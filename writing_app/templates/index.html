@@ -1050,6 +1050,9 @@
           </svg>
           <p class="session-dial-caption" id="session-dial-caption">Drag the dial to set your timer.</p>
         </div>
+        <label>Current manuscript word count
+          <input type="number" min="0" id="session-start-word-count" name="sessionStartWordCount" required />
+        </label>
         <button class="primary-btn writing-launch-cta" id="start-session-btn" type="button">Start session</button>
       </div>
     </div>
@@ -1064,8 +1067,21 @@
         <button class="ghost-btn" id="close-session-complete-btn" type="button">Close</button>
       </div>
       <form id="session-complete-form" class="session-complete-form">
-        <label>Words written
-          <input type="number" min="0" name="wordsWritten" required />
+        <p class="small-copy full" id="session-start-count-copy"></p>
+        <label id="session-end-word-count-field">Current manuscript word count
+          <input type="number" min="0" name="sessionEndWordCount" />
+        </label>
+        <label id="session-words-written-field" class="hidden">Words written
+          <input type="number" min="0" name="sessionWordsWritten" />
+        </label>
+        <label>Session duration in minutes
+          <input type="number" min="1" name="durationMinutes" required />
+        </label>
+        <label>Session date
+          <input type="date" name="sessionDate" required />
+        </label>
+        <label class="full">Notes
+          <textarea name="sessionNotes" placeholder="Optional notes about the session"></textarea>
         </label>
         <div class="full">
           <button class="primary-btn" id="session-submit-btn" type="submit">Save session</button>
@@ -1263,6 +1279,16 @@
       if (!dateString) return "No date";
       const date = new Date(dateString);
       return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    function toInputDate(dateString) {
+      const fallback = new Date();
+      const date = dateString ? new Date(dateString) : fallback;
+      const safeDate = Number.isNaN(date.getTime()) ? fallback : date;
+      const year = safeDate.getFullYear();
+      const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+      const day = String(safeDate.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     }
 
     function formatClock(totalSeconds) {
@@ -2051,7 +2077,14 @@
 
       if (startSessionButton) {
         startSessionButton.onclick = () => {
-          startWritingSession();
+          const startCountInput = document.getElementById("session-start-word-count");
+          if (!startCountInput) return;
+          const startWordCount = number(startCountInput.value);
+          if (startCountInput.value === "" || startWordCount < 0) {
+            startCountInput.reportValidity();
+            return;
+          }
+          startWritingSession(startWordCount);
         };
       }
 
@@ -2159,43 +2192,80 @@
       document.getElementById("session-complete-form").onsubmit = (event) => {
         event.preventDefault();
         const formData = new FormData(event.target);
-        if (!pendingCompletedSession) return;
-        const session = {
-          id: crypto.randomUUID(),
-          wordsWritten: number(formData.get("wordsWritten")),
-          wordsEdited: 0,
-          notes: "",
-          durationMinutes: pendingCompletedSession.durationMinutes,
-          date: pendingCompletedSession.endedAt
-        };
+        const durationMinutes = Math.max(1, number(formData.get("durationMinutes")));
+        const sessionDate = formData.get("sessionDate") || toInputDate(new Date().toISOString());
+        const sessionNotes = String(formData.get("sessionNotes") || "").trim();
 
-        updateCurrentBundle((projectBundle) => {
-          const sessions = [...projectBundle.sessions, session];
-          const updatedBundle = {
-            ...projectBundle,
-            sessions,
-            project: {
-              ...projectBundle.project,
-              currentWordCount: Math.max(
-                0,
-                number(projectBundle.project.currentWordCount)
-                  + session.wordsWritten
-              )
-            }
+        if (editingSessionId) {
+          const wordsWritten = Math.max(0, number(formData.get("sessionWordsWritten")));
+          updateCurrentBundle((projectBundle) => {
+            const existingSession = projectBundle.sessions.find((item) => item.id === editingSessionId);
+            if (!existingSession) return projectBundle;
+
+            const updatedSession = {
+              ...existingSession,
+              wordsWritten,
+              durationMinutes,
+              date: new Date(`${sessionDate}T12:00:00`).toISOString(),
+              notes: sessionNotes
+            };
+
+            return {
+              ...projectBundle,
+              sessions: projectBundle.sessions.map((item) => item.id === editingSessionId ? updatedSession : item),
+              project: {
+                ...projectBundle.project,
+                currentWordCount: Math.max(
+                  0,
+                  number(projectBundle.project.currentWordCount)
+                    - number(existingSession.wordsWritten)
+                    + updatedSession.wordsWritten
+                )
+              }
+            };
+          });
+
+          showToast("Session updated", "Your edits have been saved and the manuscript total was reconciled.");
+        } else {
+          if (!pendingCompletedSession) return;
+          const endWordCount = number(formData.get("sessionEndWordCount"));
+          const startWordCount = number(pendingCompletedSession.startWordCount);
+          const wordsWritten = Math.max(0, endWordCount - startWordCount);
+          const session = {
+            id: crypto.randomUUID(),
+            wordsWritten,
+            wordsEdited: 0,
+            notes: sessionNotes,
+            durationMinutes,
+            date: new Date(`${sessionDate}T12:00:00`).toISOString()
           };
-          const stats = getStats(updatedBundle);
-          const unlockedMilestones = milestoneTargets.filter((target) =>
-            number(updatedBundle.project.currentWordCount) >= target && !updatedBundle.milestones.includes(target)
-          );
-          if (unlockedMilestones.length) {
-            showToast("Milestone reached", `You crossed ${formatNumber(unlockedMilestones[0])} words. Keep the momentum going.`);
-          } else {
-            showToast("Session logged", `${formatNumber(session.wordsWritten)} words added to the manuscript.`);
-          }
-          return updatedBundle;
-        });
 
-        pendingCompletedSession = null;
+          updateCurrentBundle((projectBundle) => {
+            const sessions = [...projectBundle.sessions, session];
+            const updatedBundle = {
+              ...projectBundle,
+              sessions,
+              project: {
+                ...projectBundle.project,
+                currentWordCount: Math.max(
+                  0,
+                  number(projectBundle.project.currentWordCount)
+                    + session.wordsWritten
+                )
+              }
+            };
+            const unlockedMilestones = milestoneTargets.filter((target) =>
+              number(updatedBundle.project.currentWordCount) >= target && !updatedBundle.milestones.includes(target)
+            );
+            if (unlockedMilestones.length) {
+              showToast("Milestone reached", `You crossed ${formatNumber(unlockedMilestones[0])} words. Keep the momentum going.`);
+            } else {
+              showToast("Session logged", `${formatNumber(session.wordsWritten)} words calculated and added to the manuscript.`);
+            }
+            return updatedBundle;
+          });
+        }
+
         closeSessionCompleteModal();
         persistAndRender();
       };
@@ -2227,8 +2297,13 @@
       const modal = document.getElementById("session-modal");
       const title = document.getElementById("session-modal-title");
       const copy = document.getElementById("session-modal-copy");
+      const bundle = currentBundle();
+      const startCountInput = document.getElementById("session-start-word-count");
       title.textContent = "Start Writing Session";
-      copy.textContent = "Choose how long you want to write, then begin.";
+      copy.textContent = "Choose how long you want to write, add your current word count, then begin.";
+      if (startCountInput) {
+        startCountInput.value = String(number(bundle?.project?.currentWordCount));
+      }
       syncSessionDial(sessionDraftMinutes);
       modal.classList.remove("hidden");
     }
@@ -2243,13 +2318,59 @@
       const form = document.getElementById("session-complete-form");
       const title = document.getElementById("session-complete-title");
       const copy = document.getElementById("session-complete-copy");
+      const startCountCopy = document.getElementById("session-start-count-copy");
       const submit = document.getElementById("session-submit-btn");
+      const endWordCountField = document.getElementById("session-end-word-count-field");
+      const wordsWrittenField = document.getElementById("session-words-written-field");
+      const endWordCountInput = form.elements.sessionEndWordCount;
+      const wordsWrittenInput = form.elements.sessionWordsWritten;
+      const durationInput = form.elements.durationMinutes;
+      const sessionDateInput = form.elements.sessionDate;
+      const sessionNotesInput = form.elements.sessionNotes;
+
       form.reset();
-      title.textContent = "Session complete";
-      copy.textContent = pendingCompletedSession
-        ? `You wrote for ${describeMinutes(pendingCompletedSession.durationMinutes)}. How many words did you write during that time?`
-        : "How many words did you write during that time?";
-      submit.textContent = "Save session";
+
+      if (editingSessionId) {
+        const session = currentBundle()?.sessions.find((item) => item.id === editingSessionId);
+        if (!session) {
+          editingSessionId = null;
+          return;
+        }
+
+        title.textContent = "Edit session";
+        copy.textContent = "Update the logged session details and save your changes.";
+        if (startCountCopy) {
+          startCountCopy.textContent = "Editing a past session will automatically reconcile your manuscript word count.";
+        }
+        endWordCountField.classList.add("hidden");
+        wordsWrittenField.classList.remove("hidden");
+        endWordCountInput.required = false;
+        wordsWrittenInput.required = true;
+        wordsWrittenInput.value = String(number(session.wordsWritten));
+        durationInput.value = String(Math.max(1, number(session.durationMinutes)));
+        sessionDateInput.value = toInputDate(session.date);
+        sessionNotesInput.value = session.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Session complete";
+        copy.textContent = pendingCompletedSession
+          ? `You wrote for ${describeMinutes(pendingCompletedSession.durationMinutes)}. Add your current manuscript word count to calculate words written.`
+          : "Add your current manuscript word count to calculate words written.";
+        if (startCountCopy) {
+          startCountCopy.textContent = pendingCompletedSession
+            ? `Starting manuscript count: ${formatNumber(number(pendingCompletedSession.startWordCount))} words.`
+            : "";
+        }
+        endWordCountField.classList.remove("hidden");
+        wordsWrittenField.classList.add("hidden");
+        endWordCountInput.required = true;
+        wordsWrittenInput.required = false;
+        durationInput.value = String(Math.max(1, number(pendingCompletedSession?.durationMinutes || sessionDraftMinutes)));
+        sessionDateInput.value = toInputDate(pendingCompletedSession?.endedAt || new Date().toISOString());
+        sessionNotesInput.value = "";
+        submit.textContent = "Save session";
+      }
+
       modal.classList.remove("hidden");
     }
 
@@ -2268,6 +2389,7 @@
       const form = document.getElementById("session-complete-form");
       form.reset();
       pendingCompletedSession = null;
+      editingSessionId = null;
       modal.classList.add("hidden");
     }
 
@@ -2356,11 +2478,12 @@
       copy.textContent = `${describeMinutes(activeWritingSession.plannedMinutes)} session in progress`;
     }
 
-    function startWritingSession() {
+    function startWritingSession(startWordCount) {
       activeWritingSession = {
         startedAt: Date.now(),
         plannedMinutes: sessionDraftMinutes,
-        endsAt: Date.now() + (sessionDraftMinutes * 60000)
+        endsAt: Date.now() + (sessionDraftMinutes * 60000),
+        startWordCount: number(startWordCount)
       };
       closeEndSessionConfirmModal();
       closeSessionModal();
@@ -2376,7 +2499,8 @@
       const elapsedMinutes = Math.max(1, Math.round((endedAt - activeWritingSession.startedAt) / 60000));
       pendingCompletedSession = {
         durationMinutes: autoCompleted ? activeWritingSession.plannedMinutes : elapsedMinutes,
-        endedAt: new Date(endedAt).toISOString()
+        endedAt: new Date(endedAt).toISOString(),
+        startWordCount: number(activeWritingSession.startWordCount)
       };
       activeWritingSession = null;
       closeEndSessionConfirmModal();
@@ -2406,6 +2530,13 @@
     }
 
     function bindSessionActions() {
+      document.querySelectorAll("[data-action='edit-session']").forEach((button) => {
+        button.addEventListener("click", () => {
+          editingSessionId = button.dataset.id;
+          openSessionCompleteModal();
+        });
+      });
+
       document.querySelectorAll("[data-action='delete-session']").forEach((button) => {
         button.addEventListener("click", () => {
           const sessionId = button.dataset.id;
@@ -2421,6 +2552,7 @@
             };
           });
           persistAndRender();
+          showToast("Session deleted", "That session was removed from your history.");
         });
       });
 
@@ -2482,8 +2614,22 @@
               <h4>${formatNumber(session.wordsWritten)} words written</h4>
               <p class="small-copy">${formatDate(session.date)}</p>
             </div>
-            <div class="meta-line">
-              <button class="inline-btn" data-action="delete-session" data-id="${session.id}">Delete</button>
+            <div class="goal-actions">
+              <button class="icon-btn" type="button" data-action="edit-session" data-id="${session.id}" aria-label="Edit session">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+                  <path d="M13.5 6.5l4 4"></path>
+                </svg>
+              </button>
+              <button class="icon-btn" type="button" data-action="delete-session" data-id="${session.id}" aria-label="Delete session">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </button>
             </div>
           </div>
           <div class="meta-line">
