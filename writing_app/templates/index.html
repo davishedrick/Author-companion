@@ -927,6 +927,131 @@
       font-size: clamp(1.5rem, 2.8vw, 2.5rem);
     }
 
+    .edit-columns {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+    }
+
+    .pass-focus {
+      display: grid;
+      gap: 18px;
+    }
+
+    .pass-copy {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 64ch;
+    }
+
+    .snapshot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .snapshot-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.6);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .snapshot-card strong,
+    .snapshot-card p {
+      margin: 0;
+    }
+
+    .snapshot-card strong {
+      display: block;
+      font-size: 0.86rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .snapshot-card p {
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .snapshot-card span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .section-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .session-kind {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .issue-title {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    .issue-note {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pill.status-open,
+    .pill.priority-high {
+      background: rgba(184, 92, 56, 0.14);
+      color: var(--accent-strong);
+    }
+
+    .pill.status-deferred,
+    .pill.priority-medium {
+      background: rgba(162, 102, 23, 0.14);
+      color: var(--warning);
+    }
+
+    .pill.status-resolved,
+    .pill.priority-low {
+      background: rgba(47, 125, 74, 0.14);
+      color: var(--success);
+    }
+
+    .issue-breakdown {
+      display: grid;
+      gap: 10px;
+    }
+
+    .issue-breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .issue-breakdown-row strong,
+    .issue-breakdown-row span {
+      margin: 0;
+    }
+
     .empty-state {
       min-height: 56vh;
       display: grid;
@@ -955,6 +1080,8 @@
       .dashboard-grid,
       .dashboard-top,
       .hero,
+      .edit-columns,
+      .snapshot-grid,
       .projects-grid,
       .signal-band,
       .writing-launch,
@@ -978,6 +1105,8 @@
       .dashboard-grid,
       .dashboard-top,
       .hero,
+      .edit-columns,
+      .snapshot-grid,
       .projects-grid,
       .signal-band,
       .writing-launch,
@@ -1023,6 +1152,7 @@
       <main id="view-projects" class="view"></main>
       <main id="view-create-project" class="view hidden"></main>
       <main id="view-dashboard" class="view hidden"></main>
+      <main id="view-edit" class="view hidden"></main>
       <main id="view-sessions" class="view hidden"></main>
       <main id="view-stats" class="view hidden"></main>
       <main id="view-edit-project" class="view hidden"></main>
@@ -1123,9 +1253,10 @@
         <label>Goal type
           <select name="type">
             <option value="write_words">Write words</option>
+            <option value="write_minutes">Spend time writing</option>
           </select>
         </label>
-        <label>Daily target
+        <label><span id="goal-target-label">Daily target (words)</span>
           <input type="number" min="1" name="targetValue" value="1000" required />
         </label>
         <label class="full">Goal label
@@ -1137,12 +1268,234 @@
       </form>
     </div>
   </div>
+  <div class="modal-backdrop hidden" id="edit-pass-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit-pass-title">Current Pass</h3>
+          <p id="edit-pass-copy">Define the editing pass this dashboard should revolve around.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit-pass-btn" type="button">Close</button>
+      </div>
+      <form id="edit-pass-form" class="form-grid">
+        <label>Stage of process
+          <select name="passStage">
+            <option value="Developmental">Developmental</option>
+            <option value="Structural">Structural</option>
+            <option value="Line Edit">Line Edit</option>
+            <option value="Copyedit">Copyedit</option>
+            <option value="Proofread">Proofread</option>
+          </select>
+        </label>
+        <label>Status
+          <select name="passStatus">
+            <option value="Not started">Not started</option>
+            <option value="In progress">In progress</option>
+            <option value="Paused">Paused</option>
+            <option value="Complete">Complete</option>
+          </select>
+        </label>
+        <label class="full">Pass label
+          <input name="passName" placeholder="Example: Dialogue polish pass" />
+        </label>
+        <label class="full">Pass objective
+          <textarea name="passObjective" placeholder="What is this pass trying to improve?"></textarea>
+        </label>
+        <label>Sections reviewed
+          <input type="number" min="0" name="progressCurrent" value="0" />
+        </label>
+        <label>Total sections
+          <input type="number" min="0" name="progressTotal" value="0" />
+        </label>
+        <div class="full">
+          <button class="primary-btn" type="submit">Save pass</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="edit-session-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit-session-title">Log Editing Session</h3>
+          <p id="edit-session-copy">Capture time spent revising, what section you touched, and anything you want to remember.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit-session-btn" type="button">Close</button>
+      </div>
+      <form id="edit-session-form" class="form-grid">
+        <p class="small-copy full" id="edit-session-pass-copy"></p>
+        <label>Session date
+          <input type="date" name="sessionDate" required />
+        </label>
+        <label>Duration (minutes)
+          <input type="number" min="1" name="durationMinutes" value="45" required />
+        </label>
+        <label>Section worked on
+          <input name="sectionLabel" placeholder="Example: Chapter 12" />
+        </label>
+        <label>Words edited
+          <input type="number" min="0" name="wordsEdited" value="0" required />
+        </label>
+        <label class="full">Session notes
+          <textarea name="sessionNotes" placeholder="Optional note about what changed or what still feels off"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="edit-session-submit-btn" type="submit">Save editing session</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="issue-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="issue-modal-title">Add Open Issue</h3>
+          <p id="issue-modal-copy">Capture a problem now so you can come back to it during the pass.</p>
+        </div>
+        <button class="ghost-btn" id="close-issue-modal-btn" type="button">Close</button>
+      </div>
+      <form id="issue-form" class="form-grid">
+        <p class="small-copy full" id="issue-pass-copy"></p>
+        <label class="full">Problem title
+          <input name="title" placeholder="Example: Chapter 8 pacing stalls after the reveal" required />
+        </label>
+        <label>Issue type
+          <select name="type">
+            <option value="Pacing">Pacing</option>
+            <option value="Continuity">Continuity</option>
+            <option value="Character">Character</option>
+            <option value="Scene logic">Scene logic</option>
+            <option value="Prose">Prose</option>
+            <option value="Research">Research</option>
+            <option value="General">General</option>
+          </select>
+        </label>
+        <label>Priority
+          <select name="priority">
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Low">Low</option>
+          </select>
+        </label>
+        <label>Section
+          <input name="sectionLabel" placeholder="Example: Chapter 8" />
+        </label>
+        <label>Status
+          <select name="status">
+            <option value="Open">Open</option>
+            <option value="Deferred">Deferred</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+        </label>
+        <label class="full">Notes
+          <textarea name="notes" placeholder="Optional context for when you return to this issue"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="issue-submit-btn" type="submit">Save issue</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script>
     const STORAGE_KEY = "author-engine-mvp";
     const DEFAULT_VIEW = "projects";
-    const views = ["projects", "create-project", "dashboard", "sessions", "stats", "edit-project"];
+    const views = ["projects", "create-project", "dashboard", "edit", "sessions", "stats", "edit-project"];
+    const requiredImportColumns = [
+      "row_type",
+      "project_id",
+      "project_title",
+      "project_target_word_count",
+      "project_current_word_count",
+      "project_deadline",
+      "project_daily_target",
+      "project_start_date",
+      "goal_id",
+      "goal_type",
+      "goal_title",
+      "goal_target_value",
+      "goal_created_at",
+      "session_id",
+      "session_date",
+      "session_duration_minutes",
+      "session_words_written",
+      "session_words_edited",
+      "session_notes"
+    ];
     const milestoneTargets = [5000, 10000, 25000, 50000, 75000, 100000];
+    const exportColumns = [
+      "row_type",
+      "project_id",
+      "project_title",
+      "project_target_word_count",
+      "project_current_word_count",
+      "project_deadline",
+      "project_daily_target",
+      "project_start_date",
+      "project_edit_pass_name",
+      "project_edit_pass_stage",
+      "project_edit_pass_status",
+      "project_edit_pass_objective",
+      "project_edit_progress_current",
+      "project_edit_progress_total",
+      "goal_id",
+      "goal_type",
+      "goal_title",
+      "goal_target_value",
+      "goal_created_at",
+      "issue_id",
+      "issue_title",
+      "issue_type",
+      "issue_section_label",
+      "issue_priority",
+      "issue_status",
+      "issue_notes",
+      "issue_created_at",
+      "issue_pass_name",
+      "session_id",
+      "session_type",
+      "session_date",
+      "session_duration_minutes",
+      "session_words_written",
+      "session_words_edited",
+      "session_pass_name",
+      "session_section_label",
+      "session_notes"
+    ];
+
+    function defaultPassName(stage = "Developmental") {
+      const labels = {
+        Developmental: "Developmental Edit",
+        Structural: "Structural Pass",
+        "Line Edit": "Line Edit",
+        Copyedit: "Copyedit",
+        Proofread: "Proofread"
+      };
+      return labels[stage] || `${stage} Pass`;
+    }
+
+    function createDefaultEditingState() {
+      return {
+        passName: defaultPassName(),
+        passStage: "Developmental",
+        passStatus: "Not started",
+        passObjective: "",
+        progressCurrent: 0,
+        progressTotal: 0
+      };
+    }
+
+    function cloneValue(value) {
+      if (typeof structuredClone === "function") return structuredClone(value);
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function createId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
 
     const defaultProjectTemplate = {
       project: {
@@ -1153,8 +1506,10 @@
         dailyTarget: 1000,
         projectStartDate: new Date().toISOString().slice(0, 10)
       },
+      editing: createDefaultEditingState(),
       goals: [],
       sessions: [],
+      issues: [],
       milestones: []
     };
 
@@ -1167,21 +1522,24 @@
     let activeView = loadActiveView();
     let toastTimer = null;
     let editingSessionId = null;
+    let editingEditSessionId = null;
+    let editingIssueId = null;
     let heatmapMonthOffset = 0;
     let sessionDraftMinutes = 25;
     let activeWritingSession = null;
     let pendingCompletedSession = null;
     let sessionTimerHandle = null;
+    let sessionsReturnView = "dashboard";
 
     function isProjectWorkspaceView(view) {
-      return ["dashboard", "stats"].includes(view);
+      return ["dashboard", "edit", "stats"].includes(view);
     }
 
     function createProjectBundle(title, targetWordCount, currentWordCount, deadline) {
       return {
-        id: crypto.randomUUID(),
+        id: createId(),
         project: {
-          ...structuredClone(defaultProjectTemplate.project),
+          ...cloneValue(defaultProjectTemplate.project),
           bookTitle: title || "Untitled Manuscript",
           targetWordCount: number(targetWordCount) || 80000,
           currentWordCount: number(currentWordCount),
@@ -1189,8 +1547,10 @@
           dailyTarget: 1000,
           projectStartDate: new Date().toISOString().slice(0, 10)
         },
+        editing: createDefaultEditingState(),
         goals: [],
         sessions: [],
+        issues: [],
         milestones: []
       };
     }
@@ -1198,11 +1558,11 @@
     function loadState() {
       try {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (!stored) return structuredClone(defaultState);
+        if (!stored) return cloneValue(defaultState);
 
         if (Array.isArray(stored.projects)) {
           return {
-            ...structuredClone(defaultState),
+            ...cloneValue(defaultState),
             ...stored,
             projects: stored.projects.map(normalizeProjectBundle),
             activeProjectId: stored.activeProjectId || stored.projects[0]?.id || null
@@ -1211,10 +1571,12 @@
 
         if (stored.project) {
           const migrated = normalizeProjectBundle({
-            id: crypto.randomUUID(),
+            id: createId(),
             project: stored.project,
+            editing: stored.editing || createDefaultEditingState(),
             goals: stored.goals || [],
             sessions: stored.sessions || [],
+            issues: stored.issues || [],
             milestones: stored.milestones || []
           });
           return {
@@ -1223,9 +1585,9 @@
           };
         }
 
-        return structuredClone(defaultState);
+        return cloneValue(defaultState);
       } catch (error) {
-        return structuredClone(defaultState);
+        return cloneValue(defaultState);
       }
     }
 
@@ -1240,11 +1602,41 @@
 
     function normalizeProjectBundle(bundle) {
       return {
-        id: bundle.id || crypto.randomUUID(),
-        project: { ...structuredClone(defaultProjectTemplate.project), ...(bundle.project || {}) },
+        id: bundle.id || createId(),
+        project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
+        editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
         goals: Array.isArray(bundle.goals) ? bundle.goals : [],
-        sessions: Array.isArray(bundle.sessions) ? bundle.sessions : [],
+        sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
+        issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
         milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+      };
+    }
+
+    function normalizeSession(session) {
+      return {
+        id: session?.id || createId(),
+        type: session?.type === "edit" ? "edit" : "write",
+        date: session?.date || new Date().toISOString(),
+        durationMinutes: number(session?.durationMinutes),
+        wordsWritten: number(session?.wordsWritten),
+        wordsEdited: number(session?.wordsEdited),
+        notes: String(session?.notes || ""),
+        passName: String(session?.passName || ""),
+        sectionLabel: String(session?.sectionLabel || "")
+      };
+    }
+
+    function normalizeIssue(issue) {
+      return {
+        id: issue?.id || createId(),
+        title: String(issue?.title || ""),
+        type: String(issue?.type || "General"),
+        sectionLabel: String(issue?.sectionLabel || issue?.section || ""),
+        priority: String(issue?.priority || "Medium"),
+        status: String(issue?.status || "Open"),
+        notes: String(issue?.notes || ""),
+        createdAt: issue?.createdAt || new Date().toISOString(),
+        passName: String(issue?.passName || "")
       };
     }
 
@@ -1275,6 +1667,10 @@
       return new Intl.NumberFormat().format(Math.round(number(value)));
     }
 
+    function formatHours(minutes) {
+      return `${(number(minutes) / 60).toFixed(1)} hrs`;
+    }
+
     function formatDate(dateString) {
       if (!dateString) return "No date";
       const date = new Date(dateString);
@@ -1302,6 +1698,13 @@
       return `${formatNumber(minutes)} minute${number(minutes) === 1 ? "" : "s"}`;
     }
 
+    function slugifyFilePart(value) {
+      return String(value || "project")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "project";
+    }
+
     function startOfDay(date) {
       const value = new Date(date);
       value.setHours(0, 0, 0, 0);
@@ -1316,9 +1719,17 @@
       return new Date(dateString).toISOString().slice(0, 10);
     }
 
-    function getSessionGroups(bundle) {
+    function getWriteSessions(bundle) {
+      return bundle.sessions.filter((session) => session.type !== "edit");
+    }
+
+    function getEditSessions(bundle) {
+      return bundle.sessions.filter((session) => session.type === "edit");
+    }
+
+    function getSessionGroups(bundle, filterFn = () => true) {
       const groups = new Map();
-      bundle.sessions.forEach((session) => {
+      bundle.sessions.filter(filterFn).forEach((session) => {
         const key = dateKey(session.date);
         if (!groups.has(key)) {
           groups.set(key, { words: 0, edited: 0, duration: 0, count: 0 });
@@ -1333,7 +1744,8 @@
     }
 
     function getStats(bundle) {
-      const groups = getSessionGroups(bundle);
+      const writingSessions = getWriteSessions(bundle);
+      const groups = getSessionGroups(bundle, (session) => session.type !== "edit");
       const sortedDays = [...groups.keys()].sort();
       const todayKey = new Date().toISOString().slice(0, 10);
       const now = new Date();
@@ -1349,7 +1761,7 @@
       let totalDuration = 0;
       let bestDay = { key: "", words: 0 };
       const weekdayTotals = new Array(7).fill(0);
-      bundle.sessions.forEach((session) => {
+      writingSessions.forEach((session) => {
         const sessionDate = new Date(session.date);
         const dayKey = dateKey(session.date);
         const words = number(session.wordsWritten);
@@ -1391,13 +1803,13 @@
         }
       }
 
-      const firstSessionDate = bundle.sessions.length
-        ? new Date([...bundle.sessions].sort((a, b) => new Date(a.date) - new Date(b.date))[0].date)
+      const firstSessionDate = writingSessions.length
+        ? new Date([...writingSessions].sort((a, b) => new Date(a.date) - new Date(b.date))[0].date)
         : new Date(bundle.project.projectStartDate || new Date());
       const activeDays = Math.max(1, daysBetween(firstSessionDate, new Date()) + 1);
       const dailyAverage = totalWritten / activeDays;
       const weeklyAverage = totalWritten / Math.max(1, activeDays / 7);
-      const avgSession = totalWritten / Math.max(1, bundle.sessions.length);
+      const avgSession = totalWritten / Math.max(1, writingSessions.length);
       const targetWords = number(bundle.project.targetWordCount);
       const currentWords = number(bundle.project.currentWordCount);
       const distanceToGoal = Math.max(targetWords - currentWords, 0);
@@ -1413,7 +1825,7 @@
       const momentum = recentAvgB > recentAvgA * 1.08 ? "Increasing" : recentAvgB < recentAvgA * 0.92 ? "Slowing" : "Steady";
 
       const mostProductiveDayIndex = weekdayTotals.indexOf(Math.max(...weekdayTotals));
-      const longestSession = bundle.sessions.reduce((best, session) => Math.max(best, number(session.durationMinutes)), 0);
+      const longestSession = writingSessions.reduce((best, session) => Math.max(best, number(session.durationMinutes)), 0);
       const totalProgress = targetWords > 0 ? Math.min(100, (currentWords / targetWords) * 100) : 0;
       const estimatedWordsRemaining = Math.max(targetWords - currentWords, 0);
 
@@ -1441,25 +1853,93 @@
       };
     }
 
+    function getEditStats(bundle) {
+      const sessions = [...getEditSessions(bundle)].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const weekStart = startOfDay(new Date(now));
+      weekStart.setDate(weekStart.getDate() - 6);
+
+      let minutesToday = 0;
+      let minutesWeek = 0;
+      let totalMinutes = 0;
+      let totalWordsEdited = 0;
+      let currentPassMinutes = 0;
+
+      sessions.forEach((session) => {
+        const key = dateKey(session.date);
+        const duration = number(session.durationMinutes);
+        totalMinutes += duration;
+        totalWordsEdited += number(session.wordsEdited);
+        if (key === todayKey) minutesToday += duration;
+        if (startOfDay(new Date(session.date)) >= weekStart) minutesWeek += duration;
+        if (session.passName === bundle.editing.passName) currentPassMinutes += duration;
+      });
+
+      const openIssues = bundle.issues.filter((issue) => issue.status !== "Resolved");
+      const currentPassIssues = openIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
+      const resolvedIssues = bundle.issues.filter((issue) => issue.status === "Resolved");
+
+      return {
+        minutesToday,
+        minutesWeek,
+        totalMinutes,
+        totalWordsEdited,
+        currentPassMinutes,
+        averageSessionMinutes: totalMinutes / Math.max(1, sessions.length),
+        sessionCount: sessions.length,
+        currentPassIssueCount: currentPassIssues.length,
+        resolvedIssueCount: resolvedIssues.length,
+        lastSession: sessions[0] || null
+      };
+    }
+
+    function goalValueForSession(goalType, session) {
+      if (session.type === "edit") return 0;
+      if (goalType === "write_minutes") return number(session.durationMinutes);
+      return number(session.wordsWritten);
+    }
+
+    function goalValueForDate(bundle, goal, key) {
+      return bundle.sessions
+        .filter((session) => dateKey(session.date) === key)
+        .reduce((sum, session) => sum + goalValueForSession(goal.type, session), 0);
+    }
+
+    function goalUnit(goalType) {
+      return goalType === "write_minutes" ? "minutes" : "words";
+    }
+
+    function applyGoalTypePreset(form, goalType) {
+      if (!form?.elements) return;
+      const targetInput = form.elements.targetValue;
+      const titleInput = form.elements.title;
+      const targetLabel = document.getElementById("goal-target-label");
+      if (!targetInput || !titleInput || !targetLabel) return;
+      if (goalType === "write_minutes") {
+        targetLabel.textContent = "Daily target (minutes)";
+        targetInput.value = 30;
+        titleInput.placeholder = "Example: Spend 30 minutes writing today";
+        titleInput.value = titleInput.value || "Spend 30 focused minutes writing";
+        return;
+      }
+      targetLabel.textContent = "Daily target (words)";
+      targetInput.value = 1000;
+      titleInput.placeholder = "Example: Write 1,000 words today";
+      titleInput.value = titleInput.value || "Write 1,000 words today";
+    }
+
     function evaluateGoal(bundle, goal) {
       const target = Math.max(1, number(goal.targetValue));
       const todayKey = new Date().toISOString().slice(0, 10);
-      const value = bundle.sessions
-        .filter((session) => dateKey(session.date) === todayKey)
-        .reduce((sum, session) => sum + number(session.wordsWritten), 0);
+      const value = goalValueForDate(bundle, goal, todayKey);
       const progress = Math.min(100, (value / target) * 100);
       const completed = progress >= 100;
       return { ...goal, liveValue: value, progress, completed };
     }
 
     function goalTypeContext(type) {
-      return "WRITE";
-    }
-
-    function getGoalValueForDate(bundle, goal, key) {
-      return bundle.sessions
-        .filter((session) => dateKey(session.date) === key)
-        .reduce((sum, session) => sum + number(session.wordsWritten), 0);
+      return type === "write_minutes" ? "WRITE TIME" : "WRITE";
     }
 
     function getHeatmapMonth(bundle, monthOffset = 0) {
@@ -1485,9 +1965,9 @@
           days.push({ key, status: "none", label: `${longDate}\nFuture day`, dayNumber: cursor.getDate() });
           continue;
         }
-        const daySessions = bundle.sessions.filter((session) => dateKey(session.date) === key);
+        const daySessions = getWriteSessions(bundle).filter((session) => dateKey(session.date) === key);
         const activeGoals = bundle.goals.filter((goal) =>
-          goal.type === "write_words" &&
+          (goal.type === "write_words" || goal.type === "write_minutes") &&
           (!goal.createdAt || startOfDay(new Date(goal.createdAt)) <= cursor)
         );
         if (!activeGoals.length) {
@@ -1496,11 +1976,12 @@
           continue;
         }
         const goalSummaries = activeGoals.map((goal) => {
-          const value = getGoalValueForDate(bundle, goal, key);
+          const value = goalValueForDate(bundle, goal, key);
+          const unit = goalUnit(goal.type);
           return {
             value,
             target: Math.max(1, number(goal.targetValue)),
-            text: `${goalTypeContext(goal.type)} ${formatNumber(value)}/${formatNumber(goal.targetValue)} words written`
+            text: `${goalTypeContext(goal.type)} ${formatNumber(value)}/${formatNumber(goal.targetValue)} ${unit}`
           };
         });
         const averageRatio = goalSummaries.reduce((sum, goal) => {
@@ -1571,6 +2052,315 @@
       toastTimer = setTimeout(() => toast.classList.remove("show"), 3600);
     }
 
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll(`"`, `""`)}"`;
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let currentRow = [];
+      let currentValue = "";
+      let inQuotes = false;
+
+      for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        const next = text[index + 1];
+
+        if (inQuotes) {
+          if (char === `"` && next === `"`) {
+            currentValue += `"`;
+            index += 1;
+          } else if (char === `"`) {
+            inQuotes = false;
+          } else {
+            currentValue += char;
+          }
+          continue;
+        }
+
+        if (char === `"`) {
+          inQuotes = true;
+          continue;
+        }
+
+        if (char === ",") {
+          currentRow.push(currentValue);
+          currentValue = "";
+          continue;
+        }
+
+        if (char === "\n") {
+          currentRow.push(currentValue);
+          rows.push(currentRow);
+          currentRow = [];
+          currentValue = "";
+          continue;
+        }
+
+        if (char === "\r") continue;
+        currentValue += char;
+      }
+
+      if (currentValue.length || currentRow.length) {
+        currentRow.push(currentValue);
+        rows.push(currentRow);
+      }
+
+      return rows;
+    }
+
+    function projectExportBaseRow(bundle) {
+      return {
+        row_type: "",
+        project_id: bundle.id,
+        project_title: bundle.project.bookTitle || "",
+        project_target_word_count: number(bundle.project.targetWordCount),
+        project_current_word_count: number(bundle.project.currentWordCount),
+        project_deadline: bundle.project.deadline || "",
+        project_daily_target: number(bundle.project.dailyTarget),
+        project_start_date: bundle.project.projectStartDate || "",
+        project_edit_pass_name: bundle.editing.passName || "",
+        project_edit_pass_stage: bundle.editing.passStage || "",
+        project_edit_pass_status: bundle.editing.passStatus || "",
+        project_edit_pass_objective: bundle.editing.passObjective || "",
+        project_edit_progress_current: number(bundle.editing.progressCurrent),
+        project_edit_progress_total: number(bundle.editing.progressTotal),
+        goal_id: "",
+        goal_type: "",
+        goal_title: "",
+        goal_target_value: "",
+        goal_created_at: "",
+        issue_id: "",
+        issue_title: "",
+        issue_type: "",
+        issue_section_label: "",
+        issue_priority: "",
+        issue_status: "",
+        issue_notes: "",
+        issue_created_at: "",
+        issue_pass_name: "",
+        session_id: "",
+        session_type: "",
+        session_date: "",
+        session_duration_minutes: "",
+        session_words_written: "",
+        session_words_edited: "",
+        session_pass_name: "",
+        session_section_label: "",
+        session_notes: ""
+      };
+    }
+
+    function buildProjectExportRows(bundle) {
+      const base = projectExportBaseRow(bundle);
+      const rows = [{ ...base, row_type: "project" }];
+
+      bundle.goals.forEach((goal) => {
+        rows.push({
+          ...base,
+          row_type: "goal",
+          goal_id: goal.id || "",
+          goal_type: goal.type || "",
+          goal_title: goal.title || "",
+          goal_target_value: number(goal.targetValue),
+          goal_created_at: goal.createdAt || ""
+        });
+      });
+
+      bundle.issues.forEach((issue) => {
+        rows.push({
+          ...base,
+          row_type: "issue",
+          issue_id: issue.id || "",
+          issue_title: issue.title || "",
+          issue_type: issue.type || "",
+          issue_section_label: issue.sectionLabel || "",
+          issue_priority: issue.priority || "",
+          issue_status: issue.status || "",
+          issue_notes: issue.notes || "",
+          issue_created_at: issue.createdAt || "",
+          issue_pass_name: issue.passName || ""
+        });
+      });
+
+      bundle.sessions.forEach((session) => {
+        rows.push({
+          ...base,
+          row_type: "session",
+          session_id: session.id || "",
+          session_type: session.type || "write",
+          session_date: session.date || "",
+          session_duration_minutes: number(session.durationMinutes),
+          session_words_written: number(session.wordsWritten),
+          session_words_edited: number(session.wordsEdited),
+          session_pass_name: session.passName || "",
+          session_section_label: session.sectionLabel || "",
+          session_notes: session.notes || ""
+        });
+      });
+
+      return rows;
+    }
+
+    function bundleToCsv(bundle) {
+      const rows = buildProjectExportRows(bundle);
+      const header = exportColumns.map(csvCell).join(",");
+      const body = rows.map((row) => exportColumns.map((column) => csvCell(row[column])).join(",")).join("\n");
+      return `\uFEFF${header}\n${body}`;
+    }
+
+    function downloadCurrentProjectCsv() {
+      const bundle = currentBundle();
+      if (!bundle) return;
+      const csv = bundleToCsv(bundle);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `${slugifyFilePart(bundle.project.bookTitle)}-${stamp}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      showToast("CSV exported", "Your project data was downloaded in a format we can import later.");
+    }
+
+    function parseImportedRows(text) {
+      const rows = parseCsv(text.trim());
+      if (!rows.length) throw new Error("This CSV file is empty.");
+
+      const header = rows[0].map((cell, index) => {
+        const clean = index === 0 ? cell.replace(/^\uFEFF/, "") : cell;
+        return clean.trim();
+      });
+
+      const missingColumns = requiredImportColumns.filter((column) => !header.includes(column));
+      if (missingColumns.length) {
+        throw new Error(`Missing required columns: ${missingColumns.join(", ")}`);
+      }
+
+      return rows.slice(1)
+        .filter((row) => row.some((cell) => String(cell || "").trim() !== ""))
+        .map((row) => {
+          const entry = {};
+          header.forEach((column, index) => {
+            entry[column] = row[index] ?? "";
+          });
+          return entry;
+        });
+    }
+
+    function dedupeById(items) {
+      const seen = new Set();
+      return items.filter((item) => {
+        const id = item.id || createId();
+        if (seen.has(id)) return false;
+        item.id = id;
+        seen.add(id);
+        return true;
+      });
+    }
+
+    function buildBundleFromImportedRows(rows) {
+      const projectRow = rows.find((row) => row.row_type === "project");
+      if (!projectRow) throw new Error("No project row was found in this CSV.");
+
+      const bundle = normalizeProjectBundle({
+        id: projectRow.project_id || createId(),
+        project: {
+          bookTitle: projectRow.project_title || "Imported Manuscript",
+          targetWordCount: number(projectRow.project_target_word_count),
+          currentWordCount: number(projectRow.project_current_word_count),
+          deadline: projectRow.project_deadline || "",
+          dailyTarget: number(projectRow.project_daily_target) || defaultProjectTemplate.project.dailyTarget,
+          projectStartDate: projectRow.project_start_date || new Date().toISOString().slice(0, 10)
+        },
+        editing: {
+          passName: projectRow.project_edit_pass_name || defaultPassName(projectRow.project_edit_pass_stage || "Developmental"),
+          passStage: projectRow.project_edit_pass_stage || "Developmental",
+          passStatus: projectRow.project_edit_pass_status || "Not started",
+          passObjective: projectRow.project_edit_pass_objective || "",
+          progressCurrent: number(projectRow.project_edit_progress_current),
+          progressTotal: number(projectRow.project_edit_progress_total)
+        },
+        goals: rows
+          .filter((row) => row.row_type === "goal")
+          .map((row) => ({
+            id: row.goal_id || createId(),
+            type: row.goal_type || "write_words",
+            title: row.goal_title || "Imported goal",
+            targetValue: number(row.goal_target_value),
+            createdAt: row.goal_created_at || new Date().toISOString()
+          })),
+        issues: rows
+          .filter((row) => row.row_type === "issue")
+          .map((row) => ({
+            id: row.issue_id || createId(),
+            title: row.issue_title || "Imported issue",
+            type: row.issue_type || "General",
+            sectionLabel: row.issue_section_label || "",
+            priority: row.issue_priority || "Medium",
+            status: row.issue_status || "Open",
+            notes: row.issue_notes || "",
+            createdAt: row.issue_created_at || new Date().toISOString(),
+            passName: row.issue_pass_name || ""
+          })),
+        sessions: rows
+          .filter((row) => row.row_type === "session")
+          .map((row) => ({
+            id: row.session_id || createId(),
+            type: row.session_type === "edit" ? "edit" : "write",
+            date: row.session_date || new Date().toISOString(),
+            durationMinutes: number(row.session_duration_minutes),
+            wordsWritten: number(row.session_words_written),
+            wordsEdited: number(row.session_words_edited),
+            passName: row.session_pass_name || "",
+            sectionLabel: row.session_section_label || "",
+            notes: row.session_notes || ""
+          })),
+        milestones: []
+      });
+
+      bundle.goals = dedupeById(bundle.goals);
+      bundle.issues = dedupeById(bundle.issues);
+      bundle.sessions = dedupeById(bundle.sessions);
+      return normalizeProjectBundle(bundle);
+    }
+
+    function importProjectFromCsv(text) {
+      const rows = parseImportedRows(text);
+      const importedBundle = buildBundleFromImportedRows(rows);
+      const existingIndex = state.projects.findIndex((project) => project.id === importedBundle.id);
+
+      if (existingIndex >= 0) {
+        const shouldReplace = window.confirm(`Replace the existing project "${state.projects[existingIndex].project.bookTitle}" with the imported data?`);
+        if (!shouldReplace) return;
+        state.projects.splice(existingIndex, 1, importedBundle);
+      } else {
+        state.projects.unshift(importedBundle);
+      }
+
+      state.activeProjectId = importedBundle.id;
+      activeView = "dashboard";
+      persistAndRender();
+      showToast("CSV imported", `${importedBundle.project.bookTitle} is now available in your dashboard.`);
+    }
+
+    function handleImportProjectFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          importProjectFromCsv(String(reader.result || ""));
+        } catch (error) {
+          showToast("Import failed", error instanceof Error ? error.message : "The CSV could not be imported.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
     function persistAndRender() {
       if (state.activeProjectId) {
         updateCurrentBundle((bundle) => {
@@ -1594,6 +2384,7 @@
       renderProjects();
       renderCreateProject();
       renderDashboard(bundle);
+      renderEditDashboard(bundle);
       renderSessions(bundle);
       renderStats(bundle);
       renderEditProject(bundle);
@@ -1621,11 +2412,16 @@
     function renderNav(bundle) {
       const nav = document.getElementById("nav");
       const availableViews = bundle && isProjectWorkspaceView(activeView)
-        ? ["dashboard", "stats"]
+        ? ["dashboard", "edit", "stats"]
         : [];
+      const navLabels = {
+        dashboard: "Write",
+        edit: "Edit",
+        stats: "Stats"
+      };
       nav.innerHTML = availableViews.map((view) => `
         <button data-view="${view}" class="${activeView === view ? "active" : ""}">
-          ${view.charAt(0).toUpperCase() + view.slice(1)}
+          ${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}
         </button>
       `).join("");
 
@@ -1663,8 +2459,12 @@
                 <h2 class="hero-title">Projects Dashboard</h2>
                 <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
               </div>
-              <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
+              <div class="meta-line">
+                <button class="ghost-btn" id="import-project-csv-btn" type="button">Import CSV</button>
+                <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
+              </div>
             </div>
+            <input id="import-project-csv-input" class="hidden" type="file" accept=".csv,text/csv" />
             ${hasProjects ? `
               <div class="projects-grid">
                 ${state.projects.map(renderProjectCard).join("")}
@@ -1751,6 +2551,7 @@
           </div>
           <div class="meta-line">
             <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">Open project</button>
+            <button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>
             <button class="inline-btn" data-action="delete-project" data-id="${bundle.id}">Delete</button>
           </div>
         </div>
@@ -1780,7 +2581,7 @@
         ? `${milestoneSummary} Next milestone: ${formatNumber(nextMilestone)} words.`
         : `${milestoneSummary} All milestone markers cleared.`;
       const todayKey = new Date().toISOString().slice(0, 10);
-      const todaySessions = [...bundle.sessions]
+      const todaySessions = [...getWriteSessions(bundle)]
         .filter((session) => dateKey(session.date) === todayKey)
         .sort((a, b) => new Date(b.date) - new Date(a.date));
 
@@ -1805,8 +2606,13 @@
 
             <section class="card hero">
               <div class="hero-panel">
-                <p class="small-copy">Current manuscript</p>
-                <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
+                <div class="section-head" style="margin-bottom: 10px;">
+                  <div>
+                    <p class="small-copy">Current manuscript</p>
+                    <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
+                  </div>
+                  <button class="ghost-btn" id="export-project-csv-btn" type="button">Export CSV</button>
+                </div>
                 <div class="hero-meta">
                   <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
                   <span class="pill">${deadlineLabel}</span>
@@ -1876,6 +2682,186 @@
       `;
 
       bindDashboardEvents(bundle);
+    }
+
+    function renderEditDashboard(bundle) {
+      const view = document.getElementById("view-edit");
+      if (!bundle) {
+        view.innerHTML = "";
+        return;
+      }
+
+      const editStats = getEditStats(bundle);
+      const progressCurrent = number(bundle.editing.progressCurrent);
+      const progressTotal = number(bundle.editing.progressTotal);
+      const progressPercent = progressTotal > 0 ? Math.min(100, (progressCurrent / progressTotal) * 100) : 0;
+      const recentSessions = [...getEditSessions(bundle)]
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+      const issuePriorityRank = { High: 0, Medium: 1, Low: 2 };
+      const issueStatusRank = { Open: 0, Deferred: 1, Resolved: 2 };
+      const issues = [...bundle.issues]
+        .sort((a, b) => {
+          const statusDelta = (issueStatusRank[a.status] ?? 99) - (issueStatusRank[b.status] ?? 99);
+          if (statusDelta !== 0) return statusDelta;
+          const priorityDelta = (issuePriorityRank[a.priority] ?? 99) - (issuePriorityRank[b.priority] ?? 99);
+          if (priorityDelta !== 0) return priorityDelta;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+      const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
+      const currentPassIssues = visibleIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
+      const issueList = (currentPassIssues.length ? currentPassIssues : visibleIssues).slice(0, 6);
+      const issueCounts = issueList.reduce((summary, issue) => {
+        summary[issue.type] = (summary[issue.type] || 0) + 1;
+        return summary;
+      }, {});
+      const topIssueTypes = Object.entries(issueCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
+      const lastSession = editStats.lastSession;
+
+      view.innerHTML = `
+        <section class="stack">
+          <section class="card hero">
+            <div class="hero-panel pass-focus">
+              <div class="section-head">
+                <div>
+                  <p class="small-copy">Edit dashboard</p>
+                  <h2 class="hero-title">${escapeHtml(bundle.editing.passName || defaultPassName(bundle.editing.passStage))}</h2>
+                  <p class="pass-copy">${escapeHtml(bundle.editing.passObjective || "Define what this pass is trying to improve so the dashboard can support the work.")}</p>
+                </div>
+                <div class="meta-line">
+                  <button class="ghost-btn" id="open-edit-pass-btn" type="button">Change pass</button>
+                  <button class="primary-btn" id="open-edit-session-modal-btn" type="button">Log editing session</button>
+                </div>
+              </div>
+              <div class="hero-meta">
+                <span class="badge">${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
+                <span class="pill">${escapeHtml(bundle.editing.passStatus || "Not started")}</span>
+                <span class="pill">${formatNumber(editStats.currentPassIssueCount)} open issue${editStats.currentPassIssueCount === 1 ? "" : "s"} in this pass</span>
+              </div>
+              <div class="progress-block">
+                <div class="progress-label-row">
+                  <strong>Pass progress</strong>
+                  <span>${progressTotal > 0 ? `${formatNumber(progressCurrent)} / ${formatNumber(progressTotal)} sections` : "No section target yet"}</span>
+                </div>
+                <div class="progress-rail">
+                  <div class="progress-fill" style="width:${progressPercent}%"></div>
+                </div>
+              </div>
+              <div class="snapshot-grid">
+                <div class="snapshot-card">
+                  <strong>Last worked on</strong>
+                  <p>${lastSession?.sectionLabel ? escapeHtml(lastSession.sectionLabel) : "Nothing logged yet"}</p>
+                  <span>${lastSession ? formatDate(lastSession.date) : "Log an editing session to start building history."}</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Current pass hours</strong>
+                  <p>${formatHours(editStats.currentPassMinutes)}</p>
+                  <span>${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} recorded overall</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h3>Hours Edited</h3>
+                <p>Track how much revision time is actually going into the manuscript.</p>
+              </div>
+            </div>
+            <div class="metrics">
+              <div class="metric"><div class="label">Today</div><div class="value">${formatHours(editStats.minutesToday)}</div></div>
+              <div class="metric"><div class="label">This week</div><div class="value">${formatHours(editStats.minutesWeek)}</div></div>
+              <div class="metric"><div class="label">Current pass</div><div class="value">${formatHours(editStats.currentPassMinutes)}</div></div>
+              <div class="metric"><div class="label">Average session</div><div class="value">${formatNumber(editStats.averageSessionMinutes)} min</div></div>
+            </div>
+          </section>
+
+          <section class="edit-columns">
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Recent Editing Sessions</h3>
+                  <p>Keep a practical trail of what you touched and how long it took.</p>
+                </div>
+                <div class="meta-line">
+                  <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
+                </div>
+              </div>
+              <div class="list">
+                ${recentSessions.length ? recentSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged yet.</div>`}
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Open Issues</h3>
+                  <p>Capture problems now so you can refer back to them while editing.</p>
+                </div>
+                <button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>
+              </div>
+              <div class="list">
+                ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
+              </div>
+            </section>
+          </section>
+
+          <section class="edit-columns">
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Pass Snapshot</h3>
+                  <p>A quick read on how the current pass is moving.</p>
+                </div>
+              </div>
+              <div class="snapshot-grid">
+                <div class="snapshot-card">
+                  <strong>Words edited</strong>
+                  <p>${formatNumber(editStats.totalWordsEdited)}</p>
+                  <span>Across all editing sessions</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Issues resolved</strong>
+                  <p>${formatNumber(editStats.resolvedIssueCount)}</p>
+                  <span>Problems marked complete</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Status</strong>
+                  <p>${escapeHtml(bundle.editing.passStatus || "Not started")}</p>
+                  <span>${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Sections remaining</strong>
+                  <p>${progressTotal > 0 ? formatNumber(Math.max(progressTotal - progressCurrent, 0)) : "Set target"}</p>
+                  <span>${progressTotal > 0 ? `Out of ${formatNumber(progressTotal)} total` : "Add a section target in Change pass."}</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Issue Breakdown</h3>
+                  <p>See which kinds of problems are stacking up in this pass.</p>
+                </div>
+              </div>
+              <div class="issue-breakdown">
+                ${topIssueTypes.length ? topIssueTypes.map(([label, count]) => `
+                  <div class="issue-breakdown-row">
+                    <strong>${escapeHtml(label)}</strong>
+                    <span>${formatNumber(count)} issue${count === 1 ? "" : "s"}</span>
+                  </div>
+                `).join("") : `<div class="empty">Issue types will appear here once you start filing problems.</div>`}
+              </div>
+            </section>
+          </section>
+        </section>
+      `;
+
+      bindEditDashboardEvents(bundle);
     }
 
     function renderStats(bundle) {
@@ -1948,7 +2934,7 @@
       const backButton = document.getElementById("back-to-dashboard-btn");
       if (backButton) {
         backButton.addEventListener("click", () => {
-          activeView = "dashboard";
+          activeView = sessionsReturnView;
           render();
         });
       }
@@ -1969,6 +2955,7 @@
                 <h2>Edit Project</h2>
                 <p>Update the manuscript setup from its own dedicated page.</p>
               </div>
+              <button class="ghost-btn" id="back-to-projects-btn" type="button">Back to projects</button>
             </div>
             <form id="project-form" class="form-grid triple">
               <label class="full">Book title
@@ -2021,6 +3008,8 @@
 
     function bindProjectEvents() {
       const openCreateButton = document.getElementById("open-create-project-btn");
+      const importProjectCsvButton = document.getElementById("import-project-csv-btn");
+      const importProjectCsvInput = document.getElementById("import-project-csv-input");
       if (openCreateButton) {
         openCreateButton.addEventListener("click", () => {
           activeView = "create-project";
@@ -2028,10 +3017,30 @@
         });
       }
 
+      if (importProjectCsvButton && importProjectCsvInput) {
+        importProjectCsvButton.addEventListener("click", () => {
+          importProjectCsvInput.click();
+        });
+
+        importProjectCsvInput.addEventListener("change", () => {
+          handleImportProjectFile(importProjectCsvInput.files?.[0]);
+          importProjectCsvInput.value = "";
+        });
+      }
+
       document.querySelectorAll("[data-action='open-project']").forEach((button) => {
         button.addEventListener("click", () => {
           state.activeProjectId = button.dataset.id;
           activeView = "dashboard";
+          saveState();
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-action='edit-project']").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeProjectId = button.dataset.id;
+          activeView = "edit-project";
           saveState();
           render();
         });
@@ -2068,6 +3077,7 @@
       const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
       const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
       const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
+      const exportProjectCsvButton = document.getElementById("export-project-csv-btn");
 
       if (openSessionButton) {
         openSessionButton.onclick = () => {
@@ -2119,6 +3129,13 @@
         };
       }
 
+      if (goalForm?.elements?.type && goalForm.dataset.goalTypeBound !== "true") {
+        goalForm.dataset.goalTypeBound = "true";
+        goalForm.elements.type.addEventListener("change", (event) => {
+          applyGoalTypePreset(goalForm, event.target.value);
+        });
+      }
+
       goalModal.onclick = (event) => {
         if (event.target === goalModal) {
           closeGoalModal();
@@ -2157,8 +3174,15 @@
 
       if (viewAllSessionsButton) {
         viewAllSessionsButton.onclick = () => {
+          sessionsReturnView = "dashboard";
           activeView = "sessions";
           render();
+        };
+      }
+
+      if (exportProjectCsvButton) {
+        exportProjectCsvButton.onclick = () => {
+          downloadCurrentProjectCsv();
         };
       }
 
@@ -2232,7 +3256,7 @@
           const startWordCount = number(pendingCompletedSession.startWordCount);
           const wordsWritten = Math.max(0, endWordCount - startWordCount);
           const session = {
-            id: crypto.randomUUID(),
+            id: createId(),
             wordsWritten,
             wordsEdited: 0,
             notes: sessionNotes,
@@ -2276,7 +3300,7 @@
         updateCurrentBundle((projectBundle) => ({
           ...projectBundle,
           goals: [{
-            id: crypto.randomUUID(),
+            id: createId(),
             type: formData.get("type"),
             title: formData.get("title").trim(),
             targetValue: number(formData.get("targetValue")),
@@ -2291,6 +3315,313 @@
       bindSessionDial();
       bindSessionActions();
 
+    }
+
+    function bindEditDashboardEvents(bundle) {
+      const passModal = document.getElementById("edit-pass-modal");
+      const editSessionModal = document.getElementById("edit-session-modal");
+      const issueModal = document.getElementById("issue-modal");
+      const passForm = document.getElementById("edit-pass-form");
+      const editSessionForm = document.getElementById("edit-session-form");
+      const issueForm = document.getElementById("issue-form");
+      const openPassButton = document.getElementById("open-edit-pass-btn");
+      const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
+      const openIssueButton = document.getElementById("open-issue-modal-btn");
+      const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
+      const closePassButton = document.getElementById("close-edit-pass-btn");
+      const closeEditSessionButton = document.getElementById("close-edit-session-btn");
+      const closeIssueButton = document.getElementById("close-issue-modal-btn");
+
+      if (openPassButton) {
+        openPassButton.onclick = () => {
+          openEditPassModal();
+        };
+      }
+
+      if (openEditSessionButton) {
+        openEditSessionButton.onclick = () => {
+          openEditSessionModal();
+        };
+      }
+
+      if (openIssueButton) {
+        openIssueButton.onclick = () => {
+          openIssueModal();
+        };
+      }
+
+      if (viewAllSessionsButton) {
+        viewAllSessionsButton.onclick = () => {
+          sessionsReturnView = "edit";
+          activeView = "sessions";
+          render();
+        };
+      }
+
+      if (closePassButton) {
+        closePassButton.onclick = () => {
+          closeEditPassModal();
+        };
+      }
+
+      if (closeEditSessionButton) {
+        closeEditSessionButton.onclick = () => {
+          closeEditSessionModal();
+        };
+      }
+
+      if (closeIssueButton) {
+        closeIssueButton.onclick = () => {
+          closeIssueModal();
+        };
+      }
+
+      if (passModal) {
+        passModal.onclick = (event) => {
+          if (event.target === passModal) closeEditPassModal();
+        };
+      }
+
+      if (editSessionModal) {
+        editSessionModal.onclick = (event) => {
+          if (event.target === editSessionModal) closeEditSessionModal();
+        };
+      }
+
+      if (issueModal) {
+        issueModal.onclick = (event) => {
+          if (event.target === issueModal) closeIssueModal();
+        };
+      }
+
+      if (passForm) {
+        passForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(passForm);
+          const passStage = String(formData.get("passStage") || "Developmental");
+          const passName = String(formData.get("passName") || "").trim() || defaultPassName(passStage);
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            editing: {
+              ...projectBundle.editing,
+              passStage,
+              passStatus: String(formData.get("passStatus") || "Not started"),
+              passName,
+              passObjective: String(formData.get("passObjective") || "").trim(),
+              progressCurrent: number(formData.get("progressCurrent")),
+              progressTotal: number(formData.get("progressTotal"))
+            }
+          }));
+          closeEditPassModal();
+          persistAndRender();
+          showToast("Pass updated", `${passName} is now the active editing pass.`);
+        };
+      }
+
+      if (editSessionForm) {
+        editSessionForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(editSessionForm);
+          const isEditingExisting = Boolean(editingEditSessionId);
+          const session = normalizeSession({
+            id: editingEditSessionId || createId(),
+            type: "edit",
+            date: new Date(`${formData.get("sessionDate")}T12:00:00`).toISOString(),
+            durationMinutes: Math.max(1, number(formData.get("durationMinutes"))),
+            wordsEdited: Math.max(0, number(formData.get("wordsEdited"))),
+            notes: String(formData.get("sessionNotes") || "").trim(),
+            passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
+            sectionLabel: String(formData.get("sectionLabel") || "").trim()
+          });
+
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            sessions: isEditingExisting
+              ? projectBundle.sessions.map((item) => item.id === editingEditSessionId ? session : item)
+              : [session, ...projectBundle.sessions]
+          }));
+
+          closeEditSessionModal();
+          persistAndRender();
+          showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", "Your revision work is now part of the dashboard.");
+        };
+      }
+
+      if (issueForm) {
+        issueForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(issueForm);
+          const isEditingExisting = Boolean(editingIssueId);
+          const issue = normalizeIssue({
+            id: editingIssueId || createId(),
+            title: String(formData.get("title") || "").trim(),
+            type: String(formData.get("type") || "General"),
+            sectionLabel: String(formData.get("sectionLabel") || "").trim(),
+            priority: String(formData.get("priority") || "Medium"),
+            status: String(formData.get("status") || "Open"),
+            notes: String(formData.get("notes") || "").trim(),
+            createdAt: isEditingExisting
+              ? bundle.issues.find((item) => item.id === editingIssueId)?.createdAt || new Date().toISOString()
+              : new Date().toISOString(),
+            passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage)
+          });
+
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: isEditingExisting
+              ? projectBundle.issues.map((item) => item.id === editingIssueId ? issue : item)
+              : [issue, ...projectBundle.issues]
+          }));
+
+          closeIssueModal();
+          persistAndRender();
+          showToast(isEditingExisting ? "Issue updated" : "Issue added", "That editing problem has been filed away for the current pass.");
+        };
+      }
+
+      document.querySelectorAll("[data-action='edit-issue']").forEach((button) => {
+        button.onclick = () => {
+          openIssueModal(button.dataset.id);
+        };
+      });
+
+      document.querySelectorAll("[data-action='toggle-issue-status']").forEach((button) => {
+        button.onclick = () => {
+          const issueId = button.dataset.id;
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: projectBundle.issues.map((issue) => {
+              if (issue.id !== issueId) return issue;
+              return {
+                ...issue,
+                status: issue.status === "Resolved" ? "Open" : "Resolved"
+              };
+            })
+          }));
+          persistAndRender();
+          showToast("Issue updated", "The issue status was updated.");
+        };
+      });
+
+      document.querySelectorAll("[data-action='delete-issue']").forEach((button) => {
+        button.onclick = () => {
+          const issueId = button.dataset.id;
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: projectBundle.issues.filter((issue) => issue.id !== issueId)
+          }));
+          persistAndRender();
+          showToast("Issue deleted", "That issue was removed from your editing backlog.");
+        };
+      });
+
+      bindSessionActions();
+    }
+
+    function openEditPassModal() {
+      const modal = document.getElementById("edit-pass-modal");
+      const form = document.getElementById("edit-pass-form");
+      const editing = currentBundle()?.editing || createDefaultEditingState();
+      form.elements.passStage.value = editing.passStage || "Developmental";
+      form.elements.passStatus.value = editing.passStatus || "Not started";
+      form.elements.passName.value = editing.passName || defaultPassName(editing.passStage);
+      form.elements.passObjective.value = editing.passObjective || "";
+      form.elements.progressCurrent.value = String(number(editing.progressCurrent));
+      form.elements.progressTotal.value = String(number(editing.progressTotal));
+      modal.classList.remove("hidden");
+    }
+
+    function closeEditPassModal() {
+      const modal = document.getElementById("edit-pass-modal");
+      modal.classList.add("hidden");
+    }
+
+    function openEditSessionModal(sessionId = null) {
+      const modal = document.getElementById("edit-session-modal");
+      const form = document.getElementById("edit-session-form");
+      const bundle = currentBundle();
+      const passCopy = document.getElementById("edit-session-pass-copy");
+      const title = document.getElementById("edit-session-title");
+      const copy = document.getElementById("edit-session-copy");
+      const submit = document.getElementById("edit-session-submit-btn");
+      const existingSession = sessionId ? bundle?.sessions.find((item) => item.id === sessionId) : null;
+
+      editingEditSessionId = sessionId;
+      form.reset();
+      passCopy.textContent = `Active pass: ${bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage)}`;
+
+      if (existingSession) {
+        title.textContent = "Edit Editing Session";
+        copy.textContent = "Update the revision log for this session.";
+        form.elements.sessionDate.value = toInputDate(existingSession.date);
+        form.elements.durationMinutes.value = String(Math.max(1, number(existingSession.durationMinutes)));
+        form.elements.sectionLabel.value = existingSession.sectionLabel || "";
+        form.elements.wordsEdited.value = String(number(existingSession.wordsEdited));
+        form.elements.sessionNotes.value = existingSession.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Log Editing Session";
+        copy.textContent = "Capture time spent revising, what section you touched, and anything you want to remember.";
+        form.elements.sessionDate.value = toInputDate(new Date().toISOString());
+        form.elements.durationMinutes.value = "45";
+        form.elements.sectionLabel.value = "";
+        form.elements.wordsEdited.value = "0";
+        form.elements.sessionNotes.value = "";
+        submit.textContent = "Save editing session";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeEditSessionModal() {
+      const modal = document.getElementById("edit-session-modal");
+      const form = document.getElementById("edit-session-form");
+      form.reset();
+      editingEditSessionId = null;
+      modal.classList.add("hidden");
+    }
+
+    function openIssueModal(issueId = null) {
+      const modal = document.getElementById("issue-modal");
+      const form = document.getElementById("issue-form");
+      const passCopy = document.getElementById("issue-pass-copy");
+      const title = document.getElementById("issue-modal-title");
+      const copy = document.getElementById("issue-modal-copy");
+      const submit = document.getElementById("issue-submit-btn");
+      const issue = issueId ? currentBundle()?.issues.find((item) => item.id === issueId) : null;
+
+      editingIssueId = issueId;
+      form.reset();
+      passCopy.textContent = `Filed under: ${currentBundle()?.editing?.passName || defaultPassName(currentBundle()?.editing?.passStage)}`;
+
+      if (issue) {
+        title.textContent = "Edit Open Issue";
+        copy.textContent = "Update the problem so it stays useful during the pass.";
+        form.elements.title.value = issue.title || "";
+        form.elements.type.value = issue.type || "General";
+        form.elements.priority.value = issue.priority || "Medium";
+        form.elements.sectionLabel.value = issue.sectionLabel || "";
+        form.elements.status.value = issue.status || "Open";
+        form.elements.notes.value = issue.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Add Open Issue";
+        copy.textContent = "Capture a problem now so you can come back to it during the pass.";
+        form.elements.type.value = "Pacing";
+        form.elements.priority.value = "Medium";
+        form.elements.status.value = "Open";
+        submit.textContent = "Save issue";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeIssueModal() {
+      const modal = document.getElementById("issue-modal");
+      const form = document.getElementById("issue-form");
+      form.reset();
+      editingIssueId = null;
+      modal.classList.add("hidden");
     }
 
     function openSessionModal() {
@@ -2516,7 +3847,7 @@
       const copy = document.getElementById("goal-modal-copy");
       form.reset();
       form.elements.type.value = "write_words";
-      form.elements.targetValue.value = 1000;
+      applyGoalTypePreset(form, "write_words");
       title.textContent = "Create Goal";
       copy.textContent = "Set a simple daily target you can scan quickly from the dashboard.";
       modal.classList.remove("hidden");
@@ -2532,6 +3863,12 @@
     function bindSessionActions() {
       document.querySelectorAll("[data-action='edit-session']").forEach((button) => {
         button.addEventListener("click", () => {
+          const session = currentBundle()?.sessions.find((item) => item.id === button.dataset.id);
+          if (!session) return;
+          if (session.type === "edit") {
+            openEditSessionModal(session.id);
+            return;
+          }
           editingSessionId = button.dataset.id;
           openSessionCompleteModal();
         });
@@ -2540,19 +3877,23 @@
       document.querySelectorAll("[data-action='delete-session']").forEach((button) => {
         button.addEventListener("click", () => {
           const sessionId = button.dataset.id;
+          const deletedSession = currentBundle()?.sessions.find((item) => item.id === sessionId);
           updateCurrentBundle((projectBundle) => {
             const session = projectBundle.sessions.find((item) => item.id === sessionId);
+            const nextWordCount = session?.type === "edit"
+              ? number(projectBundle.project.currentWordCount)
+              : Math.max(0, number(projectBundle.project.currentWordCount) - number(session?.wordsWritten));
             return {
               ...projectBundle,
               sessions: projectBundle.sessions.filter((item) => item.id !== sessionId),
               project: {
                 ...projectBundle.project,
-                currentWordCount: Math.max(0, number(projectBundle.project.currentWordCount) - number(session?.wordsWritten))
+                currentWordCount: nextWordCount
               }
             };
           });
           persistAndRender();
-          showToast("Session deleted", "That session was removed from your history.");
+          showToast("Session deleted", deletedSession?.type === "edit" ? "That editing session was removed from your history." : "That session was removed from your history.");
         });
       });
 
@@ -2560,22 +3901,31 @@
 
     function bindEditProjectEvents() {
       const form = document.getElementById("project-form");
+      const backButton = document.getElementById("back-to-projects-btn");
+      if (backButton) {
+        backButton.addEventListener("click", () => {
+          activeView = "projects";
+          saveState();
+          render();
+        });
+      }
       if (!form) return;
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const formData = new FormData(event.target);
+        const formData = new FormData(form);
         updateCurrentBundle((projectBundle) => ({
           ...projectBundle,
           project: {
             ...projectBundle.project,
-            bookTitle: formData.get("bookTitle").trim(),
+            bookTitle: String(formData.get("bookTitle") || "").trim() || projectBundle.project.bookTitle,
             targetWordCount: number(formData.get("targetWordCount")),
             currentWordCount: number(formData.get("currentWordCount")),
-            deadline: formData.get("deadline"),
+            deadline: String(formData.get("deadline") || ""),
             dailyTarget: number(formData.get("dailyTarget")),
-            projectStartDate: formData.get("projectStartDate") || projectBundle.project.projectStartDate
+            projectStartDate: String(formData.get("projectStartDate") || "") || projectBundle.project.projectStartDate
           }
         }));
+        activeView = "projects";
         persistAndRender();
         showToast("Project updated", "Your manuscript settings have been saved.");
       });
@@ -2600,18 +3950,68 @@
           </div>
           <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
           <div class="meta-line">
-            <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)})</span>
+            <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
           </div>
         </div>
       `;
     }
 
-    function renderSessionCard(bundle, session) {
+    function renderIssueCard(issue) {
+      const priorityClass = `priority-${String(issue.priority || "Medium").toLowerCase()}`;
+      const statusClass = `status-${String(issue.status || "Open").toLowerCase()}`;
       return `
         <div class="item">
           <div class="item-top">
             <div>
-              <h4>${formatNumber(session.wordsWritten)} words written</h4>
+              <p class="session-kind">Open issue</p>
+              <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
+              <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
+            </div>
+            <div class="goal-actions">
+              <button class="icon-btn" type="button" data-action="edit-issue" data-id="${issue.id}" aria-label="Edit issue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+                  <path d="M13.5 6.5l4 4"></path>
+                </svg>
+              </button>
+              <button class="inline-btn" type="button" data-action="toggle-issue-status" data-id="${issue.id}">
+                ${issue.status === "Resolved" ? "Reopen" : "Resolve"}
+              </button>
+              <button class="icon-btn" type="button" data-action="delete-issue" data-id="${issue.id}" aria-label="Delete issue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="meta-line">
+            <span class="pill">${escapeHtml(issue.type)}</span>
+            <span class="pill ${priorityClass}">${escapeHtml(issue.priority)}</span>
+            <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
+            ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
+          </div>
+          ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderSessionCard(bundle, session) {
+      const isEditSession = session.type === "edit";
+      const title = isEditSession
+        ? `${formatNumber(session.wordsEdited)} words edited`
+        : `${formatNumber(session.wordsWritten)} words written`;
+      const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
+      const passPill = isEditSession && session.passName ? `<span class="pill">${escapeHtml(session.passName)}</span>` : "";
+      return `
+        <div class="item">
+          <div class="item-top">
+            <div>
+              <p class="session-kind">${isEditSession ? "Editing session" : "Writing session"}</p>
+              <h4>${title}</h4>
               <p class="small-copy">${formatDate(session.date)}</p>
             </div>
             <div class="goal-actions">
@@ -2634,6 +4034,8 @@
           </div>
           <div class="meta-line">
             <span class="pill">${formatNumber(session.durationMinutes)} min</span>
+            ${passPill}
+            ${sectionPill}
           </div>
           ${session.notes ? `<p class="small-copy" style="margin-top: 10px;">${escapeHtml(session.notes)}</p>` : ""}
         </div>
