@@ -1,0 +1,4125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Author Engine</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --panel: rgba(255, 252, 247, 0.88);
+      --panel-strong: #fffaf3;
+      --ink: #1f1a17;
+      --muted: #6d6257;
+      --line: rgba(77, 61, 48, 0.12);
+      --accent: #b85c38;
+      --accent-soft: rgba(184, 92, 56, 0.14);
+      --accent-strong: #914323;
+      --success: #2f7d4a;
+      --warning: #a26617;
+      --shadow: 0 20px 60px rgba(66, 43, 26, 0.12);
+      --radius: 24px;
+      --radius-sm: 16px;
+      --max: 1240px;
+      --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      --sans: "Avenir Next", "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(184, 92, 56, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(47, 125, 74, 0.1), transparent 24%),
+        linear-gradient(180deg, #f7f1e8 0%, #efe7db 100%);
+      min-height: 100vh;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .app-shell {
+      width: 100%;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 20px;
+      padding: 20px;
+    }
+
+    .app-shell.no-sidebar {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sidebar {
+      display: grid;
+      align-content: start;
+      gap: 18px;
+      padding: 22px;
+      position: sticky;
+      top: 20px;
+      max-height: calc(100vh - 40px);
+      background: rgba(255, 250, 243, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid rgba(77, 61, 48, 0.12);
+    }
+
+    .sidebar-projects-btn {
+      width: 100%;
+      text-align: left;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(184, 92, 56, 0.12);
+      color: var(--accent-strong);
+      box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.14);
+    }
+
+    .app-shell.no-sidebar .sidebar {
+      display: none;
+    }
+
+    .content-shell {
+      min-width: 0;
+      display: grid;
+      align-content: start;
+      gap: 18px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-family: var(--serif);
+      font-size: clamp(2rem, 4vw, 3.6rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .brand p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      max-width: 60ch;
+    }
+
+    .nav {
+      display: grid;
+      gap: 10px;
+    }
+
+    .nav button,
+    .ghost-btn,
+    .primary-btn,
+    .inline-btn {
+      border: 0;
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .nav button {
+      width: 100%;
+      text-align: left;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.62);
+      color: var(--muted);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .nav button.active,
+    .nav button:hover {
+      background: var(--ink);
+      color: #fff8f1;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .view {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .dashboard-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.55);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      overflow: hidden;
+    }
+
+    .card h2,
+    .card h3,
+    .card h4 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .section-head p,
+    .small-copy,
+    .muted {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .hero {
+      display: grid;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .hero-panel {
+      padding: 28px;
+      border-radius: 28px;
+      background:
+        linear-gradient(135deg, rgba(255, 250, 243, 0.94), rgba(255, 245, 234, 0.86)),
+        rgba(255, 250, 243, 0.9);
+      border: 1px solid rgba(146, 88, 54, 0.12);
+    }
+
+    .dashboard-top {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.95fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .hero-title {
+      font-family: var(--serif);
+      font-size: clamp(1.8rem, 3vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.04em;
+      margin: 0 0 10px;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0 20px;
+    }
+
+    .pill,
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: inset 0 0 0 1px var(--line);
+      color: var(--ink);
+      font-size: 0.92rem;
+    }
+
+    .badge {
+      background: rgba(184, 92, 56, 0.12);
+      color: var(--accent-strong);
+    }
+
+    .progress-block {
+      margin-top: 18px;
+    }
+
+    .progress-label-row,
+    .metric-row,
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 14px;
+    }
+
+    .progress-label-row strong {
+      font-size: 1.05rem;
+    }
+
+    .progress-rail {
+      position: relative;
+      margin-top: 10px;
+      height: 14px;
+      background: rgba(49, 37, 30, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), #d79256);
+      transition: width 320ms ease;
+    }
+
+    .sub-progress .progress-fill {
+      background: linear-gradient(90deg, var(--success), #77a76b);
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .metric .label {
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .metric .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.05;
+    }
+
+    .metric .hint {
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .signal-band {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .signal-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 16px 18px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(251, 245, 237, 0.92));
+      box-shadow: inset 0 0 0 1px rgba(96, 70, 54, 0.12);
+    }
+
+    .signal-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: 1.25rem;
+      background: rgba(255, 255, 255, 0.86);
+      box-shadow: inset 0 0 0 1px rgba(96, 70, 54, 0.12);
+    }
+
+    .signal-copy {
+      display: grid;
+      gap: 4px;
+    }
+
+    .signal-copy strong,
+    .signal-copy span,
+    .signal-copy p {
+      margin: 0;
+    }
+
+    .signal-copy strong {
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .signal-copy span {
+      font-size: 1.28rem;
+      font-weight: 700;
+      line-height: 1.05;
+    }
+
+    .signal-copy p {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .momentum-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 1.15rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .momentum-status.up {
+      color: #8ed39c;
+    }
+
+    .momentum-status.flat {
+      color: #c3beb9;
+    }
+
+    .momentum-status.down {
+      color: #ef9b8d;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .form-grid.triple {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-size: 0.94rem;
+      color: var(--muted);
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid rgba(96, 70, 54, 0.16);
+      border-radius: 14px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    .primary-btn {
+      background: var(--ink);
+      color: #fff7ef;
+      padding: 13px 18px;
+      border-radius: 14px;
+    }
+
+    .primary-btn:hover,
+    .ghost-btn:hover,
+    .inline-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .ghost-btn,
+    .inline-btn {
+      padding: 11px 15px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      color: var(--ink);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .inline-btn {
+      padding: 9px 12px;
+      font-size: 0.92rem;
+    }
+
+    .list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .item {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.62);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .item-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .goal-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: rgba(31, 26, 23, 0.7);
+      box-shadow: none;
+      transition: color 160ms ease, background 160ms ease;
+    }
+
+    .icon-btn svg {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .icon-btn:hover {
+      transform: none;
+      background: rgba(96, 70, 54, 0.08);
+      color: var(--ink);
+    }
+
+    .item h4 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .meta-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .chart-card {
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.62);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .chart-shell {
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .chart-shell svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      width: min(360px, calc(100vw - 40px));
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(24, 19, 17, 0.96);
+      color: #fff7ef;
+      box-shadow: 0 22px 70px rgba(24, 19, 17, 0.3);
+      transform: translateY(18px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease, transform 200ms ease;
+      z-index: 100;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(31, 26, 23, 0.38);
+      backdrop-filter: blur(8px);
+      z-index: 90;
+    }
+
+    #end-session-confirm-modal {
+      z-index: 110;
+    }
+
+    .modal-card {
+      width: min(720px, 100%);
+      max-height: calc(100vh - 40px);
+      overflow: auto;
+      background: rgba(255, 250, 243, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 28px;
+      box-shadow: 0 28px 80px rgba(24, 19, 17, 0.22);
+      padding: 24px;
+    }
+
+    .toast strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .empty {
+      padding: 22px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed rgba(96, 70, 54, 0.18);
+      border-radius: 18px;
+    }
+
+    .page-action-bar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .goal-editor-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .writing-launch {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+      gap: 18px;
+      align-items: center;
+    }
+
+    .writing-launch-copy {
+      display: grid;
+      gap: 10px;
+    }
+
+    .writing-launch-copy h3,
+    .writing-launch-copy p {
+      margin: 0;
+    }
+
+    .writing-launch-copy p {
+      color: var(--muted);
+    }
+
+    .writing-launch-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .writing-launch-cta {
+      justify-self: end;
+      min-width: 220px;
+      min-height: 64px;
+      font-size: 1.02rem;
+    }
+
+    .session-setup {
+      display: grid;
+      gap: 20px;
+      justify-items: center;
+      text-align: center;
+    }
+
+    .session-dial-wrap {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+      width: 100%;
+    }
+
+    .session-dial {
+      width: min(100%, 360px);
+      overflow: visible;
+      touch-action: none;
+      user-select: none;
+      cursor: grab;
+    }
+
+    .session-dial.dragging {
+      cursor: grabbing;
+    }
+
+    .session-dial text {
+      font-family: var(--serif);
+      fill: var(--ink);
+    }
+
+    .session-dial-rail {
+      fill: none;
+      stroke: rgba(96, 70, 54, 0.16);
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .session-dial-progress {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 12;
+      stroke-linecap: round;
+    }
+
+    .session-dial-handle {
+      fill: #fffaf3;
+      stroke: rgba(31, 26, 23, 0.72);
+      stroke-width: 2;
+      filter: drop-shadow(0 8px 18px rgba(24, 19, 17, 0.14));
+    }
+
+    .session-dial-caption {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .session-complete-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .writing-session-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 95;
+      background:
+        radial-gradient(circle at top, rgba(226, 190, 151, 0.24), transparent 40%),
+        rgba(255, 249, 241, 0.98);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .writing-session-shell {
+      display: grid;
+      gap: 22px;
+      justify-items: center;
+      text-align: center;
+      width: min(760px, 100%);
+    }
+
+    .writing-session-shell p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .writing-session-clock {
+      font-family: var(--serif);
+      font-size: clamp(4rem, 14vw, 8rem);
+      letter-spacing: -0.05em;
+      line-height: 0.95;
+      margin: 0;
+      color: var(--ink);
+    }
+
+    .quiet-btn {
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      box-shadow: inset 0 0 0 1px rgba(96, 70, 54, 0.14);
+    }
+
+    .quiet-btn:hover {
+      background: rgba(96, 70, 54, 0.06);
+      color: var(--ink);
+      transform: none;
+    }
+
+    .heatmap-shell {
+      display: grid;
+      gap: 14px;
+    }
+
+    .heatmap-toolbar {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .heatmap-title {
+      font-family: var(--serif);
+      font-size: 1.1rem;
+      margin: 0;
+      text-align: center;
+    }
+
+    .heatmap-nav {
+      width: 40px;
+      height: 40px;
+      border-radius: 999px;
+      border: 1px solid rgba(96, 70, 54, 0.16);
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ink);
+      font-size: 1.35rem;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .heatmap-nav:hover {
+      transform: translateY(-1px);
+      border-color: rgba(96, 70, 54, 0.28);
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    .heatmap-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .heatmap-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .heatmap-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
+      box-shadow: inset 0 0 0 1px rgba(31, 26, 23, 0.08);
+    }
+
+    .heatmap-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-align: center;
+    }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .heatmap-cell {
+      min-height: 58px;
+      border-radius: 6px;
+      background: rgba(96, 70, 54, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(31, 26, 23, 0.06);
+      padding: 6px;
+      display: flex;
+      align-items: start;
+      justify-content: end;
+      cursor: default;
+    }
+
+    .heatmap-daynum {
+      font-size: 0.78rem;
+      color: rgba(31, 26, 23, 0.76);
+      line-height: 1;
+    }
+
+    .heatmap-cell.none {
+      background: rgba(96, 70, 54, 0.08);
+    }
+
+    .heatmap-swatch.fail,
+    .heatmap-cell.fail {
+      background: rgba(206, 88, 78, 0.78);
+    }
+
+    .heatmap-swatch.partial,
+    .heatmap-cell.partial {
+      background: rgba(223, 178, 72, 0.88);
+    }
+
+    .heatmap-swatch.met,
+    .heatmap-cell.met {
+      background: rgba(69, 151, 96, 0.88);
+    }
+
+    .heatmap-swatch.exceeded,
+    .heatmap-cell.exceeded {
+      background: rgba(127, 92, 196, 0.88);
+    }
+
+    .footer-note {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .project-card {
+      display: grid;
+      gap: 14px;
+      min-height: 240px;
+    }
+
+    .project-card .hero-title {
+      font-size: clamp(1.5rem, 2.8vw, 2.5rem);
+    }
+
+    .edit-columns {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+    }
+
+    .pass-focus {
+      display: grid;
+      gap: 18px;
+    }
+
+    .pass-copy {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--ink);
+      max-width: 64ch;
+    }
+
+    .snapshot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .snapshot-card {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.6);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .snapshot-card strong,
+    .snapshot-card p {
+      margin: 0;
+    }
+
+    .snapshot-card strong {
+      display: block;
+      font-size: 0.86rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .snapshot-card p {
+      font-size: 1.2rem;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .snapshot-card span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .section-stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .session-kind {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .issue-title {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.35;
+    }
+
+    .issue-note {
+      margin: 10px 0 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .pill.status-open,
+    .pill.priority-high {
+      background: rgba(184, 92, 56, 0.14);
+      color: var(--accent-strong);
+    }
+
+    .pill.status-deferred,
+    .pill.priority-medium {
+      background: rgba(162, 102, 23, 0.14);
+      color: var(--warning);
+    }
+
+    .pill.status-resolved,
+    .pill.priority-low {
+      background: rgba(47, 125, 74, 0.14);
+      color: var(--success);
+    }
+
+    .issue-breakdown {
+      display: grid;
+      gap: 10px;
+    }
+
+    .issue-breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .issue-breakdown-row strong,
+    .issue-breakdown-row span {
+      margin: 0;
+    }
+
+    .empty-state {
+      min-height: 56vh;
+      display: grid;
+      place-items: center;
+    }
+
+    .empty-panel {
+      width: min(760px, 100%);
+      padding: 32px;
+      border-radius: 30px;
+      background: rgba(255, 250, 243, 0.92);
+      box-shadow: var(--shadow);
+      border: 1px solid rgba(96, 70, 54, 0.12);
+    }
+
+    @media (max-width: 1080px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        max-height: none;
+      }
+
+      .dashboard-grid,
+      .dashboard-top,
+      .hero,
+      .edit-columns,
+      .snapshot-grid,
+      .projects-grid,
+      .signal-band,
+      .writing-launch,
+      .split,
+      .stats-grid,
+      .metrics {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .section-head,
+      .heatmap-toolbar,
+      .item-top,
+      .metric-row,
+      .summary-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .dashboard-grid,
+      .dashboard-top,
+      .hero,
+      .edit-columns,
+      .snapshot-grid,
+      .projects-grid,
+      .signal-band,
+      .writing-launch,
+      .split,
+      .stats-grid,
+      .metrics,
+      .form-grid,
+      .form-grid.triple {
+        grid-template-columns: 1fr;
+      }
+
+      .writing-launch-cta {
+        justify-self: stretch;
+        width: 100%;
+      }
+
+      .app-shell {
+        padding: 14px;
+      }
+
+      .card,
+      .hero-panel {
+        padding: 18px;
+      }
+
+      .heatmap-cell {
+        min-height: 44px;
+        padding: 5px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand" id="brand"></div>
+      <nav class="nav" id="nav"></nav>
+      <div class="sidebar-footer" id="sidebar-footer"></div>
+      <p class="footer-note">Everything stays editable. Data is stored locally in your browser for this MVP.</p>
+    </aside>
+
+    <section class="content-shell">
+      <main id="view-projects" class="view"></main>
+      <main id="view-create-project" class="view hidden"></main>
+      <main id="view-dashboard" class="view hidden"></main>
+      <main id="view-edit" class="view hidden"></main>
+      <main id="view-sessions" class="view hidden"></main>
+      <main id="view-stats" class="view hidden"></main>
+      <main id="view-edit-project" class="view hidden"></main>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="modal-backdrop hidden" id="session-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="session-modal-title">Start Writing Session</h3>
+          <p id="session-modal-copy">Choose how long you want to write, then begin.</p>
+        </div>
+        <button class="ghost-btn" id="close-session-modal-btn" type="button">Close</button>
+      </div>
+      <div class="session-setup">
+        <div class="session-dial-wrap">
+          <svg class="session-dial" id="session-dial" viewBox="0 0 320 220" aria-label="Writing session duration dial">
+            <path class="session-dial-rail" id="session-dial-rail" pathLength="100" d="M40 180 A120 120 0 0 1 280 180"></path>
+            <path class="session-dial-progress" id="session-dial-progress" pathLength="100" d="M40 180 A120 120 0 0 1 280 180"></path>
+            <circle class="session-dial-handle" id="session-dial-handle" cx="40" cy="180" r="11"></circle>
+            <text id="session-dial-value" x="160" y="118" text-anchor="middle" font-size="44">25</text>
+            <text x="160" y="145" text-anchor="middle" font-size="16">minutes</text>
+          </svg>
+          <p class="session-dial-caption" id="session-dial-caption">Drag the dial to set your timer.</p>
+        </div>
+        <label>Current manuscript word count
+          <input type="number" min="0" id="session-start-word-count" name="sessionStartWordCount" required />
+        </label>
+        <button class="primary-btn writing-launch-cta" id="start-session-btn" type="button">Start session</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="session-complete-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="session-complete-title">Session complete</h3>
+          <p id="session-complete-copy">How many words did you write during that time?</p>
+        </div>
+        <button class="ghost-btn" id="close-session-complete-btn" type="button">Close</button>
+      </div>
+      <form id="session-complete-form" class="session-complete-form">
+        <p class="small-copy full" id="session-start-count-copy"></p>
+        <label id="session-end-word-count-field">Current manuscript word count
+          <input type="number" min="0" name="sessionEndWordCount" />
+        </label>
+        <label id="session-words-written-field" class="hidden">Words written
+          <input type="number" min="0" name="sessionWordsWritten" />
+        </label>
+        <label>Session duration in minutes
+          <input type="number" min="1" name="durationMinutes" required />
+        </label>
+        <label>Session date
+          <input type="date" name="sessionDate" required />
+        </label>
+        <label class="full">Notes
+          <textarea name="sessionNotes" placeholder="Optional notes about the session"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="session-submit-btn" type="submit">Save session</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="writing-session-screen hidden" id="writing-session-screen">
+    <div class="writing-session-shell">
+      <p id="writing-session-copy">Writing session in progress</p>
+      <h2 class="writing-session-clock" id="writing-session-clock">25:00</h2>
+      <button class="quiet-btn" id="end-session-btn" type="button">End writing session</button>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="end-session-confirm-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3>End session early?</h3>
+          <p>Your timer is still running. Are you sure you want to stop this writing session now?</p>
+        </div>
+      </div>
+      <div class="meta-line" style="margin-top: 18px;">
+        <button class="ghost-btn" id="cancel-end-session-btn" type="button">Keep writing</button>
+        <button class="primary-btn" id="confirm-end-session-btn" type="button">End session</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="goal-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="goal-modal-title">Create Goal</h3>
+          <p id="goal-modal-copy">Set a simple daily target you can scan quickly from the dashboard.</p>
+        </div>
+        <button class="ghost-btn" id="close-goal-modal-btn" type="button">Close</button>
+      </div>
+      <form id="goal-form" class="form-grid">
+        <label>Goal type
+          <select name="type">
+            <option value="write_words">Write words</option>
+            <option value="write_minutes">Spend time writing</option>
+          </select>
+        </label>
+        <label><span id="goal-target-label">Daily target (words)</span>
+          <input type="number" min="1" name="targetValue" value="1000" required />
+        </label>
+        <label class="full">Goal label
+          <input name="title" placeholder="Example: Write 1,000 words today" required />
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="goal-submit-btn" type="submit">Add goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="edit-pass-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit-pass-title">Current Pass</h3>
+          <p id="edit-pass-copy">Define the editing pass this dashboard should revolve around.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit-pass-btn" type="button">Close</button>
+      </div>
+      <form id="edit-pass-form" class="form-grid">
+        <label>Stage of process
+          <select name="passStage">
+            <option value="Developmental">Developmental</option>
+            <option value="Structural">Structural</option>
+            <option value="Line Edit">Line Edit</option>
+            <option value="Copyedit">Copyedit</option>
+            <option value="Proofread">Proofread</option>
+          </select>
+        </label>
+        <label>Status
+          <select name="passStatus">
+            <option value="Not started">Not started</option>
+            <option value="In progress">In progress</option>
+            <option value="Paused">Paused</option>
+            <option value="Complete">Complete</option>
+          </select>
+        </label>
+        <label class="full">Pass label
+          <input name="passName" placeholder="Example: Dialogue polish pass" />
+        </label>
+        <label class="full">Pass objective
+          <textarea name="passObjective" placeholder="What is this pass trying to improve?"></textarea>
+        </label>
+        <label>Sections reviewed
+          <input type="number" min="0" name="progressCurrent" value="0" />
+        </label>
+        <label>Total sections
+          <input type="number" min="0" name="progressTotal" value="0" />
+        </label>
+        <div class="full">
+          <button class="primary-btn" type="submit">Save pass</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="edit-session-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit-session-title">Log Editing Session</h3>
+          <p id="edit-session-copy">Capture time spent revising, what section you touched, and anything you want to remember.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit-session-btn" type="button">Close</button>
+      </div>
+      <form id="edit-session-form" class="form-grid">
+        <p class="small-copy full" id="edit-session-pass-copy"></p>
+        <label>Session date
+          <input type="date" name="sessionDate" required />
+        </label>
+        <label>Duration (minutes)
+          <input type="number" min="1" name="durationMinutes" value="45" required />
+        </label>
+        <label>Section worked on
+          <input name="sectionLabel" placeholder="Example: Chapter 12" />
+        </label>
+        <label>Words edited
+          <input type="number" min="0" name="wordsEdited" value="0" required />
+        </label>
+        <label class="full">Session notes
+          <textarea name="sessionNotes" placeholder="Optional note about what changed or what still feels off"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="edit-session-submit-btn" type="submit">Save editing session</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="issue-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="issue-modal-title">Add Open Issue</h3>
+          <p id="issue-modal-copy">Capture a problem now so you can come back to it during the pass.</p>
+        </div>
+        <button class="ghost-btn" id="close-issue-modal-btn" type="button">Close</button>
+      </div>
+      <form id="issue-form" class="form-grid">
+        <p class="small-copy full" id="issue-pass-copy"></p>
+        <label class="full">Problem title
+          <input name="title" placeholder="Example: Chapter 8 pacing stalls after the reveal" required />
+        </label>
+        <label>Issue type
+          <select name="type">
+            <option value="Pacing">Pacing</option>
+            <option value="Continuity">Continuity</option>
+            <option value="Character">Character</option>
+            <option value="Scene logic">Scene logic</option>
+            <option value="Prose">Prose</option>
+            <option value="Research">Research</option>
+            <option value="General">General</option>
+          </select>
+        </label>
+        <label>Priority
+          <select name="priority">
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Low">Low</option>
+          </select>
+        </label>
+        <label>Section
+          <input name="sectionLabel" placeholder="Example: Chapter 8" />
+        </label>
+        <label>Status
+          <select name="status">
+            <option value="Open">Open</option>
+            <option value="Deferred">Deferred</option>
+            <option value="Resolved">Resolved</option>
+          </select>
+        </label>
+        <label class="full">Notes
+          <textarea name="notes" placeholder="Optional context for when you return to this issue"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="issue-submit-btn" type="submit">Save issue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "author-engine-mvp";
+    const DEFAULT_VIEW = "projects";
+    const views = ["projects", "create-project", "dashboard", "edit", "sessions", "stats", "edit-project"];
+    const requiredImportColumns = [
+      "row_type",
+      "project_id",
+      "project_title",
+      "project_target_word_count",
+      "project_current_word_count",
+      "project_deadline",
+      "project_daily_target",
+      "project_start_date",
+      "goal_id",
+      "goal_type",
+      "goal_title",
+      "goal_target_value",
+      "goal_created_at",
+      "session_id",
+      "session_date",
+      "session_duration_minutes",
+      "session_words_written",
+      "session_words_edited",
+      "session_notes"
+    ];
+    const milestoneTargets = [5000, 10000, 25000, 50000, 75000, 100000];
+    const exportColumns = [
+      "row_type",
+      "project_id",
+      "project_title",
+      "project_target_word_count",
+      "project_current_word_count",
+      "project_deadline",
+      "project_daily_target",
+      "project_start_date",
+      "project_edit_pass_name",
+      "project_edit_pass_stage",
+      "project_edit_pass_status",
+      "project_edit_pass_objective",
+      "project_edit_progress_current",
+      "project_edit_progress_total",
+      "goal_id",
+      "goal_type",
+      "goal_title",
+      "goal_target_value",
+      "goal_created_at",
+      "issue_id",
+      "issue_title",
+      "issue_type",
+      "issue_section_label",
+      "issue_priority",
+      "issue_status",
+      "issue_notes",
+      "issue_created_at",
+      "issue_pass_name",
+      "session_id",
+      "session_type",
+      "session_date",
+      "session_duration_minutes",
+      "session_words_written",
+      "session_words_edited",
+      "session_pass_name",
+      "session_section_label",
+      "session_notes"
+    ];
+
+    function defaultPassName(stage = "Developmental") {
+      const labels = {
+        Developmental: "Developmental Edit",
+        Structural: "Structural Pass",
+        "Line Edit": "Line Edit",
+        Copyedit: "Copyedit",
+        Proofread: "Proofread"
+      };
+      return labels[stage] || `${stage} Pass`;
+    }
+
+    function createDefaultEditingState() {
+      return {
+        passName: defaultPassName(),
+        passStage: "Developmental",
+        passStatus: "Not started",
+        passObjective: "",
+        progressCurrent: 0,
+        progressTotal: 0
+      };
+    }
+
+    function cloneValue(value) {
+      if (typeof structuredClone === "function") return structuredClone(value);
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function createId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    const defaultProjectTemplate = {
+      project: {
+        bookTitle: "",
+        targetWordCount: 80000,
+        currentWordCount: 0,
+        deadline: "",
+        dailyTarget: 1000,
+        projectStartDate: new Date().toISOString().slice(0, 10)
+      },
+      editing: createDefaultEditingState(),
+      goals: [],
+      sessions: [],
+      issues: [],
+      milestones: []
+    };
+
+    const defaultState = {
+      projects: [],
+      activeProjectId: null
+    };
+
+    let state = loadState();
+    let activeView = loadActiveView();
+    let toastTimer = null;
+    let editingSessionId = null;
+    let editingEditSessionId = null;
+    let editingIssueId = null;
+    let heatmapMonthOffset = 0;
+    let sessionDraftMinutes = 25;
+    let activeWritingSession = null;
+    let pendingCompletedSession = null;
+    let sessionTimerHandle = null;
+    let sessionsReturnView = "dashboard";
+
+    function isProjectWorkspaceView(view) {
+      return ["dashboard", "edit", "stats"].includes(view);
+    }
+
+    function createProjectBundle(title, targetWordCount, currentWordCount, deadline) {
+      return {
+        id: createId(),
+        project: {
+          ...cloneValue(defaultProjectTemplate.project),
+          bookTitle: title || "Untitled Manuscript",
+          targetWordCount: number(targetWordCount) || 80000,
+          currentWordCount: number(currentWordCount),
+          deadline: deadline || "",
+          dailyTarget: 1000,
+          projectStartDate: new Date().toISOString().slice(0, 10)
+        },
+        editing: createDefaultEditingState(),
+        goals: [],
+        sessions: [],
+        issues: [],
+        milestones: []
+      };
+    }
+
+    function loadState() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (!stored) return cloneValue(defaultState);
+
+        if (Array.isArray(stored.projects)) {
+          return {
+            ...cloneValue(defaultState),
+            ...stored,
+            projects: stored.projects.map(normalizeProjectBundle),
+            activeProjectId: stored.activeProjectId || stored.projects[0]?.id || null
+          };
+        }
+
+        if (stored.project) {
+          const migrated = normalizeProjectBundle({
+            id: createId(),
+            project: stored.project,
+            editing: stored.editing || createDefaultEditingState(),
+            goals: stored.goals || [],
+            sessions: stored.sessions || [],
+            issues: stored.issues || [],
+            milestones: stored.milestones || []
+          });
+          return {
+            projects: [migrated],
+            activeProjectId: migrated.id
+          };
+        }
+
+        return cloneValue(defaultState);
+      } catch (error) {
+        return cloneValue(defaultState);
+      }
+    }
+
+    function loadActiveView() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        return views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+      } catch (error) {
+        return DEFAULT_VIEW;
+      }
+    }
+
+    function normalizeProjectBundle(bundle) {
+      return {
+        id: bundle.id || createId(),
+        project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
+        editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
+        goals: Array.isArray(bundle.goals) ? bundle.goals : [],
+        sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
+        issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
+        milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+      };
+    }
+
+    function normalizeSession(session) {
+      return {
+        id: session?.id || createId(),
+        type: session?.type === "edit" ? "edit" : "write",
+        date: session?.date || new Date().toISOString(),
+        durationMinutes: number(session?.durationMinutes),
+        wordsWritten: number(session?.wordsWritten),
+        wordsEdited: number(session?.wordsEdited),
+        notes: String(session?.notes || ""),
+        passName: String(session?.passName || ""),
+        sectionLabel: String(session?.sectionLabel || "")
+      };
+    }
+
+    function normalizeIssue(issue) {
+      return {
+        id: issue?.id || createId(),
+        title: String(issue?.title || ""),
+        type: String(issue?.type || "General"),
+        sectionLabel: String(issue?.sectionLabel || issue?.section || ""),
+        priority: String(issue?.priority || "Medium"),
+        status: String(issue?.status || "Open"),
+        notes: String(issue?.notes || ""),
+        createdAt: issue?.createdAt || new Date().toISOString(),
+        passName: String(issue?.passName || "")
+      };
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...state,
+        activeView
+      }));
+    }
+
+    function currentBundle() {
+      return state.projects.find((project) => project.id === state.activeProjectId) || null;
+    }
+
+    function updateCurrentBundle(updater) {
+      state.projects = state.projects.map((project) => {
+        if (project.id !== state.activeProjectId) return project;
+        const updated = updater(normalizeProjectBundle(project));
+        return normalizeProjectBundle(updated);
+      });
+    }
+
+    function number(value) {
+      return Number(value) || 0;
+    }
+
+    function formatNumber(value) {
+      return new Intl.NumberFormat().format(Math.round(number(value)));
+    }
+
+    function formatHours(minutes) {
+      return `${(number(minutes) / 60).toFixed(1)} hrs`;
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return "No date";
+      const date = new Date(dateString);
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    function toInputDate(dateString) {
+      const fallback = new Date();
+      const date = dateString ? new Date(dateString) : fallback;
+      const safeDate = Number.isNaN(date.getTime()) ? fallback : date;
+      const year = safeDate.getFullYear();
+      const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+      const day = String(safeDate.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function formatClock(totalSeconds) {
+      const safeSeconds = Math.max(0, Math.ceil(totalSeconds));
+      const minutes = Math.floor(safeSeconds / 60);
+      const seconds = safeSeconds % 60;
+      return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function describeMinutes(minutes) {
+      return `${formatNumber(minutes)} minute${number(minutes) === 1 ? "" : "s"}`;
+    }
+
+    function slugifyFilePart(value) {
+      return String(value || "project")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "project";
+    }
+
+    function startOfDay(date) {
+      const value = new Date(date);
+      value.setHours(0, 0, 0, 0);
+      return value;
+    }
+
+    function daysBetween(a, b) {
+      return Math.round((startOfDay(b) - startOfDay(a)) / 86400000);
+    }
+
+    function dateKey(dateString) {
+      return new Date(dateString).toISOString().slice(0, 10);
+    }
+
+    function getWriteSessions(bundle) {
+      return bundle.sessions.filter((session) => session.type !== "edit");
+    }
+
+    function getEditSessions(bundle) {
+      return bundle.sessions.filter((session) => session.type === "edit");
+    }
+
+    function getSessionGroups(bundle, filterFn = () => true) {
+      const groups = new Map();
+      bundle.sessions.filter(filterFn).forEach((session) => {
+        const key = dateKey(session.date);
+        if (!groups.has(key)) {
+          groups.set(key, { words: 0, edited: 0, duration: 0, count: 0 });
+        }
+        const entry = groups.get(key);
+        entry.words += number(session.wordsWritten);
+        entry.edited += number(session.wordsEdited);
+        entry.duration += number(session.durationMinutes);
+        entry.count += 1;
+      });
+      return groups;
+    }
+
+    function getStats(bundle) {
+      const writingSessions = getWriteSessions(bundle);
+      const groups = getSessionGroups(bundle, (session) => session.type !== "edit");
+      const sortedDays = [...groups.keys()].sort();
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const weekStart = startOfDay(new Date(now));
+      weekStart.setDate(weekStart.getDate() - 6);
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      let wordsToday = 0;
+      let wordsWeek = 0;
+      let wordsMonth = 0;
+      let totalWritten = 0;
+      let totalEdited = 0;
+      let totalDuration = 0;
+      let bestDay = { key: "", words: 0 };
+      const weekdayTotals = new Array(7).fill(0);
+      writingSessions.forEach((session) => {
+        const sessionDate = new Date(session.date);
+        const dayKey = dateKey(session.date);
+        const words = number(session.wordsWritten);
+        const edited = number(session.wordsEdited);
+        const duration = number(session.durationMinutes);
+        totalWritten += words;
+        totalEdited += edited;
+        totalDuration += duration;
+        weekdayTotals[sessionDate.getDay()] += words;
+        if (dayKey === todayKey) wordsToday += words;
+        if (startOfDay(sessionDate) >= weekStart) wordsWeek += words;
+        if (startOfDay(sessionDate) >= startOfDay(monthStart)) wordsMonth += words;
+      });
+
+      groups.forEach((entry, key) => {
+        if (entry.words > bestDay.words) bestDay = { key, words: entry.words };
+      });
+
+      let currentStreak = 0;
+      let longestStreak = 0;
+      if (sortedDays.length) {
+        let run = 1;
+        longestStreak = 1;
+        for (let i = 1; i < sortedDays.length; i += 1) {
+          const gap = daysBetween(sortedDays[i - 1], sortedDays[i]);
+          run = gap === 1 ? run + 1 : 1;
+          longestStreak = Math.max(longestStreak, run);
+        }
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const lastDay = sortedDays[sortedDays.length - 1];
+        if ([todayKey, yesterday.toISOString().slice(0, 10)].includes(lastDay)) {
+          currentStreak = 1;
+          for (let i = sortedDays.length - 1; i > 0; i -= 1) {
+            const gap = daysBetween(sortedDays[i - 1], sortedDays[i]);
+            if (gap === 1) currentStreak += 1;
+            else break;
+          }
+        }
+      }
+
+      const firstSessionDate = writingSessions.length
+        ? new Date([...writingSessions].sort((a, b) => new Date(a.date) - new Date(b.date))[0].date)
+        : new Date(bundle.project.projectStartDate || new Date());
+      const activeDays = Math.max(1, daysBetween(firstSessionDate, new Date()) + 1);
+      const dailyAverage = totalWritten / activeDays;
+      const weeklyAverage = totalWritten / Math.max(1, activeDays / 7);
+      const avgSession = totalWritten / Math.max(1, writingSessions.length);
+      const targetWords = number(bundle.project.targetWordCount);
+      const currentWords = number(bundle.project.currentWordCount);
+      const distanceToGoal = Math.max(targetWords - currentWords, 0);
+      const estimatedCompletionDate = dailyAverage > 0
+        ? new Date(Date.now() + (distanceToGoal / dailyAverage) * 86400000)
+        : null;
+
+      const recentDays = [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-14);
+      const recentFirst = recentDays.slice(0, Math.max(1, Math.ceil(recentDays.length / 2)));
+      const recentSecond = recentDays.slice(-Math.max(1, Math.ceil(recentDays.length / 2)));
+      const recentAvgA = recentFirst.reduce((sum, [, value]) => sum + value.words, 0) / Math.max(1, recentFirst.length);
+      const recentAvgB = recentSecond.reduce((sum, [, value]) => sum + value.words, 0) / Math.max(1, recentSecond.length);
+      const momentum = recentAvgB > recentAvgA * 1.08 ? "Increasing" : recentAvgB < recentAvgA * 0.92 ? "Slowing" : "Steady";
+
+      const mostProductiveDayIndex = weekdayTotals.indexOf(Math.max(...weekdayTotals));
+      const longestSession = writingSessions.reduce((best, session) => Math.max(best, number(session.durationMinutes)), 0);
+      const totalProgress = targetWords > 0 ? Math.min(100, (currentWords / targetWords) * 100) : 0;
+      const estimatedWordsRemaining = Math.max(targetWords - currentWords, 0);
+
+      return {
+        wordsToday,
+        wordsWeek,
+        wordsMonth,
+        totalWritten,
+        totalEdited,
+        totalDuration,
+        dailyAverage,
+        weeklyAverage,
+        avgSession,
+        bestDay,
+        currentStreak,
+        longestStreak,
+        estimatedCompletionDate,
+        distanceToGoal,
+        momentum,
+        mostProductiveDayIndex,
+        longestSession,
+        totalProgress,
+        estimatedWordsRemaining,
+        groups
+      };
+    }
+
+    function getEditStats(bundle) {
+      const sessions = [...getEditSessions(bundle)].sort((a, b) => new Date(b.date) - new Date(a.date));
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const weekStart = startOfDay(new Date(now));
+      weekStart.setDate(weekStart.getDate() - 6);
+
+      let minutesToday = 0;
+      let minutesWeek = 0;
+      let totalMinutes = 0;
+      let totalWordsEdited = 0;
+      let currentPassMinutes = 0;
+
+      sessions.forEach((session) => {
+        const key = dateKey(session.date);
+        const duration = number(session.durationMinutes);
+        totalMinutes += duration;
+        totalWordsEdited += number(session.wordsEdited);
+        if (key === todayKey) minutesToday += duration;
+        if (startOfDay(new Date(session.date)) >= weekStart) minutesWeek += duration;
+        if (session.passName === bundle.editing.passName) currentPassMinutes += duration;
+      });
+
+      const openIssues = bundle.issues.filter((issue) => issue.status !== "Resolved");
+      const currentPassIssues = openIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
+      const resolvedIssues = bundle.issues.filter((issue) => issue.status === "Resolved");
+
+      return {
+        minutesToday,
+        minutesWeek,
+        totalMinutes,
+        totalWordsEdited,
+        currentPassMinutes,
+        averageSessionMinutes: totalMinutes / Math.max(1, sessions.length),
+        sessionCount: sessions.length,
+        currentPassIssueCount: currentPassIssues.length,
+        resolvedIssueCount: resolvedIssues.length,
+        lastSession: sessions[0] || null
+      };
+    }
+
+    function goalValueForSession(goalType, session) {
+      if (session.type === "edit") return 0;
+      if (goalType === "write_minutes") return number(session.durationMinutes);
+      return number(session.wordsWritten);
+    }
+
+    function goalValueForDate(bundle, goal, key) {
+      return bundle.sessions
+        .filter((session) => dateKey(session.date) === key)
+        .reduce((sum, session) => sum + goalValueForSession(goal.type, session), 0);
+    }
+
+    function goalUnit(goalType) {
+      return goalType === "write_minutes" ? "minutes" : "words";
+    }
+
+    function applyGoalTypePreset(form, goalType) {
+      if (!form?.elements) return;
+      const targetInput = form.elements.targetValue;
+      const titleInput = form.elements.title;
+      const targetLabel = document.getElementById("goal-target-label");
+      if (!targetInput || !titleInput || !targetLabel) return;
+      if (goalType === "write_minutes") {
+        targetLabel.textContent = "Daily target (minutes)";
+        targetInput.value = 30;
+        titleInput.placeholder = "Example: Spend 30 minutes writing today";
+        titleInput.value = titleInput.value || "Spend 30 focused minutes writing";
+        return;
+      }
+      targetLabel.textContent = "Daily target (words)";
+      targetInput.value = 1000;
+      titleInput.placeholder = "Example: Write 1,000 words today";
+      titleInput.value = titleInput.value || "Write 1,000 words today";
+    }
+
+    function evaluateGoal(bundle, goal) {
+      const target = Math.max(1, number(goal.targetValue));
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const value = goalValueForDate(bundle, goal, todayKey);
+      const progress = Math.min(100, (value / target) * 100);
+      const completed = progress >= 100;
+      return { ...goal, liveValue: value, progress, completed };
+    }
+
+    function goalTypeContext(type) {
+      return type === "write_minutes" ? "WRITE TIME" : "WRITE";
+    }
+
+    function getHeatmapMonth(bundle, monthOffset = 0) {
+      const today = startOfDay(new Date());
+      const targetMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+      const monthStart = startOfDay(targetMonth);
+      const monthEnd = startOfDay(new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 0));
+      const calendarStart = startOfDay(new Date(monthStart));
+      calendarStart.setDate(calendarStart.getDate() - ((calendarStart.getDay() + 6) % 7));
+      const calendarEnd = startOfDay(new Date(monthEnd));
+      calendarEnd.setDate(calendarEnd.getDate() + ((7 - ((calendarEnd.getDay() + 6) % 7) - 1 + 7) % 7));
+      const days = [];
+
+      for (let cursor = new Date(calendarStart); cursor <= calendarEnd; cursor.setDate(cursor.getDate() + 1)) {
+        const key = cursor.toISOString().slice(0, 10);
+        const inMonth = cursor.getMonth() === monthStart.getMonth() && cursor.getFullYear() === monthStart.getFullYear();
+        const longDate = cursor.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+        if (!inMonth) {
+          days.push({ key, status: "none", label: "", outsideMonth: true, dayNumber: cursor.getDate() });
+          continue;
+        }
+        if (cursor > today) {
+          days.push({ key, status: "none", label: `${longDate}\nFuture day`, dayNumber: cursor.getDate() });
+          continue;
+        }
+        const daySessions = getWriteSessions(bundle).filter((session) => dateKey(session.date) === key);
+        const activeGoals = bundle.goals.filter((goal) =>
+          (goal.type === "write_words" || goal.type === "write_minutes") &&
+          (!goal.createdAt || startOfDay(new Date(goal.createdAt)) <= cursor)
+        );
+        if (!activeGoals.length) {
+          const noGoalLines = [longDate, "No goals set", `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`];
+          days.push({ key, status: "none", label: noGoalLines.join("\n"), dayNumber: cursor.getDate() });
+          continue;
+        }
+        const goalSummaries = activeGoals.map((goal) => {
+          const value = goalValueForDate(bundle, goal, key);
+          const unit = goalUnit(goal.type);
+          return {
+            value,
+            target: Math.max(1, number(goal.targetValue)),
+            text: `${goalTypeContext(goal.type)} ${formatNumber(value)}/${formatNumber(goal.targetValue)} ${unit}`
+          };
+        });
+        const averageRatio = goalSummaries.reduce((sum, goal) => {
+          return sum + (goal.value / goal.target);
+        }, 0) / activeGoals.length;
+        const status = averageRatio > 1.2 ? "exceeded" : averageRatio >= 1 ? "met" : averageRatio > 0 ? "partial" : "fail";
+        const statusCopy = {
+          fail: "Missed goal",
+          partial: "Partial progress",
+          met: "Goal met",
+          exceeded: "Goal exceeded"
+        };
+        const labelLines = [
+          longDate,
+          statusCopy[status],
+          ...goalSummaries.map((goal) => goal.text),
+          `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`
+        ];
+        days.push({ key, status, label: labelLines.join("\n"), dayNumber: cursor.getDate() });
+      }
+
+      return {
+        days,
+        monthLabel: monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+      };
+    }
+
+    function renderGoalHeatmap(bundle) {
+      const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const { days, monthLabel } = getHeatmapMonth(bundle, heatmapMonthOffset);
+      return `
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h3>Goal Heatmap</h3>
+              <p>Daily goal performance, one month at a time.</p>
+            </div>
+          </div>
+          <div class="heatmap-shell">
+            <div class="heatmap-toolbar">
+              <button class="heatmap-nav" id="heatmap-prev-month-btn" type="button" aria-label="Previous month">‹</button>
+              <p class="heatmap-title">${monthLabel}</p>
+              <button class="heatmap-nav" id="heatmap-next-month-btn" type="button" aria-label="Next month">›</button>
+            </div>
+            <div class="heatmap-legend">
+              <span><i class="heatmap-swatch fail"></i> Missed</span>
+              <span><i class="heatmap-swatch partial"></i> Partial</span>
+              <span><i class="heatmap-swatch met"></i> Met</span>
+              <span><i class="heatmap-swatch exceeded"></i> Exceeded</span>
+            </div>
+            <div class="heatmap-weekdays">${weekdayLabels.map((label) => `<span>${label}</span>`).join("")}</div>
+            <div class="heatmap-grid">
+              ${days.map((day) => day.outsideMonth
+                ? `<div class="heatmap-cell none" aria-hidden="true"></div>`
+                : `<div class="heatmap-cell ${day.status}" title="${escapeAttr(day.label)}" aria-label="${escapeAttr(day.label)}"><span class="heatmap-daynum">${day.dayNumber}</span></div>`
+              ).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function showToast(title, body) {
+      const toast = document.getElementById("toast");
+      toast.innerHTML = `<strong>${title}</strong><span>${body}</span>`;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 3600);
+    }
+
+    function csvCell(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll(`"`, `""`)}"`;
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let currentRow = [];
+      let currentValue = "";
+      let inQuotes = false;
+
+      for (let index = 0; index < text.length; index += 1) {
+        const char = text[index];
+        const next = text[index + 1];
+
+        if (inQuotes) {
+          if (char === `"` && next === `"`) {
+            currentValue += `"`;
+            index += 1;
+          } else if (char === `"`) {
+            inQuotes = false;
+          } else {
+            currentValue += char;
+          }
+          continue;
+        }
+
+        if (char === `"`) {
+          inQuotes = true;
+          continue;
+        }
+
+        if (char === ",") {
+          currentRow.push(currentValue);
+          currentValue = "";
+          continue;
+        }
+
+        if (char === "\n") {
+          currentRow.push(currentValue);
+          rows.push(currentRow);
+          currentRow = [];
+          currentValue = "";
+          continue;
+        }
+
+        if (char === "\r") continue;
+        currentValue += char;
+      }
+
+      if (currentValue.length || currentRow.length) {
+        currentRow.push(currentValue);
+        rows.push(currentRow);
+      }
+
+      return rows;
+    }
+
+    function projectExportBaseRow(bundle) {
+      return {
+        row_type: "",
+        project_id: bundle.id,
+        project_title: bundle.project.bookTitle || "",
+        project_target_word_count: number(bundle.project.targetWordCount),
+        project_current_word_count: number(bundle.project.currentWordCount),
+        project_deadline: bundle.project.deadline || "",
+        project_daily_target: number(bundle.project.dailyTarget),
+        project_start_date: bundle.project.projectStartDate || "",
+        project_edit_pass_name: bundle.editing.passName || "",
+        project_edit_pass_stage: bundle.editing.passStage || "",
+        project_edit_pass_status: bundle.editing.passStatus || "",
+        project_edit_pass_objective: bundle.editing.passObjective || "",
+        project_edit_progress_current: number(bundle.editing.progressCurrent),
+        project_edit_progress_total: number(bundle.editing.progressTotal),
+        goal_id: "",
+        goal_type: "",
+        goal_title: "",
+        goal_target_value: "",
+        goal_created_at: "",
+        issue_id: "",
+        issue_title: "",
+        issue_type: "",
+        issue_section_label: "",
+        issue_priority: "",
+        issue_status: "",
+        issue_notes: "",
+        issue_created_at: "",
+        issue_pass_name: "",
+        session_id: "",
+        session_type: "",
+        session_date: "",
+        session_duration_minutes: "",
+        session_words_written: "",
+        session_words_edited: "",
+        session_pass_name: "",
+        session_section_label: "",
+        session_notes: ""
+      };
+    }
+
+    function buildProjectExportRows(bundle) {
+      const base = projectExportBaseRow(bundle);
+      const rows = [{ ...base, row_type: "project" }];
+
+      bundle.goals.forEach((goal) => {
+        rows.push({
+          ...base,
+          row_type: "goal",
+          goal_id: goal.id || "",
+          goal_type: goal.type || "",
+          goal_title: goal.title || "",
+          goal_target_value: number(goal.targetValue),
+          goal_created_at: goal.createdAt || ""
+        });
+      });
+
+      bundle.issues.forEach((issue) => {
+        rows.push({
+          ...base,
+          row_type: "issue",
+          issue_id: issue.id || "",
+          issue_title: issue.title || "",
+          issue_type: issue.type || "",
+          issue_section_label: issue.sectionLabel || "",
+          issue_priority: issue.priority || "",
+          issue_status: issue.status || "",
+          issue_notes: issue.notes || "",
+          issue_created_at: issue.createdAt || "",
+          issue_pass_name: issue.passName || ""
+        });
+      });
+
+      bundle.sessions.forEach((session) => {
+        rows.push({
+          ...base,
+          row_type: "session",
+          session_id: session.id || "",
+          session_type: session.type || "write",
+          session_date: session.date || "",
+          session_duration_minutes: number(session.durationMinutes),
+          session_words_written: number(session.wordsWritten),
+          session_words_edited: number(session.wordsEdited),
+          session_pass_name: session.passName || "",
+          session_section_label: session.sectionLabel || "",
+          session_notes: session.notes || ""
+        });
+      });
+
+      return rows;
+    }
+
+    function bundleToCsv(bundle) {
+      const rows = buildProjectExportRows(bundle);
+      const header = exportColumns.map(csvCell).join(",");
+      const body = rows.map((row) => exportColumns.map((column) => csvCell(row[column])).join(",")).join("\n");
+      return `\uFEFF${header}\n${body}`;
+    }
+
+    function downloadCurrentProjectCsv() {
+      const bundle = currentBundle();
+      if (!bundle) return;
+      const csv = bundleToCsv(bundle);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `${slugifyFilePart(bundle.project.bookTitle)}-${stamp}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      showToast("CSV exported", "Your project data was downloaded in a format we can import later.");
+    }
+
+    function parseImportedRows(text) {
+      const rows = parseCsv(text.trim());
+      if (!rows.length) throw new Error("This CSV file is empty.");
+
+      const header = rows[0].map((cell, index) => {
+        const clean = index === 0 ? cell.replace(/^\uFEFF/, "") : cell;
+        return clean.trim();
+      });
+
+      const missingColumns = requiredImportColumns.filter((column) => !header.includes(column));
+      if (missingColumns.length) {
+        throw new Error(`Missing required columns: ${missingColumns.join(", ")}`);
+      }
+
+      return rows.slice(1)
+        .filter((row) => row.some((cell) => String(cell || "").trim() !== ""))
+        .map((row) => {
+          const entry = {};
+          header.forEach((column, index) => {
+            entry[column] = row[index] ?? "";
+          });
+          return entry;
+        });
+    }
+
+    function dedupeById(items) {
+      const seen = new Set();
+      return items.filter((item) => {
+        const id = item.id || createId();
+        if (seen.has(id)) return false;
+        item.id = id;
+        seen.add(id);
+        return true;
+      });
+    }
+
+    function buildBundleFromImportedRows(rows) {
+      const projectRow = rows.find((row) => row.row_type === "project");
+      if (!projectRow) throw new Error("No project row was found in this CSV.");
+
+      const bundle = normalizeProjectBundle({
+        id: projectRow.project_id || createId(),
+        project: {
+          bookTitle: projectRow.project_title || "Imported Manuscript",
+          targetWordCount: number(projectRow.project_target_word_count),
+          currentWordCount: number(projectRow.project_current_word_count),
+          deadline: projectRow.project_deadline || "",
+          dailyTarget: number(projectRow.project_daily_target) || defaultProjectTemplate.project.dailyTarget,
+          projectStartDate: projectRow.project_start_date || new Date().toISOString().slice(0, 10)
+        },
+        editing: {
+          passName: projectRow.project_edit_pass_name || defaultPassName(projectRow.project_edit_pass_stage || "Developmental"),
+          passStage: projectRow.project_edit_pass_stage || "Developmental",
+          passStatus: projectRow.project_edit_pass_status || "Not started",
+          passObjective: projectRow.project_edit_pass_objective || "",
+          progressCurrent: number(projectRow.project_edit_progress_current),
+          progressTotal: number(projectRow.project_edit_progress_total)
+        },
+        goals: rows
+          .filter((row) => row.row_type === "goal")
+          .map((row) => ({
+            id: row.goal_id || createId(),
+            type: row.goal_type || "write_words",
+            title: row.goal_title || "Imported goal",
+            targetValue: number(row.goal_target_value),
+            createdAt: row.goal_created_at || new Date().toISOString()
+          })),
+        issues: rows
+          .filter((row) => row.row_type === "issue")
+          .map((row) => ({
+            id: row.issue_id || createId(),
+            title: row.issue_title || "Imported issue",
+            type: row.issue_type || "General",
+            sectionLabel: row.issue_section_label || "",
+            priority: row.issue_priority || "Medium",
+            status: row.issue_status || "Open",
+            notes: row.issue_notes || "",
+            createdAt: row.issue_created_at || new Date().toISOString(),
+            passName: row.issue_pass_name || ""
+          })),
+        sessions: rows
+          .filter((row) => row.row_type === "session")
+          .map((row) => ({
+            id: row.session_id || createId(),
+            type: row.session_type === "edit" ? "edit" : "write",
+            date: row.session_date || new Date().toISOString(),
+            durationMinutes: number(row.session_duration_minutes),
+            wordsWritten: number(row.session_words_written),
+            wordsEdited: number(row.session_words_edited),
+            passName: row.session_pass_name || "",
+            sectionLabel: row.session_section_label || "",
+            notes: row.session_notes || ""
+          })),
+        milestones: []
+      });
+
+      bundle.goals = dedupeById(bundle.goals);
+      bundle.issues = dedupeById(bundle.issues);
+      bundle.sessions = dedupeById(bundle.sessions);
+      return normalizeProjectBundle(bundle);
+    }
+
+    function importProjectFromCsv(text) {
+      const rows = parseImportedRows(text);
+      const importedBundle = buildBundleFromImportedRows(rows);
+      const existingIndex = state.projects.findIndex((project) => project.id === importedBundle.id);
+
+      if (existingIndex >= 0) {
+        const shouldReplace = window.confirm(`Replace the existing project "${state.projects[existingIndex].project.bookTitle}" with the imported data?`);
+        if (!shouldReplace) return;
+        state.projects.splice(existingIndex, 1, importedBundle);
+      } else {
+        state.projects.unshift(importedBundle);
+      }
+
+      state.activeProjectId = importedBundle.id;
+      activeView = "dashboard";
+      persistAndRender();
+      showToast("CSV imported", `${importedBundle.project.bookTitle} is now available in your dashboard.`);
+    }
+
+    function handleImportProjectFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          importProjectFromCsv(String(reader.result || ""));
+        } catch (error) {
+          showToast("Import failed", error instanceof Error ? error.message : "The CSV could not be imported.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function persistAndRender() {
+      if (state.activeProjectId) {
+        updateCurrentBundle((bundle) => {
+          return {
+            ...bundle,
+            milestones: milestoneTargets.filter((target) => number(bundle.project.currentWordCount) >= target)
+          };
+        });
+      }
+      saveState();
+      render();
+    }
+
+    function render() {
+      const bundle = currentBundle();
+      const appShell = document.querySelector(".app-shell");
+      appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
+      renderBrand(bundle);
+      renderNav(bundle);
+      renderSidebarFooter(bundle);
+      renderProjects();
+      renderCreateProject();
+      renderDashboard(bundle);
+      renderEditDashboard(bundle);
+      renderSessions(bundle);
+      renderStats(bundle);
+      renderEditProject(bundle);
+      if (!bundle && !["projects", "create-project"].includes(activeView)) activeView = "projects";
+      views.forEach((view) => {
+        if (!bundle && !["projects", "create-project"].includes(view)) {
+          document.getElementById(`view-${view}`).classList.add("hidden");
+          return;
+        }
+        document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
+      });
+      saveState();
+    }
+
+    function renderBrand(bundle) {
+      document.getElementById("brand").innerHTML = bundle && isProjectWorkspaceView(activeView) ? `
+        <h1>The Author Engine</h1>
+        <p>${escapeHtml(bundle.project.bookTitle)}. Make progress visible, measurable, and satisfying.</p>
+      ` : `
+        <h1>The Author Engine</h1>
+        <p>Build momentum toward finishing your book every single day.</p>
+      `;
+    }
+
+    function renderNav(bundle) {
+      const nav = document.getElementById("nav");
+      const availableViews = bundle && isProjectWorkspaceView(activeView)
+        ? ["dashboard", "edit", "stats"]
+        : [];
+      const navLabels = {
+        dashboard: "Write",
+        edit: "Edit",
+        stats: "Stats"
+      };
+      nav.innerHTML = availableViews.map((view) => `
+        <button data-view="${view}" class="${activeView === view ? "active" : ""}">
+          ${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}
+        </button>
+      `).join("");
+
+      [...nav.querySelectorAll("button")].forEach((button) => {
+        button.addEventListener("click", () => {
+          activeView = button.dataset.view;
+          saveState();
+          render();
+        });
+      });
+    }
+
+    function renderSidebarFooter(bundle) {
+      const footer = document.getElementById("sidebar-footer");
+      if (!(bundle && isProjectWorkspaceView(activeView))) {
+        footer.innerHTML = "";
+        return;
+      }
+      footer.innerHTML = `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>`;
+      document.getElementById("view-all-projects-btn").addEventListener("click", () => {
+        activeView = "projects";
+        saveState();
+        render();
+      });
+    }
+
+    function renderProjects() {
+      const hasProjects = state.projects.length > 0;
+      document.getElementById("view-projects").innerHTML = `
+        <section class="stack">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <p class="small-copy">The Author Engine</p>
+                <h2 class="hero-title">Projects Dashboard</h2>
+                <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
+              </div>
+              <div class="meta-line">
+                <button class="ghost-btn" id="import-project-csv-btn" type="button">Import CSV</button>
+                <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
+              </div>
+            </div>
+            <input id="import-project-csv-input" class="hidden" type="file" accept=".csv,text/csv" />
+            ${hasProjects ? `
+              <div class="projects-grid">
+                ${state.projects.map(renderProjectCard).join("")}
+              </div>
+            ` : `
+              <div class="empty">No projects yet. Create one to start tracking your manuscript.</div>
+            `}
+          </section>
+        </section>
+      `;
+
+      bindProjectEvents();
+    }
+
+    function renderCreateProject() {
+      document.getElementById("view-create-project").innerHTML = `
+        <section class="stack">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h2>Create New Project</h2>
+                <p>Start with the essentials, then refine everything later inside the project dashboard.</p>
+              </div>
+            </div>
+            ${renderCreateProjectForm()}
+          </section>
+        </section>
+      `;
+      bindCreateProjectEvents();
+    }
+
+    function renderCreateProjectForm() {
+      return `
+        <form id="create-project-form" class="form-grid">
+          <label class="full">Project title
+            <input name="bookTitle" placeholder="Example: The Hollow Orchard" required />
+          </label>
+          <label>Target word count estimate
+            <input type="number" min="0" name="targetWordCount" value="80000" required />
+          </label>
+          <label>Words written so far
+            <input type="number" min="0" name="currentWordCount" value="0" required />
+          </label>
+          <label class="full">Deadline to completion
+            <input type="date" name="deadline" />
+          </label>
+          <div class="full">
+            <button class="primary-btn" type="submit">Create project</button>
+          </div>
+        </form>
+      `;
+    }
+
+    function renderProjectCard(bundle) {
+      const stats = getStats(bundle);
+      return `
+        <div class="card project-card">
+          <div>
+            <p class="small-copy">Project</p>
+            <h3 class="hero-title">${escapeHtml(bundle.project.bookTitle)}</h3>
+            <div class="meta-line">
+              <span class="pill">${formatNumber(bundle.project.currentWordCount)} / ${formatNumber(bundle.project.targetWordCount)} words</span>
+              <span class="pill">${bundle.project.deadline ? `Due ${formatDate(bundle.project.deadline)}` : "No deadline"}</span>
+            </div>
+          </div>
+          <div class="progress-block">
+            <div class="progress-label-row">
+              <strong>Completion</strong>
+              <span>${stats.totalProgress.toFixed(1)}%</span>
+            </div>
+            <div class="progress-rail">
+              <div class="progress-fill" style="width:${stats.totalProgress}%"></div>
+            </div>
+          </div>
+          <div class="metrics" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
+            <div class="metric">
+              <div class="label">Words today</div>
+              <div class="value">${formatNumber(stats.wordsToday)}</div>
+            </div>
+            <div class="metric">
+              <div class="label">Current streak</div>
+              <div class="value">${formatNumber(stats.currentStreak)}</div>
+            </div>
+          </div>
+          <div class="meta-line">
+            <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">Open project</button>
+            <button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>
+            <button class="inline-btn" data-action="delete-project" data-id="${bundle.id}">Delete</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDashboard(bundle) {
+      if (!bundle) {
+        document.getElementById("view-dashboard").innerHTML = "";
+        return;
+      }
+      const stats = getStats(bundle);
+      const goals = bundle.goals.map((goal) => evaluateGoal(bundle, goal));
+      const deadlineLabel = bundle.project.deadline ? formatDate(bundle.project.deadline) : "Flexible timeline";
+      const completionLabel = stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Build pace to predict";
+      const momentumState = stats.momentum === "Increasing"
+        ? { icon: "↑", label: "Accelerating", className: "up", detail: `Projected finish ${completionLabel}` }
+        : stats.momentum === "Slowing"
+          ? { icon: "↓", label: "Declining", className: "down", detail: `Pace is slipping. Finish forecast ${completionLabel}` }
+          : { icon: "→", label: "Steady", className: "flat", detail: `Projected finish ${completionLabel}` };
+      const reachedMilestones = milestoneTargets.filter((target) => number(bundle.project.currentWordCount) >= target);
+      const nextMilestone = milestoneTargets.find((target) => number(bundle.project.currentWordCount) < target);
+      const milestoneSummary = reachedMilestones.length
+        ? `Milestones reached: ${reachedMilestones.map((target) => formatNumber(target)).join(", ")} words.`
+        : "No milestones reached yet.";
+      const milestoneSubtext = nextMilestone
+        ? `${milestoneSummary} Next milestone: ${formatNumber(nextMilestone)} words.`
+        : `${milestoneSummary} All milestone markers cleared.`;
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const todaySessions = [...getWriteSessions(bundle)]
+        .filter((session) => dateKey(session.date) === todayKey)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      document.getElementById("view-dashboard").innerHTML = `
+        <section class="grid dashboard-grid">
+          <div class="stack">
+            <section class="card">
+              <div class="writing-launch">
+                <div class="writing-launch-copy">
+                  <div>
+                    <h3>Get writing</h3>
+                    <p>Start a focused session, let the timer run, then record your words when you finish.</p>
+                  </div>
+                  <div class="writing-launch-meta">
+                    <span class="pill">${formatNumber(todaySessions.length)} session${todaySessions.length === 1 ? "" : "s"} today</span>
+                    <span class="pill">${formatNumber(stats.wordsToday)} words written today</span>
+                  </div>
+                </div>
+                <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
+              </div>
+            </section>
+
+            <section class="card hero">
+              <div class="hero-panel">
+                <div class="section-head" style="margin-bottom: 10px;">
+                  <div>
+                    <p class="small-copy">Current manuscript</p>
+                    <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
+                  </div>
+                  <button class="ghost-btn" id="export-project-csv-btn" type="button">Export CSV</button>
+                </div>
+                <div class="hero-meta">
+                  <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
+                  <span class="pill">${deadlineLabel}</span>
+                </div>
+
+                <div class="progress-block">
+                  <div class="progress-label-row">
+                    <strong>Book completion</strong>
+                    <span>${stats.totalProgress.toFixed(1)}%</span>
+                  </div>
+                  <div class="progress-rail">
+                    <div class="progress-fill" style="width: ${stats.totalProgress}%"></div>
+                  </div>
+                  <p class="small-copy" style="margin-top: 10px;">${milestoneSubtext}</p>
+                </div>
+
+                <div class="signal-band">
+                  <div class="signal-card">
+                    <div class="signal-icon">${momentumState.icon}</div>
+                    <div class="signal-copy">
+                      <strong>Momentum</strong>
+                      <div class="momentum-status ${momentumState.className}">${momentumState.label}</div>
+                      <p>${momentumState.detail}</p>
+                    </div>
+                  </div>
+                  <div class="signal-card">
+                    <div class="signal-icon">🔥</div>
+                    <div class="signal-copy">
+                      <strong>Streak</strong>
+                      <span>${formatNumber(stats.currentStreak)} days</span>
+                      <p>Longest streak ${formatNumber(stats.longestStreak)} days</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="section-head" style="margin-top: 18px; margin-bottom: 10px;">
+                  <div>
+                    <h3 style="margin-bottom: 4px;">Goals</h3>
+                    <p>Simple writing targets, tracked against your current numbers.</p>
+                  </div>
+                  <button class="ghost-btn" id="open-goal-modal-btn" type="button">Create goal</button>
+                </div>
+                <div class="goal-editor-list">
+                  ${goals.length ? goals.map((goal) => renderGoalCard(goal)).join("") : `<div class="empty">No goals yet.</div>`}
+                </div>
+              </div>
+            </section>
+
+            ${renderGoalHeatmap(bundle)}
+
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Session History</h3>
+                  <p>All writing sessions logged today.</p>
+                </div>
+                <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
+              </div>
+              <div class="list">
+                ${todaySessions.length ? todaySessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged today.</div>`}
+              </div>
+            </section>
+          </div>
+        </section>
+      `;
+
+      bindDashboardEvents(bundle);
+    }
+
+    function renderEditDashboard(bundle) {
+      const view = document.getElementById("view-edit");
+      if (!bundle) {
+        view.innerHTML = "";
+        return;
+      }
+
+      const editStats = getEditStats(bundle);
+      const progressCurrent = number(bundle.editing.progressCurrent);
+      const progressTotal = number(bundle.editing.progressTotal);
+      const progressPercent = progressTotal > 0 ? Math.min(100, (progressCurrent / progressTotal) * 100) : 0;
+      const recentSessions = [...getEditSessions(bundle)]
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+      const issuePriorityRank = { High: 0, Medium: 1, Low: 2 };
+      const issueStatusRank = { Open: 0, Deferred: 1, Resolved: 2 };
+      const issues = [...bundle.issues]
+        .sort((a, b) => {
+          const statusDelta = (issueStatusRank[a.status] ?? 99) - (issueStatusRank[b.status] ?? 99);
+          if (statusDelta !== 0) return statusDelta;
+          const priorityDelta = (issuePriorityRank[a.priority] ?? 99) - (issuePriorityRank[b.priority] ?? 99);
+          if (priorityDelta !== 0) return priorityDelta;
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+      const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
+      const currentPassIssues = visibleIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
+      const issueList = (currentPassIssues.length ? currentPassIssues : visibleIssues).slice(0, 6);
+      const issueCounts = issueList.reduce((summary, issue) => {
+        summary[issue.type] = (summary[issue.type] || 0) + 1;
+        return summary;
+      }, {});
+      const topIssueTypes = Object.entries(issueCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
+      const lastSession = editStats.lastSession;
+
+      view.innerHTML = `
+        <section class="stack">
+          <section class="card hero">
+            <div class="hero-panel pass-focus">
+              <div class="section-head">
+                <div>
+                  <p class="small-copy">Edit dashboard</p>
+                  <h2 class="hero-title">${escapeHtml(bundle.editing.passName || defaultPassName(bundle.editing.passStage))}</h2>
+                  <p class="pass-copy">${escapeHtml(bundle.editing.passObjective || "Define what this pass is trying to improve so the dashboard can support the work.")}</p>
+                </div>
+                <div class="meta-line">
+                  <button class="ghost-btn" id="open-edit-pass-btn" type="button">Change pass</button>
+                  <button class="primary-btn" id="open-edit-session-modal-btn" type="button">Log editing session</button>
+                </div>
+              </div>
+              <div class="hero-meta">
+                <span class="badge">${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
+                <span class="pill">${escapeHtml(bundle.editing.passStatus || "Not started")}</span>
+                <span class="pill">${formatNumber(editStats.currentPassIssueCount)} open issue${editStats.currentPassIssueCount === 1 ? "" : "s"} in this pass</span>
+              </div>
+              <div class="progress-block">
+                <div class="progress-label-row">
+                  <strong>Pass progress</strong>
+                  <span>${progressTotal > 0 ? `${formatNumber(progressCurrent)} / ${formatNumber(progressTotal)} sections` : "No section target yet"}</span>
+                </div>
+                <div class="progress-rail">
+                  <div class="progress-fill" style="width:${progressPercent}%"></div>
+                </div>
+              </div>
+              <div class="snapshot-grid">
+                <div class="snapshot-card">
+                  <strong>Last worked on</strong>
+                  <p>${lastSession?.sectionLabel ? escapeHtml(lastSession.sectionLabel) : "Nothing logged yet"}</p>
+                  <span>${lastSession ? formatDate(lastSession.date) : "Log an editing session to start building history."}</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Current pass hours</strong>
+                  <p>${formatHours(editStats.currentPassMinutes)}</p>
+                  <span>${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} recorded overall</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h3>Hours Edited</h3>
+                <p>Track how much revision time is actually going into the manuscript.</p>
+              </div>
+            </div>
+            <div class="metrics">
+              <div class="metric"><div class="label">Today</div><div class="value">${formatHours(editStats.minutesToday)}</div></div>
+              <div class="metric"><div class="label">This week</div><div class="value">${formatHours(editStats.minutesWeek)}</div></div>
+              <div class="metric"><div class="label">Current pass</div><div class="value">${formatHours(editStats.currentPassMinutes)}</div></div>
+              <div class="metric"><div class="label">Average session</div><div class="value">${formatNumber(editStats.averageSessionMinutes)} min</div></div>
+            </div>
+          </section>
+
+          <section class="edit-columns">
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Recent Editing Sessions</h3>
+                  <p>Keep a practical trail of what you touched and how long it took.</p>
+                </div>
+                <div class="meta-line">
+                  <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
+                </div>
+              </div>
+              <div class="list">
+                ${recentSessions.length ? recentSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged yet.</div>`}
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Open Issues</h3>
+                  <p>Capture problems now so you can refer back to them while editing.</p>
+                </div>
+                <button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>
+              </div>
+              <div class="list">
+                ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
+              </div>
+            </section>
+          </section>
+
+          <section class="edit-columns">
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Pass Snapshot</h3>
+                  <p>A quick read on how the current pass is moving.</p>
+                </div>
+              </div>
+              <div class="snapshot-grid">
+                <div class="snapshot-card">
+                  <strong>Words edited</strong>
+                  <p>${formatNumber(editStats.totalWordsEdited)}</p>
+                  <span>Across all editing sessions</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Issues resolved</strong>
+                  <p>${formatNumber(editStats.resolvedIssueCount)}</p>
+                  <span>Problems marked complete</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Status</strong>
+                  <p>${escapeHtml(bundle.editing.passStatus || "Not started")}</p>
+                  <span>${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
+                </div>
+                <div class="snapshot-card">
+                  <strong>Sections remaining</strong>
+                  <p>${progressTotal > 0 ? formatNumber(Math.max(progressTotal - progressCurrent, 0)) : "Set target"}</p>
+                  <span>${progressTotal > 0 ? `Out of ${formatNumber(progressTotal)} total` : "Add a section target in Change pass."}</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="section-head">
+                <div>
+                  <h3>Issue Breakdown</h3>
+                  <p>See which kinds of problems are stacking up in this pass.</p>
+                </div>
+              </div>
+              <div class="issue-breakdown">
+                ${topIssueTypes.length ? topIssueTypes.map(([label, count]) => `
+                  <div class="issue-breakdown-row">
+                    <strong>${escapeHtml(label)}</strong>
+                    <span>${formatNumber(count)} issue${count === 1 ? "" : "s"}</span>
+                  </div>
+                `).join("") : `<div class="empty">Issue types will appear here once you start filing problems.</div>`}
+              </div>
+            </section>
+          </section>
+        </section>
+      `;
+
+      bindEditDashboardEvents(bundle);
+    }
+
+    function renderStats(bundle) {
+      if (!bundle) {
+        document.getElementById("view-stats").innerHTML = "";
+        return;
+      }
+      const stats = getStats(bundle);
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      document.getElementById("view-stats").innerHTML = `
+        <section class="stack">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h2>Statistics Dashboard</h2>
+                <p>Patterns over time, session quality, and project trajectory.</p>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="metric"><div class="label">Total words written</div><div class="value">${formatNumber(stats.totalWritten)}</div></div>
+              <div class="metric"><div class="label">Average words per day</div><div class="value">${formatNumber(stats.dailyAverage)}</div></div>
+              <div class="metric"><div class="label">Average words per session</div><div class="value">${formatNumber(stats.avgSession)}</div></div>
+              <div class="metric"><div class="label">Most productive day</div><div class="value" style="font-size: 1.2rem;">${dayNames[stats.mostProductiveDayIndex]}</div></div>
+              <div class="metric"><div class="label">Best writing day</div><div class="value">${stats.bestDay.words ? formatNumber(stats.bestDay.words) : "0"}</div><div class="hint">${stats.bestDay.key ? formatDate(stats.bestDay.key) : "No writing days logged yet"}</div></div>
+              <div class="metric"><div class="label">Longest writing session</div><div class="value">${formatNumber(stats.longestSession)}</div><div class="hint">Minutes</div></div>
+              <div class="metric"><div class="label">Words written this month</div><div class="value">${formatNumber(stats.wordsMonth)}</div></div>
+              <div class="metric"><div class="label">Completion percentage</div><div class="value">${stats.totalProgress.toFixed(1)}%</div></div>
+              <div class="metric"><div class="label">Predicted finish date</div><div class="value" style="font-size: 1.08rem;">${stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Not enough pace data"}</div></div>
+            </div>
+          </section>
+
+          <section class="split">
+            <div class="card">
+              <div class="section-head"><div><h3>Word Count Over Time</h3><p>Total manuscript growth across writing days.</p></div></div>
+              <div class="chart-card chart-shell">${renderLineChart(bundle)}</div>
+            </div>
+            <div class="card">
+              <div class="section-head"><div><h3>Weekly Productivity</h3><p>Rolling week totals to show your pace trends.</p></div></div>
+              <div class="chart-card chart-shell">${renderBarChart(bundle)}</div>
+            </div>
+          </section>
+
+        </section>
+      `;
+    }
+
+    function renderSessions(bundle) {
+      const view = document.getElementById("view-sessions");
+      if (!bundle) {
+        view.innerHTML = "";
+        return;
+      }
+      const sessions = [...bundle.sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+      view.innerHTML = `
+        <section class="stack">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h2>All Sessions</h2>
+                <p>View and delete every session logged for this project.</p>
+              </div>
+              <button class="ghost-btn" id="back-to-dashboard-btn" type="button">Back to dashboard</button>
+            </div>
+            <div class="list">
+              ${sessions.length ? sessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged yet.</div>`}
+            </div>
+          </section>
+        </section>
+      `;
+      const backButton = document.getElementById("back-to-dashboard-btn");
+      if (backButton) {
+        backButton.addEventListener("click", () => {
+          activeView = sessionsReturnView;
+          render();
+        });
+      }
+      bindSessionActions();
+    }
+
+    function renderEditProject(bundle) {
+      const view = document.getElementById("view-edit-project");
+      if (!bundle) {
+        view.innerHTML = "";
+        return;
+      }
+      view.innerHTML = `
+        <section class="stack">
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h2>Edit Project</h2>
+                <p>Update the manuscript setup from its own dedicated page.</p>
+              </div>
+              <button class="ghost-btn" id="back-to-projects-btn" type="button">Back to projects</button>
+            </div>
+            <form id="project-form" class="form-grid triple">
+              <label class="full">Book title
+                <input name="bookTitle" value="${escapeAttr(bundle.project.bookTitle)}" placeholder="Book title" />
+              </label>
+              <label>Target word count
+                <input type="number" min="0" name="targetWordCount" value="${escapeAttr(bundle.project.targetWordCount)}" />
+              </label>
+              <label>Current word count
+                <input type="number" min="0" name="currentWordCount" value="${escapeAttr(bundle.project.currentWordCount)}" />
+              </label>
+              <label>Deadline
+                <input type="date" name="deadline" value="${escapeAttr(bundle.project.deadline)}" />
+              </label>
+              <label>Daily target
+                <input type="number" min="0" name="dailyTarget" value="${escapeAttr(bundle.project.dailyTarget)}" />
+              </label>
+              <label>Project start date
+                <input type="date" name="projectStartDate" value="${escapeAttr(bundle.project.projectStartDate)}" />
+              </label>
+              <div class="full">
+                <button class="primary-btn" type="submit">Save project</button>
+              </div>
+            </form>
+          </section>
+        </section>
+      `;
+      bindEditProjectEvents();
+    }
+
+    function bindCreateProjectEvents() {
+      const createForm = document.getElementById("create-project-form");
+      if (!createForm) return;
+      createForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const bundle = createProjectBundle(
+          formData.get("bookTitle").trim(),
+          formData.get("targetWordCount"),
+          formData.get("currentWordCount"),
+          formData.get("deadline")
+        );
+        state.projects.unshift(bundle);
+        state.activeProjectId = bundle.id;
+        activeView = "dashboard";
+        persistAndRender();
+        showToast("Project created", `${bundle.project.bookTitle} is ready for tracking.`);
+      });
+    }
+
+    function bindProjectEvents() {
+      const openCreateButton = document.getElementById("open-create-project-btn");
+      const importProjectCsvButton = document.getElementById("import-project-csv-btn");
+      const importProjectCsvInput = document.getElementById("import-project-csv-input");
+      if (openCreateButton) {
+        openCreateButton.addEventListener("click", () => {
+          activeView = "create-project";
+          render();
+        });
+      }
+
+      if (importProjectCsvButton && importProjectCsvInput) {
+        importProjectCsvButton.addEventListener("click", () => {
+          importProjectCsvInput.click();
+        });
+
+        importProjectCsvInput.addEventListener("change", () => {
+          handleImportProjectFile(importProjectCsvInput.files?.[0]);
+          importProjectCsvInput.value = "";
+        });
+      }
+
+      document.querySelectorAll("[data-action='open-project']").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeProjectId = button.dataset.id;
+          activeView = "dashboard";
+          saveState();
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-action='edit-project']").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.activeProjectId = button.dataset.id;
+          activeView = "edit-project";
+          saveState();
+          render();
+        });
+      });
+
+      document.querySelectorAll("[data-action='delete-project']").forEach((button) => {
+        button.addEventListener("click", () => {
+          const projectId = button.dataset.id;
+          state.projects = state.projects.filter((project) => project.id !== projectId);
+          if (state.activeProjectId === projectId) {
+            state.activeProjectId = state.projects[0]?.id || null;
+            activeView = state.activeProjectId ? "dashboard" : "projects";
+          }
+          persistAndRender();
+        });
+      });
+    }
+
+    function bindDashboardEvents(bundle) {
+      const sessionModal = document.getElementById("session-modal");
+      const sessionCompleteModal = document.getElementById("session-complete-modal");
+      const endSessionConfirmModal = document.getElementById("end-session-confirm-modal");
+      const goalModal = document.getElementById("goal-modal");
+      const goalForm = document.getElementById("goal-form");
+      const openSessionButton = document.getElementById("open-session-modal-btn");
+      const closeSessionButton = document.getElementById("close-session-modal-btn");
+      const closeSessionCompleteButton = document.getElementById("close-session-complete-btn");
+      const startSessionButton = document.getElementById("start-session-btn");
+      const endSessionButton = document.getElementById("end-session-btn");
+      const cancelEndSessionButton = document.getElementById("cancel-end-session-btn");
+      const confirmEndSessionButton = document.getElementById("confirm-end-session-btn");
+      const openGoalButton = document.getElementById("open-goal-modal-btn");
+      const closeGoalButton = document.getElementById("close-goal-modal-btn");
+      const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
+      const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
+      const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
+      const exportProjectCsvButton = document.getElementById("export-project-csv-btn");
+
+      if (openSessionButton) {
+        openSessionButton.onclick = () => {
+          openSessionModal();
+        };
+      }
+
+      if (startSessionButton) {
+        startSessionButton.onclick = () => {
+          const startCountInput = document.getElementById("session-start-word-count");
+          if (!startCountInput) return;
+          const startWordCount = number(startCountInput.value);
+          if (startCountInput.value === "" || startWordCount < 0) {
+            startCountInput.reportValidity();
+            return;
+          }
+          startWritingSession(startWordCount);
+        };
+      }
+
+      if (endSessionButton) {
+        endSessionButton.onclick = () => {
+          openEndSessionConfirmModal();
+        };
+      }
+
+      if (cancelEndSessionButton) {
+        cancelEndSessionButton.onclick = () => {
+          closeEndSessionConfirmModal();
+        };
+      }
+
+      if (confirmEndSessionButton) {
+        confirmEndSessionButton.onclick = () => {
+          closeEndSessionConfirmModal();
+          finishActiveWritingSession(false);
+        };
+      }
+
+      if (openGoalButton) {
+        openGoalButton.onclick = () => {
+          openGoalModal();
+        };
+      }
+
+      if (closeGoalButton) {
+        closeGoalButton.onclick = () => {
+          closeGoalModal();
+        };
+      }
+
+      if (goalForm?.elements?.type && goalForm.dataset.goalTypeBound !== "true") {
+        goalForm.dataset.goalTypeBound = "true";
+        goalForm.elements.type.addEventListener("change", (event) => {
+          applyGoalTypePreset(goalForm, event.target.value);
+        });
+      }
+
+      goalModal.onclick = (event) => {
+        if (event.target === goalModal) {
+          closeGoalModal();
+        }
+      };
+
+      if (closeSessionButton) {
+        closeSessionButton.onclick = () => {
+          closeSessionModal();
+        };
+      }
+
+      if (closeSessionCompleteButton) {
+        closeSessionCompleteButton.onclick = () => {
+          closeSessionCompleteModal();
+        };
+      }
+
+      sessionModal.onclick = (event) => {
+        if (event.target === sessionModal) {
+          closeSessionModal();
+        }
+      };
+
+      sessionCompleteModal.onclick = (event) => {
+        if (event.target === sessionCompleteModal) {
+          closeSessionCompleteModal();
+        }
+      };
+
+      endSessionConfirmModal.onclick = (event) => {
+        if (event.target === endSessionConfirmModal) {
+          closeEndSessionConfirmModal();
+        }
+      };
+
+      if (viewAllSessionsButton) {
+        viewAllSessionsButton.onclick = () => {
+          sessionsReturnView = "dashboard";
+          activeView = "sessions";
+          render();
+        };
+      }
+
+      if (exportProjectCsvButton) {
+        exportProjectCsvButton.onclick = () => {
+          downloadCurrentProjectCsv();
+        };
+      }
+
+      if (prevHeatmapButton) {
+        prevHeatmapButton.onclick = () => {
+          heatmapMonthOffset -= 1;
+          render();
+        };
+      }
+
+      if (nextHeatmapButton) {
+        nextHeatmapButton.onclick = () => {
+          heatmapMonthOffset += 1;
+          render();
+        };
+      }
+
+      document.querySelectorAll("[data-action='delete-goal']").forEach((button) => {
+        button.onclick = () => {
+          const goal = bundle.goals.find((item) => item.id === button.dataset.id);
+          if (!goal) return;
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            goals: projectBundle.goals.filter((item) => item.id !== goal.id)
+          }));
+          persistAndRender();
+          showToast("Goal deleted", "That goal has been removed.");
+        };
+      });
+
+      document.getElementById("session-complete-form").onsubmit = (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        const durationMinutes = Math.max(1, number(formData.get("durationMinutes")));
+        const sessionDate = formData.get("sessionDate") || toInputDate(new Date().toISOString());
+        const sessionNotes = String(formData.get("sessionNotes") || "").trim();
+
+        if (editingSessionId) {
+          const wordsWritten = Math.max(0, number(formData.get("sessionWordsWritten")));
+          updateCurrentBundle((projectBundle) => {
+            const existingSession = projectBundle.sessions.find((item) => item.id === editingSessionId);
+            if (!existingSession) return projectBundle;
+
+            const updatedSession = {
+              ...existingSession,
+              wordsWritten,
+              durationMinutes,
+              date: new Date(`${sessionDate}T12:00:00`).toISOString(),
+              notes: sessionNotes
+            };
+
+            return {
+              ...projectBundle,
+              sessions: projectBundle.sessions.map((item) => item.id === editingSessionId ? updatedSession : item),
+              project: {
+                ...projectBundle.project,
+                currentWordCount: Math.max(
+                  0,
+                  number(projectBundle.project.currentWordCount)
+                    - number(existingSession.wordsWritten)
+                    + updatedSession.wordsWritten
+                )
+              }
+            };
+          });
+
+          showToast("Session updated", "Your edits have been saved and the manuscript total was reconciled.");
+        } else {
+          if (!pendingCompletedSession) return;
+          const endWordCount = number(formData.get("sessionEndWordCount"));
+          const startWordCount = number(pendingCompletedSession.startWordCount);
+          const wordsWritten = Math.max(0, endWordCount - startWordCount);
+          const session = {
+            id: createId(),
+            wordsWritten,
+            wordsEdited: 0,
+            notes: sessionNotes,
+            durationMinutes,
+            date: new Date(`${sessionDate}T12:00:00`).toISOString()
+          };
+
+          updateCurrentBundle((projectBundle) => {
+            const sessions = [...projectBundle.sessions, session];
+            const updatedBundle = {
+              ...projectBundle,
+              sessions,
+              project: {
+                ...projectBundle.project,
+                currentWordCount: Math.max(
+                  0,
+                  number(projectBundle.project.currentWordCount)
+                    + session.wordsWritten
+                )
+              }
+            };
+            const unlockedMilestones = milestoneTargets.filter((target) =>
+              number(updatedBundle.project.currentWordCount) >= target && !updatedBundle.milestones.includes(target)
+            );
+            if (unlockedMilestones.length) {
+              showToast("Milestone reached", `You crossed ${formatNumber(unlockedMilestones[0])} words. Keep the momentum going.`);
+            } else {
+              showToast("Session logged", `${formatNumber(session.wordsWritten)} words calculated and added to the manuscript.`);
+            }
+            return updatedBundle;
+          });
+        }
+
+        closeSessionCompleteModal();
+        persistAndRender();
+      };
+
+      goalForm.onsubmit = (event) => {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+        updateCurrentBundle((projectBundle) => ({
+          ...projectBundle,
+          goals: [{
+            id: createId(),
+            type: formData.get("type"),
+            title: formData.get("title").trim(),
+            targetValue: number(formData.get("targetValue")),
+            createdAt: new Date().toISOString()
+          }, ...projectBundle.goals]
+        }));
+        closeGoalModal();
+        persistAndRender();
+        showToast("Goal added", "Your new goal is now visible on the dashboard.");
+      };
+
+      bindSessionDial();
+      bindSessionActions();
+
+    }
+
+    function bindEditDashboardEvents(bundle) {
+      const passModal = document.getElementById("edit-pass-modal");
+      const editSessionModal = document.getElementById("edit-session-modal");
+      const issueModal = document.getElementById("issue-modal");
+      const passForm = document.getElementById("edit-pass-form");
+      const editSessionForm = document.getElementById("edit-session-form");
+      const issueForm = document.getElementById("issue-form");
+      const openPassButton = document.getElementById("open-edit-pass-btn");
+      const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
+      const openIssueButton = document.getElementById("open-issue-modal-btn");
+      const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
+      const closePassButton = document.getElementById("close-edit-pass-btn");
+      const closeEditSessionButton = document.getElementById("close-edit-session-btn");
+      const closeIssueButton = document.getElementById("close-issue-modal-btn");
+
+      if (openPassButton) {
+        openPassButton.onclick = () => {
+          openEditPassModal();
+        };
+      }
+
+      if (openEditSessionButton) {
+        openEditSessionButton.onclick = () => {
+          openEditSessionModal();
+        };
+      }
+
+      if (openIssueButton) {
+        openIssueButton.onclick = () => {
+          openIssueModal();
+        };
+      }
+
+      if (viewAllSessionsButton) {
+        viewAllSessionsButton.onclick = () => {
+          sessionsReturnView = "edit";
+          activeView = "sessions";
+          render();
+        };
+      }
+
+      if (closePassButton) {
+        closePassButton.onclick = () => {
+          closeEditPassModal();
+        };
+      }
+
+      if (closeEditSessionButton) {
+        closeEditSessionButton.onclick = () => {
+          closeEditSessionModal();
+        };
+      }
+
+      if (closeIssueButton) {
+        closeIssueButton.onclick = () => {
+          closeIssueModal();
+        };
+      }
+
+      if (passModal) {
+        passModal.onclick = (event) => {
+          if (event.target === passModal) closeEditPassModal();
+        };
+      }
+
+      if (editSessionModal) {
+        editSessionModal.onclick = (event) => {
+          if (event.target === editSessionModal) closeEditSessionModal();
+        };
+      }
+
+      if (issueModal) {
+        issueModal.onclick = (event) => {
+          if (event.target === issueModal) closeIssueModal();
+        };
+      }
+
+      if (passForm) {
+        passForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(passForm);
+          const passStage = String(formData.get("passStage") || "Developmental");
+          const passName = String(formData.get("passName") || "").trim() || defaultPassName(passStage);
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            editing: {
+              ...projectBundle.editing,
+              passStage,
+              passStatus: String(formData.get("passStatus") || "Not started"),
+              passName,
+              passObjective: String(formData.get("passObjective") || "").trim(),
+              progressCurrent: number(formData.get("progressCurrent")),
+              progressTotal: number(formData.get("progressTotal"))
+            }
+          }));
+          closeEditPassModal();
+          persistAndRender();
+          showToast("Pass updated", `${passName} is now the active editing pass.`);
+        };
+      }
+
+      if (editSessionForm) {
+        editSessionForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(editSessionForm);
+          const isEditingExisting = Boolean(editingEditSessionId);
+          const session = normalizeSession({
+            id: editingEditSessionId || createId(),
+            type: "edit",
+            date: new Date(`${formData.get("sessionDate")}T12:00:00`).toISOString(),
+            durationMinutes: Math.max(1, number(formData.get("durationMinutes"))),
+            wordsEdited: Math.max(0, number(formData.get("wordsEdited"))),
+            notes: String(formData.get("sessionNotes") || "").trim(),
+            passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
+            sectionLabel: String(formData.get("sectionLabel") || "").trim()
+          });
+
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            sessions: isEditingExisting
+              ? projectBundle.sessions.map((item) => item.id === editingEditSessionId ? session : item)
+              : [session, ...projectBundle.sessions]
+          }));
+
+          closeEditSessionModal();
+          persistAndRender();
+          showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", "Your revision work is now part of the dashboard.");
+        };
+      }
+
+      if (issueForm) {
+        issueForm.onsubmit = (event) => {
+          event.preventDefault();
+          const formData = new FormData(issueForm);
+          const isEditingExisting = Boolean(editingIssueId);
+          const issue = normalizeIssue({
+            id: editingIssueId || createId(),
+            title: String(formData.get("title") || "").trim(),
+            type: String(formData.get("type") || "General"),
+            sectionLabel: String(formData.get("sectionLabel") || "").trim(),
+            priority: String(formData.get("priority") || "Medium"),
+            status: String(formData.get("status") || "Open"),
+            notes: String(formData.get("notes") || "").trim(),
+            createdAt: isEditingExisting
+              ? bundle.issues.find((item) => item.id === editingIssueId)?.createdAt || new Date().toISOString()
+              : new Date().toISOString(),
+            passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage)
+          });
+
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: isEditingExisting
+              ? projectBundle.issues.map((item) => item.id === editingIssueId ? issue : item)
+              : [issue, ...projectBundle.issues]
+          }));
+
+          closeIssueModal();
+          persistAndRender();
+          showToast(isEditingExisting ? "Issue updated" : "Issue added", "That editing problem has been filed away for the current pass.");
+        };
+      }
+
+      document.querySelectorAll("[data-action='edit-issue']").forEach((button) => {
+        button.onclick = () => {
+          openIssueModal(button.dataset.id);
+        };
+      });
+
+      document.querySelectorAll("[data-action='toggle-issue-status']").forEach((button) => {
+        button.onclick = () => {
+          const issueId = button.dataset.id;
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: projectBundle.issues.map((issue) => {
+              if (issue.id !== issueId) return issue;
+              return {
+                ...issue,
+                status: issue.status === "Resolved" ? "Open" : "Resolved"
+              };
+            })
+          }));
+          persistAndRender();
+          showToast("Issue updated", "The issue status was updated.");
+        };
+      });
+
+      document.querySelectorAll("[data-action='delete-issue']").forEach((button) => {
+        button.onclick = () => {
+          const issueId = button.dataset.id;
+          updateCurrentBundle((projectBundle) => ({
+            ...projectBundle,
+            issues: projectBundle.issues.filter((issue) => issue.id !== issueId)
+          }));
+          persistAndRender();
+          showToast("Issue deleted", "That issue was removed from your editing backlog.");
+        };
+      });
+
+      bindSessionActions();
+    }
+
+    function openEditPassModal() {
+      const modal = document.getElementById("edit-pass-modal");
+      const form = document.getElementById("edit-pass-form");
+      const editing = currentBundle()?.editing || createDefaultEditingState();
+      form.elements.passStage.value = editing.passStage || "Developmental";
+      form.elements.passStatus.value = editing.passStatus || "Not started";
+      form.elements.passName.value = editing.passName || defaultPassName(editing.passStage);
+      form.elements.passObjective.value = editing.passObjective || "";
+      form.elements.progressCurrent.value = String(number(editing.progressCurrent));
+      form.elements.progressTotal.value = String(number(editing.progressTotal));
+      modal.classList.remove("hidden");
+    }
+
+    function closeEditPassModal() {
+      const modal = document.getElementById("edit-pass-modal");
+      modal.classList.add("hidden");
+    }
+
+    function openEditSessionModal(sessionId = null) {
+      const modal = document.getElementById("edit-session-modal");
+      const form = document.getElementById("edit-session-form");
+      const bundle = currentBundle();
+      const passCopy = document.getElementById("edit-session-pass-copy");
+      const title = document.getElementById("edit-session-title");
+      const copy = document.getElementById("edit-session-copy");
+      const submit = document.getElementById("edit-session-submit-btn");
+      const existingSession = sessionId ? bundle?.sessions.find((item) => item.id === sessionId) : null;
+
+      editingEditSessionId = sessionId;
+      form.reset();
+      passCopy.textContent = `Active pass: ${bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage)}`;
+
+      if (existingSession) {
+        title.textContent = "Edit Editing Session";
+        copy.textContent = "Update the revision log for this session.";
+        form.elements.sessionDate.value = toInputDate(existingSession.date);
+        form.elements.durationMinutes.value = String(Math.max(1, number(existingSession.durationMinutes)));
+        form.elements.sectionLabel.value = existingSession.sectionLabel || "";
+        form.elements.wordsEdited.value = String(number(existingSession.wordsEdited));
+        form.elements.sessionNotes.value = existingSession.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Log Editing Session";
+        copy.textContent = "Capture time spent revising, what section you touched, and anything you want to remember.";
+        form.elements.sessionDate.value = toInputDate(new Date().toISOString());
+        form.elements.durationMinutes.value = "45";
+        form.elements.sectionLabel.value = "";
+        form.elements.wordsEdited.value = "0";
+        form.elements.sessionNotes.value = "";
+        submit.textContent = "Save editing session";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeEditSessionModal() {
+      const modal = document.getElementById("edit-session-modal");
+      const form = document.getElementById("edit-session-form");
+      form.reset();
+      editingEditSessionId = null;
+      modal.classList.add("hidden");
+    }
+
+    function openIssueModal(issueId = null) {
+      const modal = document.getElementById("issue-modal");
+      const form = document.getElementById("issue-form");
+      const passCopy = document.getElementById("issue-pass-copy");
+      const title = document.getElementById("issue-modal-title");
+      const copy = document.getElementById("issue-modal-copy");
+      const submit = document.getElementById("issue-submit-btn");
+      const issue = issueId ? currentBundle()?.issues.find((item) => item.id === issueId) : null;
+
+      editingIssueId = issueId;
+      form.reset();
+      passCopy.textContent = `Filed under: ${currentBundle()?.editing?.passName || defaultPassName(currentBundle()?.editing?.passStage)}`;
+
+      if (issue) {
+        title.textContent = "Edit Open Issue";
+        copy.textContent = "Update the problem so it stays useful during the pass.";
+        form.elements.title.value = issue.title || "";
+        form.elements.type.value = issue.type || "General";
+        form.elements.priority.value = issue.priority || "Medium";
+        form.elements.sectionLabel.value = issue.sectionLabel || "";
+        form.elements.status.value = issue.status || "Open";
+        form.elements.notes.value = issue.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Add Open Issue";
+        copy.textContent = "Capture a problem now so you can come back to it during the pass.";
+        form.elements.type.value = "Pacing";
+        form.elements.priority.value = "Medium";
+        form.elements.status.value = "Open";
+        submit.textContent = "Save issue";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function closeIssueModal() {
+      const modal = document.getElementById("issue-modal");
+      const form = document.getElementById("issue-form");
+      form.reset();
+      editingIssueId = null;
+      modal.classList.add("hidden");
+    }
+
+    function openSessionModal() {
+      const modal = document.getElementById("session-modal");
+      const title = document.getElementById("session-modal-title");
+      const copy = document.getElementById("session-modal-copy");
+      const bundle = currentBundle();
+      const startCountInput = document.getElementById("session-start-word-count");
+      title.textContent = "Start Writing Session";
+      copy.textContent = "Choose how long you want to write, add your current word count, then begin.";
+      if (startCountInput) {
+        startCountInput.value = String(number(bundle?.project?.currentWordCount));
+      }
+      syncSessionDial(sessionDraftMinutes);
+      modal.classList.remove("hidden");
+    }
+
+    function closeSessionModal() {
+      const modal = document.getElementById("session-modal");
+      modal.classList.add("hidden");
+    }
+
+    function openSessionCompleteModal() {
+      const modal = document.getElementById("session-complete-modal");
+      const form = document.getElementById("session-complete-form");
+      const title = document.getElementById("session-complete-title");
+      const copy = document.getElementById("session-complete-copy");
+      const startCountCopy = document.getElementById("session-start-count-copy");
+      const submit = document.getElementById("session-submit-btn");
+      const endWordCountField = document.getElementById("session-end-word-count-field");
+      const wordsWrittenField = document.getElementById("session-words-written-field");
+      const endWordCountInput = form.elements.sessionEndWordCount;
+      const wordsWrittenInput = form.elements.sessionWordsWritten;
+      const durationInput = form.elements.durationMinutes;
+      const sessionDateInput = form.elements.sessionDate;
+      const sessionNotesInput = form.elements.sessionNotes;
+
+      form.reset();
+
+      if (editingSessionId) {
+        const session = currentBundle()?.sessions.find((item) => item.id === editingSessionId);
+        if (!session) {
+          editingSessionId = null;
+          return;
+        }
+
+        title.textContent = "Edit session";
+        copy.textContent = "Update the logged session details and save your changes.";
+        if (startCountCopy) {
+          startCountCopy.textContent = "Editing a past session will automatically reconcile your manuscript word count.";
+        }
+        endWordCountField.classList.add("hidden");
+        wordsWrittenField.classList.remove("hidden");
+        endWordCountInput.required = false;
+        wordsWrittenInput.required = true;
+        wordsWrittenInput.value = String(number(session.wordsWritten));
+        durationInput.value = String(Math.max(1, number(session.durationMinutes)));
+        sessionDateInput.value = toInputDate(session.date);
+        sessionNotesInput.value = session.notes || "";
+        submit.textContent = "Save changes";
+      } else {
+        title.textContent = "Session complete";
+        copy.textContent = pendingCompletedSession
+          ? `You wrote for ${describeMinutes(pendingCompletedSession.durationMinutes)}. Add your current manuscript word count to calculate words written.`
+          : "Add your current manuscript word count to calculate words written.";
+        if (startCountCopy) {
+          startCountCopy.textContent = pendingCompletedSession
+            ? `Starting manuscript count: ${formatNumber(number(pendingCompletedSession.startWordCount))} words.`
+            : "";
+        }
+        endWordCountField.classList.remove("hidden");
+        wordsWrittenField.classList.add("hidden");
+        endWordCountInput.required = true;
+        wordsWrittenInput.required = false;
+        durationInput.value = String(Math.max(1, number(pendingCompletedSession?.durationMinutes || sessionDraftMinutes)));
+        sessionDateInput.value = toInputDate(pendingCompletedSession?.endedAt || new Date().toISOString());
+        sessionNotesInput.value = "";
+        submit.textContent = "Save session";
+      }
+
+      modal.classList.remove("hidden");
+    }
+
+    function openEndSessionConfirmModal() {
+      const modal = document.getElementById("end-session-confirm-modal");
+      modal.classList.remove("hidden");
+    }
+
+    function closeEndSessionConfirmModal() {
+      const modal = document.getElementById("end-session-confirm-modal");
+      modal.classList.add("hidden");
+    }
+
+    function closeSessionCompleteModal() {
+      const modal = document.getElementById("session-complete-modal");
+      const form = document.getElementById("session-complete-form");
+      form.reset();
+      pendingCompletedSession = null;
+      editingSessionId = null;
+      modal.classList.add("hidden");
+    }
+
+    function syncSessionDial(minutes = sessionDraftMinutes) {
+      const dialValue = document.getElementById("session-dial-value");
+      const dialProgress = document.getElementById("session-dial-progress");
+      const dialHandle = document.getElementById("session-dial-handle");
+      const dialCaption = document.getElementById("session-dial-caption");
+      if (!dialValue || !dialProgress || !dialHandle || !dialCaption) return;
+      const clampedMinutes = Math.min(120, Math.max(15, Math.round(number(minutes) / 5) * 5 || 25));
+      sessionDraftMinutes = clampedMinutes;
+      const progress = (clampedMinutes - 15) / 105;
+      const angle = Math.PI - (progress * Math.PI);
+      const cx = 160;
+      const cy = 180;
+      const radius = 120;
+      const x = cx + Math.cos(angle) * radius;
+      const y = cy - Math.sin(angle) * radius;
+      dialValue.textContent = String(clampedMinutes);
+      dialProgress.setAttribute("stroke-dasharray", `${progress * 100} 100`);
+      dialHandle.setAttribute("cx", x.toFixed(2));
+      dialHandle.setAttribute("cy", y.toFixed(2));
+      dialCaption.textContent = `${describeMinutes(clampedMinutes)} of focused writing time.`;
+    }
+
+    function bindSessionDial() {
+      const dial = document.getElementById("session-dial");
+      if (!dial || dial.dataset.bound === "true") return;
+      dial.dataset.bound = "true";
+
+      const updateFromPointer = (clientX, clientY) => {
+        const bounds = dial.getBoundingClientRect();
+        const scaleX = 320 / bounds.width;
+        const scaleY = 220 / bounds.height;
+        const x = (clientX - bounds.left) * scaleX;
+        const y = (clientY - bounds.top) * scaleY;
+        const angle = Math.max(0, Math.min(Math.PI, Math.atan2(180 - y, x - 160)));
+        const progress = (Math.PI - angle) / Math.PI;
+        const minutes = 15 + Math.round((progress * 105) / 5) * 5;
+        syncSessionDial(minutes);
+      };
+
+      const move = (event) => {
+        if (event.buttons === 0 && event.type === "pointermove") return;
+        updateFromPointer(event.clientX, event.clientY);
+      };
+
+      dial.addEventListener("pointerdown", (event) => {
+        dial.classList.add("dragging");
+        dial.setPointerCapture(event.pointerId);
+        updateFromPointer(event.clientX, event.clientY);
+      });
+
+      dial.addEventListener("pointermove", move);
+      dial.addEventListener("pointerup", (event) => {
+        dial.classList.remove("dragging");
+        if (dial.hasPointerCapture(event.pointerId)) dial.releasePointerCapture(event.pointerId);
+      });
+      dial.addEventListener("pointercancel", (event) => {
+        dial.classList.remove("dragging");
+        if (dial.hasPointerCapture(event.pointerId)) dial.releasePointerCapture(event.pointerId);
+      });
+
+      syncSessionDial(sessionDraftMinutes);
+    }
+
+    function stopWritingSessionTimer() {
+      if (sessionTimerHandle) {
+        clearInterval(sessionTimerHandle);
+        sessionTimerHandle = null;
+      }
+    }
+
+    function updateWritingSessionScreen() {
+      const screen = document.getElementById("writing-session-screen");
+      const clock = document.getElementById("writing-session-clock");
+      const copy = document.getElementById("writing-session-copy");
+      if (!screen || !clock || !copy || !activeWritingSession) return;
+      const remainingSeconds = (activeWritingSession.endsAt - Date.now()) / 1000;
+      if (remainingSeconds <= 0) {
+        clock.textContent = "00:00";
+        finishActiveWritingSession(true);
+        return;
+      }
+      clock.textContent = formatClock(remainingSeconds);
+      copy.textContent = `${describeMinutes(activeWritingSession.plannedMinutes)} session in progress`;
+    }
+
+    function startWritingSession(startWordCount) {
+      activeWritingSession = {
+        startedAt: Date.now(),
+        plannedMinutes: sessionDraftMinutes,
+        endsAt: Date.now() + (sessionDraftMinutes * 60000),
+        startWordCount: number(startWordCount)
+      };
+      closeEndSessionConfirmModal();
+      closeSessionModal();
+      document.getElementById("writing-session-screen").classList.remove("hidden");
+      updateWritingSessionScreen();
+      stopWritingSessionTimer();
+      sessionTimerHandle = setInterval(updateWritingSessionScreen, 250);
+    }
+
+    function finishActiveWritingSession(autoCompleted = false) {
+      if (!activeWritingSession) return;
+      const endedAt = Date.now();
+      const elapsedMinutes = Math.max(1, Math.round((endedAt - activeWritingSession.startedAt) / 60000));
+      pendingCompletedSession = {
+        durationMinutes: autoCompleted ? activeWritingSession.plannedMinutes : elapsedMinutes,
+        endedAt: new Date(endedAt).toISOString(),
+        startWordCount: number(activeWritingSession.startWordCount)
+      };
+      activeWritingSession = null;
+      closeEndSessionConfirmModal();
+      stopWritingSessionTimer();
+      document.getElementById("writing-session-screen").classList.add("hidden");
+      openSessionCompleteModal();
+    }
+
+    function openGoalModal() {
+      const modal = document.getElementById("goal-modal");
+      const form = document.getElementById("goal-form");
+      const title = document.getElementById("goal-modal-title");
+      const copy = document.getElementById("goal-modal-copy");
+      form.reset();
+      form.elements.type.value = "write_words";
+      applyGoalTypePreset(form, "write_words");
+      title.textContent = "Create Goal";
+      copy.textContent = "Set a simple daily target you can scan quickly from the dashboard.";
+      modal.classList.remove("hidden");
+    }
+
+    function closeGoalModal() {
+      const modal = document.getElementById("goal-modal");
+      const form = document.getElementById("goal-form");
+      form.reset();
+      modal.classList.add("hidden");
+    }
+
+    function bindSessionActions() {
+      document.querySelectorAll("[data-action='edit-session']").forEach((button) => {
+        button.addEventListener("click", () => {
+          const session = currentBundle()?.sessions.find((item) => item.id === button.dataset.id);
+          if (!session) return;
+          if (session.type === "edit") {
+            openEditSessionModal(session.id);
+            return;
+          }
+          editingSessionId = button.dataset.id;
+          openSessionCompleteModal();
+        });
+      });
+
+      document.querySelectorAll("[data-action='delete-session']").forEach((button) => {
+        button.addEventListener("click", () => {
+          const sessionId = button.dataset.id;
+          const deletedSession = currentBundle()?.sessions.find((item) => item.id === sessionId);
+          updateCurrentBundle((projectBundle) => {
+            const session = projectBundle.sessions.find((item) => item.id === sessionId);
+            const nextWordCount = session?.type === "edit"
+              ? number(projectBundle.project.currentWordCount)
+              : Math.max(0, number(projectBundle.project.currentWordCount) - number(session?.wordsWritten));
+            return {
+              ...projectBundle,
+              sessions: projectBundle.sessions.filter((item) => item.id !== sessionId),
+              project: {
+                ...projectBundle.project,
+                currentWordCount: nextWordCount
+              }
+            };
+          });
+          persistAndRender();
+          showToast("Session deleted", deletedSession?.type === "edit" ? "That editing session was removed from your history." : "That session was removed from your history.");
+        });
+      });
+
+    }
+
+    function bindEditProjectEvents() {
+      const form = document.getElementById("project-form");
+      const backButton = document.getElementById("back-to-projects-btn");
+      if (backButton) {
+        backButton.addEventListener("click", () => {
+          activeView = "projects";
+          saveState();
+          render();
+        });
+      }
+      if (!form) return;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const formData = new FormData(form);
+        updateCurrentBundle((projectBundle) => ({
+          ...projectBundle,
+          project: {
+            ...projectBundle.project,
+            bookTitle: String(formData.get("bookTitle") || "").trim() || projectBundle.project.bookTitle,
+            targetWordCount: number(formData.get("targetWordCount")),
+            currentWordCount: number(formData.get("currentWordCount")),
+            deadline: String(formData.get("deadline") || ""),
+            dailyTarget: number(formData.get("dailyTarget")),
+            projectStartDate: String(formData.get("projectStartDate") || "") || projectBundle.project.projectStartDate
+          }
+        }));
+        activeView = "projects";
+        persistAndRender();
+        showToast("Project updated", "Your manuscript settings have been saved.");
+      });
+    }
+
+    function renderGoalCard(goal) {
+      return `
+        <div class="item" data-goal-id="${goal.id}">
+          <div class="item-top">
+            <h4>${escapeHtml(goal.title)}</h4>
+            <div class="goal-actions">
+              <button class="icon-btn" type="button" data-action="delete-goal" data-id="${goal.id}" aria-label="Delete goal">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
+          <div class="meta-line">
+            <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderIssueCard(issue) {
+      const priorityClass = `priority-${String(issue.priority || "Medium").toLowerCase()}`;
+      const statusClass = `status-${String(issue.status || "Open").toLowerCase()}`;
+      return `
+        <div class="item">
+          <div class="item-top">
+            <div>
+              <p class="session-kind">Open issue</p>
+              <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
+              <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
+            </div>
+            <div class="goal-actions">
+              <button class="icon-btn" type="button" data-action="edit-issue" data-id="${issue.id}" aria-label="Edit issue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+                  <path d="M13.5 6.5l4 4"></path>
+                </svg>
+              </button>
+              <button class="inline-btn" type="button" data-action="toggle-issue-status" data-id="${issue.id}">
+                ${issue.status === "Resolved" ? "Reopen" : "Resolve"}
+              </button>
+              <button class="icon-btn" type="button" data-action="delete-issue" data-id="${issue.id}" aria-label="Delete issue">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="meta-line">
+            <span class="pill">${escapeHtml(issue.type)}</span>
+            <span class="pill ${priorityClass}">${escapeHtml(issue.priority)}</span>
+            <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
+            ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
+          </div>
+          ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderSessionCard(bundle, session) {
+      const isEditSession = session.type === "edit";
+      const title = isEditSession
+        ? `${formatNumber(session.wordsEdited)} words edited`
+        : `${formatNumber(session.wordsWritten)} words written`;
+      const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
+      const passPill = isEditSession && session.passName ? `<span class="pill">${escapeHtml(session.passName)}</span>` : "";
+      return `
+        <div class="item">
+          <div class="item-top">
+            <div>
+              <p class="session-kind">${isEditSession ? "Editing session" : "Writing session"}</p>
+              <h4>${title}</h4>
+              <p class="small-copy">${formatDate(session.date)}</p>
+            </div>
+            <div class="goal-actions">
+              <button class="icon-btn" type="button" data-action="edit-session" data-id="${session.id}" aria-label="Edit session">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+                  <path d="M13.5 6.5l4 4"></path>
+                </svg>
+              </button>
+              <button class="icon-btn" type="button" data-action="delete-session" data-id="${session.id}" aria-label="Delete session">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="meta-line">
+            <span class="pill">${formatNumber(session.durationMinutes)} min</span>
+            ${passPill}
+            ${sectionPill}
+          </div>
+          ${session.notes ? `<p class="small-copy" style="margin-top: 10px;">${escapeHtml(session.notes)}</p>` : ""}
+        </div>
+      `;
+    }
+
+    function renderLineChart(bundle) {
+      const entries = [...getStats(bundle).groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+      if (!entries.length) return `<div class="empty">Log sessions to populate the chart.</div>`;
+      let running = 0;
+      const series = entries.map(([key, value]) => {
+        running += value.words;
+        return { key, total: running };
+      });
+      const width = 720;
+      const height = 280;
+      const max = Math.max(...series.map((point) => point.total), 1);
+      const points = series.map((point, index) => {
+        const x = 40 + (index * (width - 80)) / Math.max(1, series.length - 1);
+        const y = height - 30 - ((point.total / max) * (height - 70));
+        return `${x},${y}`;
+      }).join(" ");
+      return `
+        <svg viewBox="0 0 ${width} ${height}" aria-label="Word count over time line chart">
+          <line x1="40" y1="${height - 30}" x2="${width - 20}" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+          <line x1="40" y1="20" x2="40" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+          <polyline fill="none" stroke="#b85c38" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+          ${series.map((point, index) => {
+            const x = 40 + (index * (width - 80)) / Math.max(1, series.length - 1);
+            const y = height - 30 - ((point.total / max) * (height - 70));
+            return `<circle cx="${x}" cy="${y}" r="4" fill="#b85c38" />`;
+          }).join("")}
+          <text x="42" y="18" fill="#6d6257" font-size="12">Total words</text>
+          <text x="${width - 24}" y="${height - 10}" text-anchor="end" fill="#6d6257" font-size="12">${series[series.length - 1].key}</text>
+        </svg>
+      `;
+    }
+
+    function renderBarChart(bundle) {
+      const entries = [...getStats(bundle).groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+      if (!entries.length) return `<div class="empty">Log sessions to populate the chart.</div>`;
+      const weekly = new Map();
+      entries.forEach(([key, value]) => {
+        const date = new Date(key);
+        const monday = startOfDay(date);
+        monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+        const weekKey = monday.toISOString().slice(0, 10);
+        weekly.set(weekKey, (weekly.get(weekKey) || 0) + value.words);
+      });
+      const series = [...weekly.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-8);
+      const width = 720;
+      const height = 280;
+      const max = Math.max(...series.map(([, value]) => value), 1);
+      const barWidth = (width - 90) / Math.max(1, series.length);
+      return `
+        <svg viewBox="0 0 ${width} ${height}" aria-label="Weekly productivity bar chart">
+          <line x1="40" y1="${height - 30}" x2="${width - 20}" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+          ${series.map(([key, value], index) => {
+            const x = 48 + index * barWidth;
+            const barHeight = (value / max) * (height - 80);
+            const y = height - 30 - barHeight;
+            return `
+              <rect x="${x}" y="${y}" width="${Math.max(barWidth - 14, 20)}" height="${barHeight}" rx="12" fill="rgba(184,92,56,0.78)" />
+              <text x="${x + (Math.max(barWidth - 14, 20) / 2)}" y="${height - 10}" text-anchor="middle" fill="#6d6257" font-size="12">${key.slice(5)}</text>
+            `;
+          }).join("")}
+        </svg>
+      `;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    persistAndRender();
+  </script>
+</body>
+</html>
