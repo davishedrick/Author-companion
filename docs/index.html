@@ -113,6 +113,15 @@
       transition: color 140ms ease;
     }
 
+    .sidebar-text-btn .settings-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      background: #c22d2d;
+      box-shadow: inset 0 0 0 1px rgba(109, 14, 14, 0.22);
+      flex: 0 0 auto;
+    }
+
     .sidebar-text-btn:hover {
       transform: none;
       background: transparent;
@@ -1719,7 +1728,12 @@
     function loadActiveView() {
       try {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        return views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+        const storedView = views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+        const hasProjects = Array.isArray(stored?.projects)
+          ? stored.projects.length > 0
+          : Boolean(stored?.project);
+        if (!hasProjects) return DEFAULT_VIEW;
+        return isProjectWorkspaceView(storedView) ? storedView : DEFAULT_VIEW;
       } catch (error) {
         return DEFAULT_VIEW;
       }
@@ -2641,6 +2655,7 @@
           ${bundle ? `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>` : ""}
           <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button">
             <span aria-hidden="true">⚙</span>
+            <span class="settings-indicator" aria-hidden="true"></span>
             <span>Settings</span>
           </button>
         </div>
@@ -3334,7 +3349,7 @@
           state.projects = state.projects.filter((project) => project.id !== projectId);
           if (state.activeProjectId === projectId) {
             state.activeProjectId = state.projects[0]?.id || null;
-            activeView = state.activeProjectId ? "dashboard" : "projects";
+            activeView = state.activeProjectId ? preferredWorkspaceView() : DEFAULT_VIEW;
           }
           persistAndRender();
         });
