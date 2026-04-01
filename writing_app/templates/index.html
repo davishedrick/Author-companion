@@ -91,6 +91,56 @@
       box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.14);
     }
 
+    .sidebar-footer-actions {
+      display: grid;
+      gap: 6px;
+    }
+
+    .sidebar-text-btn {
+      width: 100%;
+      text-align: left;
+      padding: 10px 2px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: var(--muted);
+      box-shadow: none;
+      cursor: pointer;
+      font-size: 0.96rem;
+      transition: color 140ms ease;
+    }
+
+    .sidebar-text-btn:hover {
+      transform: none;
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .sidebar-text-btn:disabled {
+      cursor: default;
+      color: rgba(109, 98, 87, 0.48);
+    }
+
+    .settings-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .settings-section {
+      padding: 18px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: inset 0 0 0 1px var(--line);
+    }
+
+    .settings-section h4,
+    .settings-section p {
+      margin-top: 0;
+    }
+
     .app-shell.no-sidebar .sidebar {
       display: none;
     }
@@ -933,6 +983,21 @@
       gap: 18px;
     }
 
+    .open-issues-focus .list {
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 10px;
+    }
+
+    .open-issues-focus .item {
+      padding: 14px;
+    }
+
+    .open-issues-focus .issue-note {
+      margin-top: 8px;
+      font-size: 0.95rem;
+      line-height: 1.35;
+    }
+
     .pass-focus {
       display: grid;
       gap: 18px;
@@ -1013,22 +1078,43 @@
       line-height: 1.45;
     }
 
-    .pill.status-open,
-    .pill.priority-high {
+    .pill.status-open {
       background: rgba(184, 92, 56, 0.14);
       color: var(--accent-strong);
     }
 
-    .pill.status-deferred,
-    .pill.priority-medium {
+    .pill.status-deferred {
       background: rgba(162, 102, 23, 0.14);
       color: var(--warning);
     }
 
-    .pill.status-resolved,
-    .pill.priority-low {
+    .pill.status-resolved {
       background: rgba(47, 125, 74, 0.14);
       color: var(--success);
+    }
+
+    .pill.issue-priority {
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: inset 0 0 0 1px transparent;
+    }
+
+    .pill.issue-priority.priority-high {
+      background: rgba(194, 45, 45, 0.2);
+      color: #8f1d1d;
+      box-shadow: inset 0 0 0 1px rgba(194, 45, 45, 0.32);
+    }
+
+    .pill.issue-priority.priority-medium {
+      background: rgba(221, 171, 48, 0.26);
+      color: #835d00;
+      box-shadow: inset 0 0 0 1px rgba(168, 119, 0, 0.34);
+    }
+
+    .pill.issue-priority.priority-low {
+      background: rgba(72, 166, 97, 0.24);
+      color: #1c6a34;
+      box-shadow: inset 0 0 0 1px rgba(45, 132, 70, 0.34);
     }
 
     .issue-breakdown {
@@ -1268,6 +1354,39 @@
       </form>
     </div>
   </div>
+  <div class="modal-backdrop hidden" id="settings-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3>Settings</h3>
+          <p>Manage data actions now, with room to add more project settings later.</p>
+        </div>
+        <button class="ghost-btn" id="close-settings-modal-btn" type="button">Close</button>
+      </div>
+      <div class="settings-grid">
+        <section class="settings-section">
+          <h4>Import</h4>
+          <p class="muted">Bring an existing project into The Author Engine from a CSV file.</p>
+          <div class="meta-line" style="margin-top: 18px;">
+            <button class="primary-btn" id="choose-import-csv-btn" type="button">Import CSV</button>
+          </div>
+        </section>
+        <section class="settings-section">
+          <h4>Export</h4>
+          <p class="muted">Download just your writing data, just your editing data, or the whole project.</p>
+          <div class="list" style="margin-top: 18px;">
+            <button class="ghost-btn" id="export-write-modal-btn" type="button">Export Write</button>
+            <button class="ghost-btn" id="export-edit-modal-btn" type="button">Export Edit</button>
+            <button class="ghost-btn" id="export-all-modal-btn" type="button">Export All</button>
+          </div>
+        </section>
+        <section class="settings-section">
+          <h4>More Settings</h4>
+          <p class="muted">This area is reserved for future settings like preferences, backup options, and project-level controls.</p>
+        </section>
+      </div>
+    </div>
+  </div>
   <div class="modal-backdrop hidden" id="edit-pass-modal">
     <div class="modal-card">
       <div class="section-head">
@@ -1399,7 +1518,8 @@
 
   <script>
     const STORAGE_KEY = "author-engine-mvp";
-    const DEFAULT_VIEW = "projects";
+    const DEFAULT_VIEW = "dashboard";
+    const WORKSPACE_VIEWS = ["dashboard", "edit", "stats"];
     const views = ["projects", "create-project", "dashboard", "edit", "sessions", "stats", "edit-project"];
     const requiredImportColumns = [
       "row_type",
@@ -1520,6 +1640,7 @@
 
     let state = loadState();
     let activeView = loadActiveView();
+    let lastWorkspaceView = loadLastWorkspaceView();
     let toastTimer = null;
     let editingSessionId = null;
     let editingEditSessionId = null;
@@ -1532,7 +1653,7 @@
     let sessionsReturnView = "dashboard";
 
     function isProjectWorkspaceView(view) {
-      return ["dashboard", "edit", "stats"].includes(view);
+      return WORKSPACE_VIEWS.includes(view);
     }
 
     function createProjectBundle(title, targetWordCount, currentWordCount, deadline) {
@@ -1561,11 +1682,15 @@
         if (!stored) return cloneValue(defaultState);
 
         if (Array.isArray(stored.projects)) {
+          const normalizedProjects = stored.projects.map(normalizeProjectBundle);
+          const hasStoredActiveId = normalizedProjects.some((project) => project.id === stored.activeProjectId);
           return {
             ...cloneValue(defaultState),
             ...stored,
-            projects: stored.projects.map(normalizeProjectBundle),
-            activeProjectId: stored.activeProjectId || stored.projects[0]?.id || null
+            projects: normalizedProjects,
+            activeProjectId: hasStoredActiveId
+              ? stored.activeProjectId
+              : normalizedProjects[0]?.id || null
           };
         }
 
@@ -1595,6 +1720,17 @@
       try {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
         return views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+      } catch (error) {
+        return DEFAULT_VIEW;
+      }
+    }
+
+    function loadLastWorkspaceView() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        if (WORKSPACE_VIEWS.includes(stored?.lastWorkspaceView)) return stored.lastWorkspaceView;
+        if (WORKSPACE_VIEWS.includes(stored?.activeView)) return stored.activeView;
+        return DEFAULT_VIEW;
       } catch (error) {
         return DEFAULT_VIEW;
       }
@@ -1641,10 +1777,18 @@
     }
 
     function saveState() {
+      if (isProjectWorkspaceView(activeView)) {
+        lastWorkspaceView = activeView;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         ...state,
-        activeView
+        activeView,
+        lastWorkspaceView
       }));
+    }
+
+    function preferredWorkspaceView() {
+      return isProjectWorkspaceView(lastWorkspaceView) ? lastWorkspaceView : DEFAULT_VIEW;
     }
 
     function currentBundle() {
@@ -2044,6 +2188,42 @@
       `;
     }
 
+    function renderWorkspaceEmptyState(label) {
+      return `
+        <section class="empty-state">
+          <div class="empty-panel">
+            <p class="small-copy">${escapeHtml(label)}</p>
+            <h2 class="hero-title">Create a project to track your progress</h2>
+            <p class="muted">Start your first manuscript project to unlock the full Write, Edit, and Stats workspace.</p>
+            <div class="meta-line" style="margin-top: 22px;">
+              <button class="primary-btn writing-launch-cta" data-action="create-first-project" type="button">Create first project</button>
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function bindWorkspaceEmptyActions() {
+      document.querySelectorAll("[data-action='create-first-project']").forEach((button) => {
+        button.onclick = () => {
+          activeView = "create-project";
+          render();
+        };
+      });
+    }
+
+    function openSettingsModal() {
+      const modal = document.getElementById("settings-modal");
+      if (!modal) return;
+      modal.classList.remove("hidden");
+    }
+
+    function closeSettingsModal() {
+      const modal = document.getElementById("settings-modal");
+      if (!modal) return;
+      modal.classList.add("hidden");
+    }
+
     function showToast(title, body) {
       const toast = document.getElementById("toast");
       toast.innerHTML = `<strong>${title}</strong><span>${body}</span>`;
@@ -2152,39 +2332,47 @@
       };
     }
 
-    function buildProjectExportRows(bundle) {
+    function buildProjectExportRows(bundle, mode = "all") {
       const base = projectExportBaseRow(bundle);
       const rows = [{ ...base, row_type: "project" }];
+      const includeWrite = mode === "all" || mode === "write";
+      const includeEdit = mode === "all" || mode === "edit";
 
-      bundle.goals.forEach((goal) => {
-        rows.push({
-          ...base,
-          row_type: "goal",
-          goal_id: goal.id || "",
-          goal_type: goal.type || "",
-          goal_title: goal.title || "",
-          goal_target_value: number(goal.targetValue),
-          goal_created_at: goal.createdAt || ""
+      if (includeWrite) {
+        bundle.goals.forEach((goal) => {
+          rows.push({
+            ...base,
+            row_type: "goal",
+            goal_id: goal.id || "",
+            goal_type: goal.type || "",
+            goal_title: goal.title || "",
+            goal_target_value: number(goal.targetValue),
+            goal_created_at: goal.createdAt || ""
+          });
         });
-      });
+      }
 
-      bundle.issues.forEach((issue) => {
-        rows.push({
-          ...base,
-          row_type: "issue",
-          issue_id: issue.id || "",
-          issue_title: issue.title || "",
-          issue_type: issue.type || "",
-          issue_section_label: issue.sectionLabel || "",
-          issue_priority: issue.priority || "",
-          issue_status: issue.status || "",
-          issue_notes: issue.notes || "",
-          issue_created_at: issue.createdAt || "",
-          issue_pass_name: issue.passName || ""
+      if (includeEdit) {
+        bundle.issues.forEach((issue) => {
+          rows.push({
+            ...base,
+            row_type: "issue",
+            issue_id: issue.id || "",
+            issue_title: issue.title || "",
+            issue_type: issue.type || "",
+            issue_section_label: issue.sectionLabel || "",
+            issue_priority: issue.priority || "",
+            issue_status: issue.status || "",
+            issue_notes: issue.notes || "",
+            issue_created_at: issue.createdAt || "",
+            issue_pass_name: issue.passName || ""
+          });
         });
-      });
+      }
 
       bundle.sessions.forEach((session) => {
+        if (mode === "write" && session.type === "edit") return;
+        if (mode === "edit" && session.type !== "edit") return;
         rows.push({
           ...base,
           row_type: "session",
@@ -2203,28 +2391,30 @@
       return rows;
     }
 
-    function bundleToCsv(bundle) {
-      const rows = buildProjectExportRows(bundle);
+    function bundleToCsv(bundle, mode = "all") {
+      const rows = buildProjectExportRows(bundle, mode);
       const header = exportColumns.map(csvCell).join(",");
       const body = rows.map((row) => exportColumns.map((column) => csvCell(row[column])).join(",")).join("\n");
       return `\uFEFF${header}\n${body}`;
     }
 
-    function downloadCurrentProjectCsv() {
+    function downloadCurrentProjectCsv(mode = "all") {
       const bundle = currentBundle();
       if (!bundle) return;
-      const csv = bundleToCsv(bundle);
+      const csv = bundleToCsv(bundle, mode);
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const stamp = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `${slugifyFilePart(bundle.project.bookTitle)}-${stamp}.csv`;
+      const modeLabel = mode === "write" ? "write" : mode === "edit" ? "edit" : "project";
+      link.download = `${slugifyFilePart(bundle.project.bookTitle)}-${modeLabel}-${stamp}.csv`;
       document.body.append(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
-      showToast("CSV exported", "Your project data was downloaded in a format we can import later.");
+      const toastLabel = mode === "write" ? "Write" : mode === "edit" ? "Edit" : "Project";
+      showToast("CSV exported", `${toastLabel} data was downloaded in a format you can keep locally.`);
     }
 
     function parseImportedRows(text) {
@@ -2343,9 +2533,9 @@
       }
 
       state.activeProjectId = importedBundle.id;
-      activeView = "dashboard";
+      activeView = preferredWorkspaceView();
       persistAndRender();
-      showToast("CSV imported", `${importedBundle.project.bookTitle} is now available in your dashboard.`);
+      showToast("CSV imported", `${importedBundle.project.bookTitle} is now available in your workspace.`);
     }
 
     function handleImportProjectFile(file) {
@@ -2376,6 +2566,12 @@
 
     function render() {
       const bundle = currentBundle();
+      if (!bundle && !["dashboard", "edit", "stats", "projects", "create-project"].includes(activeView)) {
+        activeView = "dashboard";
+      }
+      if (!bundle && activeView === "projects") {
+        activeView = "dashboard";
+      }
       const appShell = document.querySelector(".app-shell");
       appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
       renderBrand(bundle);
@@ -2388,14 +2584,14 @@
       renderSessions(bundle);
       renderStats(bundle);
       renderEditProject(bundle);
-      if (!bundle && !["projects", "create-project"].includes(activeView)) activeView = "projects";
       views.forEach((view) => {
-        if (!bundle && !["projects", "create-project"].includes(view)) {
+        if (!bundle && ["sessions", "edit-project"].includes(view)) {
           document.getElementById(`view-${view}`).classList.add("hidden");
           return;
         }
         document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
       });
+      bindImportExportModals();
       saveState();
     }
 
@@ -2411,7 +2607,7 @@
 
     function renderNav(bundle) {
       const nav = document.getElementById("nav");
-      const availableViews = bundle && isProjectWorkspaceView(activeView)
+      const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && ["dashboard", "edit", "stats"].includes(activeView))
         ? ["dashboard", "edit", "stats"]
         : [];
       const navLabels = {
@@ -2436,16 +2632,92 @@
 
     function renderSidebarFooter(bundle) {
       const footer = document.getElementById("sidebar-footer");
-      if (!(bundle && isProjectWorkspaceView(activeView))) {
+      if (!isProjectWorkspaceView(activeView)) {
         footer.innerHTML = "";
         return;
       }
-      footer.innerHTML = `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>`;
-      document.getElementById("view-all-projects-btn").addEventListener("click", () => {
-        activeView = "projects";
-        saveState();
-        render();
+      footer.innerHTML = `
+        <div class="sidebar-footer-actions">
+          ${bundle ? `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>` : ""}
+          <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button">
+            <span aria-hidden="true">⚙</span>
+            <span>Settings</span>
+          </button>
+        </div>
+      `;
+      if (bundle) {
+        document.getElementById("view-all-projects-btn").addEventListener("click", () => {
+          activeView = "projects";
+          saveState();
+          render();
+        });
+      }
+      document.getElementById("open-settings-modal-btn").addEventListener("click", () => {
+        openSettingsModal();
       });
+    }
+
+    function bindImportExportModals() {
+      const settingsModal = document.getElementById("settings-modal");
+      const closeSettingsButton = document.getElementById("close-settings-modal-btn");
+      const chooseImportButton = document.getElementById("choose-import-csv-btn");
+      const exportWriteButton = document.getElementById("export-write-modal-btn");
+      const exportEditButton = document.getElementById("export-edit-modal-btn");
+      const exportAllButton = document.getElementById("export-all-modal-btn");
+      const importProjectCsvInput = document.getElementById("import-project-csv-input");
+      const hasBundle = Boolean(currentBundle());
+
+      if (closeSettingsButton) {
+        closeSettingsButton.onclick = () => {
+          closeSettingsModal();
+        };
+      }
+
+      if (chooseImportButton) {
+        chooseImportButton.onclick = () => {
+          importProjectCsvInput?.click();
+        };
+      }
+
+      if (importProjectCsvInput && importProjectCsvInput.dataset.modalBound !== "true") {
+        importProjectCsvInput.dataset.modalBound = "true";
+        importProjectCsvInput.addEventListener("change", () => {
+          closeSettingsModal();
+        });
+      }
+
+      if (exportWriteButton) {
+        exportWriteButton.disabled = !hasBundle;
+        exportWriteButton.onclick = () => {
+          if (!hasBundle) return;
+          downloadCurrentProjectCsv("write");
+          closeSettingsModal();
+        };
+      }
+
+      if (exportEditButton) {
+        exportEditButton.disabled = !hasBundle;
+        exportEditButton.onclick = () => {
+          if (!hasBundle) return;
+          downloadCurrentProjectCsv("edit");
+          closeSettingsModal();
+        };
+      }
+
+      if (exportAllButton) {
+        exportAllButton.disabled = !hasBundle;
+        exportAllButton.onclick = () => {
+          if (!hasBundle) return;
+          downloadCurrentProjectCsv("all");
+          closeSettingsModal();
+        };
+      }
+
+      if (settingsModal) {
+        settingsModal.onclick = (event) => {
+          if (event.target === settingsModal) closeSettingsModal();
+        };
+      }
     }
 
     function renderProjects() {
@@ -2460,7 +2732,6 @@
                 <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
               </div>
               <div class="meta-line">
-                <button class="ghost-btn" id="import-project-csv-btn" type="button">Import CSV</button>
                 <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
               </div>
             </div>
@@ -2560,7 +2831,8 @@
 
     function renderDashboard(bundle) {
       if (!bundle) {
-        document.getElementById("view-dashboard").innerHTML = "";
+        document.getElementById("view-dashboard").innerHTML = renderWorkspaceEmptyState("Write");
+        bindWorkspaceEmptyActions();
         return;
       }
       const stats = getStats(bundle);
@@ -2606,17 +2878,16 @@
 
             <section class="card hero">
               <div class="hero-panel">
-                <div class="section-head" style="margin-bottom: 10px;">
-                  <div>
-                    <p class="small-copy">Current manuscript</p>
-                    <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
-                  </div>
-                  <button class="ghost-btn" id="export-project-csv-btn" type="button">Export CSV</button>
+              <div class="section-head" style="margin-bottom: 10px;">
+                <div>
+                  <p class="small-copy">Current manuscript</p>
+                  <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
                 </div>
-                <div class="hero-meta">
-                  <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
-                  <span class="pill">${deadlineLabel}</span>
-                </div>
+              </div>
+              <div class="hero-meta">
+                <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
+                <span class="pill">${deadlineLabel}</span>
+              </div>
 
                 <div class="progress-block">
                   <div class="progress-label-row">
@@ -2687,7 +2958,8 @@
     function renderEditDashboard(bundle) {
       const view = document.getElementById("view-edit");
       if (!bundle) {
-        view.innerHTML = "";
+        view.innerHTML = renderWorkspaceEmptyState("Edit");
+        bindWorkspaceEmptyActions();
         return;
       }
 
@@ -2695,9 +2967,10 @@
       const progressCurrent = number(bundle.editing.progressCurrent);
       const progressTotal = number(bundle.editing.progressTotal);
       const progressPercent = progressTotal > 0 ? Math.min(100, (progressCurrent / progressTotal) * 100) : 0;
-      const recentSessions = [...getEditSessions(bundle)]
-        .sort((a, b) => new Date(b.date) - new Date(a.date))
-        .slice(0, 5);
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const todayEditSessions = [...getEditSessions(bundle)]
+        .filter((session) => dateKey(session.date) === todayKey)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
       const issuePriorityRank = { High: 0, Medium: 1, Low: 2 };
       const issueStatusRank = { Open: 0, Deferred: 1, Resolved: 2 };
       const issues = [...bundle.issues]
@@ -2722,6 +2995,22 @@
 
       view.innerHTML = `
         <section class="stack">
+          <section class="card">
+            <div class="writing-launch">
+              <div class="writing-launch-copy">
+                <div>
+                  <h3>Get editing</h3>
+                  <p>Jump into a revision pass, log the section you touched, and capture what changed before you move on.</p>
+                </div>
+                <div class="writing-launch-meta">
+                  <span class="pill">${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today</span>
+                  <span class="pill">${formatHours(editStats.minutesToday)} edited today</span>
+                </div>
+              </div>
+              <button class="primary-btn writing-launch-cta" id="open-edit-session-modal-btn" type="button">Log editing session</button>
+            </div>
+          </section>
+
           <section class="card hero">
             <div class="hero-panel pass-focus">
               <div class="section-head">
@@ -2732,7 +3021,6 @@
                 </div>
                 <div class="meta-line">
                   <button class="ghost-btn" id="open-edit-pass-btn" type="button">Change pass</button>
-                  <button class="primary-btn" id="open-edit-session-modal-btn" type="button">Log editing session</button>
                 </div>
               </div>
               <div class="hero-meta">
@@ -2779,65 +3067,32 @@
             </div>
           </section>
 
-          <section class="edit-columns">
-            <section class="card">
-              <div class="section-head">
-                <div>
-                  <h3>Recent Editing Sessions</h3>
-                  <p>Keep a practical trail of what you touched and how long it took.</p>
-                </div>
-                <div class="meta-line">
-                  <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
-                </div>
+          <section class="card open-issues-focus">
+            <div class="section-head">
+              <div>
+                <h3>Open Issues</h3>
+                <p>Capture problems now so you can refer back to them while editing.</p>
               </div>
-              <div class="list">
-                ${recentSessions.length ? recentSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged yet.</div>`}
-              </div>
-            </section>
-
-            <section class="card">
-              <div class="section-head">
-                <div>
-                  <h3>Open Issues</h3>
-                  <p>Capture problems now so you can refer back to them while editing.</p>
-                </div>
-                <button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>
-              </div>
-              <div class="list">
-                ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
-              </div>
-            </section>
+              <button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>
+            </div>
+            <div class="list">
+              ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
+            </div>
           </section>
 
           <section class="edit-columns">
             <section class="card">
               <div class="section-head">
                 <div>
-                  <h3>Pass Snapshot</h3>
-                  <p>A quick read on how the current pass is moving.</p>
+                  <h3>Session History</h3>
+                  <p>All editing sessions logged today.</p>
+                </div>
+                <div class="meta-line">
+                  <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
                 </div>
               </div>
-              <div class="snapshot-grid">
-                <div class="snapshot-card">
-                  <strong>Words edited</strong>
-                  <p>${formatNumber(editStats.totalWordsEdited)}</p>
-                  <span>Across all editing sessions</span>
-                </div>
-                <div class="snapshot-card">
-                  <strong>Issues resolved</strong>
-                  <p>${formatNumber(editStats.resolvedIssueCount)}</p>
-                  <span>Problems marked complete</span>
-                </div>
-                <div class="snapshot-card">
-                  <strong>Status</strong>
-                  <p>${escapeHtml(bundle.editing.passStatus || "Not started")}</p>
-                  <span>${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
-                </div>
-                <div class="snapshot-card">
-                  <strong>Sections remaining</strong>
-                  <p>${progressTotal > 0 ? formatNumber(Math.max(progressTotal - progressCurrent, 0)) : "Set target"}</p>
-                  <span>${progressTotal > 0 ? `Out of ${formatNumber(progressTotal)} total` : "Add a section target in Change pass."}</span>
-                </div>
+              <div class="list">
+                ${todayEditSessions.length ? todayEditSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged today.</div>`}
               </div>
             </section>
 
@@ -2858,6 +3113,37 @@
               </div>
             </section>
           </section>
+
+          <section class="card">
+            <div class="section-head">
+              <div>
+                <h3>Pass Snapshot</h3>
+                <p>A quick read on how the current pass is moving.</p>
+              </div>
+            </div>
+            <div class="snapshot-grid">
+              <div class="snapshot-card">
+                <strong>Words edited</strong>
+                <p>${formatNumber(editStats.totalWordsEdited)}</p>
+                <span>Across all editing sessions</span>
+              </div>
+              <div class="snapshot-card">
+                <strong>Issues resolved</strong>
+                <p>${formatNumber(editStats.resolvedIssueCount)}</p>
+                <span>Problems marked complete</span>
+              </div>
+              <div class="snapshot-card">
+                <strong>Status</strong>
+                <p>${escapeHtml(bundle.editing.passStatus || "Not started")}</p>
+                <span>${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
+              </div>
+              <div class="snapshot-card">
+                <strong>Sections remaining</strong>
+                <p>${progressTotal > 0 ? formatNumber(Math.max(progressTotal - progressCurrent, 0)) : "Set target"}</p>
+                <span>${progressTotal > 0 ? `Out of ${formatNumber(progressTotal)} total` : "Add a section target in Change pass."}</span>
+              </div>
+            </div>
+          </section>
         </section>
       `;
 
@@ -2866,7 +3152,8 @@
 
     function renderStats(bundle) {
       if (!bundle) {
-        document.getElementById("view-stats").innerHTML = "";
+        document.getElementById("view-stats").innerHTML = renderWorkspaceEmptyState("Stats");
+        bindWorkspaceEmptyActions();
         return;
       }
       const stats = getStats(bundle);
@@ -3000,7 +3287,7 @@
         );
         state.projects.unshift(bundle);
         state.activeProjectId = bundle.id;
-        activeView = "dashboard";
+        activeView = preferredWorkspaceView();
         persistAndRender();
         showToast("Project created", `${bundle.project.bookTitle} is ready for tracking.`);
       });
@@ -3008,7 +3295,6 @@
 
     function bindProjectEvents() {
       const openCreateButton = document.getElementById("open-create-project-btn");
-      const importProjectCsvButton = document.getElementById("import-project-csv-btn");
       const importProjectCsvInput = document.getElementById("import-project-csv-input");
       if (openCreateButton) {
         openCreateButton.addEventListener("click", () => {
@@ -3017,11 +3303,7 @@
         });
       }
 
-      if (importProjectCsvButton && importProjectCsvInput) {
-        importProjectCsvButton.addEventListener("click", () => {
-          importProjectCsvInput.click();
-        });
-
+      if (importProjectCsvInput) {
         importProjectCsvInput.addEventListener("change", () => {
           handleImportProjectFile(importProjectCsvInput.files?.[0]);
           importProjectCsvInput.value = "";
@@ -3031,7 +3313,7 @@
       document.querySelectorAll("[data-action='open-project']").forEach((button) => {
         button.addEventListener("click", () => {
           state.activeProjectId = button.dataset.id;
-          activeView = "dashboard";
+          activeView = preferredWorkspaceView();
           saveState();
           render();
         });
@@ -3077,7 +3359,6 @@
       const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
       const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
       const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
-      const exportProjectCsvButton = document.getElementById("export-project-csv-btn");
 
       if (openSessionButton) {
         openSessionButton.onclick = () => {
@@ -3177,12 +3458,6 @@
           sessionsReturnView = "dashboard";
           activeView = "sessions";
           render();
-        };
-      }
-
-      if (exportProjectCsvButton) {
-        exportProjectCsvButton.onclick = () => {
-          downloadCurrentProjectCsv();
         };
       }
 
@@ -3990,7 +4265,7 @@
           </div>
           <div class="meta-line">
             <span class="pill">${escapeHtml(issue.type)}</span>
-            <span class="pill ${priorityClass}">${escapeHtml(issue.priority)}</span>
+            <span class="pill issue-priority ${priorityClass}">${escapeHtml(issue.priority)}</span>
             <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
             ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
           </div>
