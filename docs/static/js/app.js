@@ -104,6 +104,7 @@ function renderSidebarFooter(bundle) {
         <span aria-hidden="true">⚙</span>
         <span>Settings</span>
       </button>
+      ${persistenceMode === "remote" ? `<a class="sidebar-text-btn" id="logout-link" href="/logout">Log out</a>` : ""}
     </div>
   `;
   if (bundle) {
