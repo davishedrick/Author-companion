@@ -1,0 +1,706 @@
+function persistAndRender() {
+  if (state.activeProjectId) {
+    updateCurrentBundle((bundle) => {
+      return {
+        ...bundle,
+        milestones: milestoneTargets.filter((target) => number(bundle.project.currentWordCount) >= target)
+      };
+    });
+  }
+  saveState();
+  render();
+}
+
+async function initializeApp() {
+  remoteSyncSuspended = true;
+  try {
+    const remoteSnapshot = await fetchRemoteState();
+    applyPersistedSnapshot(remoteSnapshot);
+    persistenceMode = "remote";
+  } catch (error) {
+    persistenceMode = "local";
+    console.warn("Using browser storage fallback.", error);
+  }
+  render();
+  remoteSyncSuspended = false;
+}
+
+function render() {
+  const bundle = currentBundle();
+  if (!bundle && !["dashboard", "edit", "stats", "projects", "create-project"].includes(activeView)) {
+    activeView = "dashboard";
+  }
+  if (!bundle && activeView === "projects") {
+    activeView = "dashboard";
+  }
+  const appShell = document.querySelector(".app-shell");
+  appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
+  renderBrand(bundle);
+  renderNav(bundle);
+  renderSidebarFooter(bundle);
+  renderProjects();
+  renderCreateProject();
+  renderDashboard(bundle);
+  renderEditDashboard(bundle);
+  renderSessions(bundle);
+  renderStats(bundle);
+  renderEditProject(bundle);
+  views.forEach((view) => {
+    if (!bundle && ["sessions", "edit-project"].includes(view)) {
+      document.getElementById(`view-${view}`).classList.add("hidden");
+      return;
+    }
+    document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
+  });
+  bindImportExportModals();
+  saveState();
+}
+
+function renderBrand(bundle) {
+  document.getElementById("brand").innerHTML = bundle && isProjectWorkspaceView(activeView) ? `
+    <h1>The Author Engine</h1>
+    <p>${escapeHtml(bundle.project.bookTitle)}. Make progress visible, measurable, and satisfying.</p>
+  ` : `
+    <h1>The Author Engine</h1>
+    <p>Build momentum toward finishing your book every single day.</p>
+  `;
+}
+
+function renderNav(bundle) {
+  const nav = document.getElementById("nav");
+  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && ["dashboard", "edit", "stats"].includes(activeView))
+    ? ["dashboard", "edit", "stats"]
+    : [];
+  const navLabels = {
+    dashboard: "Write",
+    edit: "Edit",
+    stats: "Stats"
+  };
+  nav.innerHTML = availableViews.map((view) => `
+    <button data-view="${view}" class="${activeView === view ? "active" : ""}">
+      ${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}
+    </button>
+  `).join("");
+
+  [...nav.querySelectorAll("button")].forEach((button) => {
+    button.addEventListener("click", () => {
+      activeView = button.dataset.view;
+      saveState();
+      render();
+    });
+  });
+}
+
+function renderSidebarFooter(bundle) {
+  const footer = document.getElementById("sidebar-footer");
+  if (!isProjectWorkspaceView(activeView)) {
+    footer.innerHTML = "";
+    return;
+  }
+  footer.innerHTML = `
+    <div class="sidebar-footer-actions">
+      ${bundle ? `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>` : ""}
+      <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button">
+        <span aria-hidden="true">⚙</span>
+        <span>Settings</span>
+      </button>
+    </div>
+  `;
+  if (bundle) {
+    document.getElementById("view-all-projects-btn").addEventListener("click", () => {
+      activeView = "projects";
+      saveState();
+      render();
+    });
+  }
+  document.getElementById("open-settings-modal-btn").addEventListener("click", () => {
+    openSettingsModal();
+  });
+}
+
+function bindImportExportModals() {
+  const settingsModal = document.getElementById("settings-modal");
+  const closeSettingsButton = document.getElementById("close-settings-modal-btn");
+  const chooseImportButton = document.getElementById("choose-import-csv-btn");
+  const exportWriteButton = document.getElementById("export-write-modal-btn");
+  const exportEditButton = document.getElementById("export-edit-modal-btn");
+  const exportAllButton = document.getElementById("export-all-modal-btn");
+  const importProjectCsvInput = document.getElementById("import-project-csv-input");
+  const hasBundle = Boolean(currentBundle());
+
+  if (closeSettingsButton) {
+    closeSettingsButton.onclick = () => {
+      closeSettingsModal();
+    };
+  }
+
+  if (chooseImportButton) {
+    chooseImportButton.onclick = () => {
+      importProjectCsvInput?.click();
+    };
+  }
+
+  if (importProjectCsvInput && importProjectCsvInput.dataset.modalBound !== "true") {
+    importProjectCsvInput.dataset.modalBound = "true";
+    importProjectCsvInput.addEventListener("change", () => {
+      closeSettingsModal();
+    });
+  }
+
+  if (exportWriteButton) {
+    exportWriteButton.disabled = !hasBundle;
+    exportWriteButton.onclick = () => {
+      if (!hasBundle) return;
+      downloadCurrentProjectCsv("write");
+      closeSettingsModal();
+    };
+  }
+
+  if (exportEditButton) {
+    exportEditButton.disabled = !hasBundle;
+    exportEditButton.onclick = () => {
+      if (!hasBundle) return;
+      downloadCurrentProjectCsv("edit");
+      closeSettingsModal();
+    };
+  }
+
+  if (exportAllButton) {
+    exportAllButton.disabled = !hasBundle;
+    exportAllButton.onclick = () => {
+      if (!hasBundle) return;
+      downloadCurrentProjectCsv("all");
+      closeSettingsModal();
+    };
+  }
+
+  if (settingsModal) {
+    settingsModal.onclick = (event) => {
+      if (event.target === settingsModal) closeSettingsModal();
+    };
+  }
+}
+
+function renderProjects() {
+  const hasProjects = state.projects.length > 0;
+  document.getElementById("view-projects").innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="small-copy">The Author Engine</p>
+            <h2 class="hero-title">Projects Dashboard</h2>
+            <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
+          </div>
+          <div class="meta-line">
+            <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
+          </div>
+        </div>
+        <input id="import-project-csv-input" class="hidden" type="file" accept=".csv,text/csv" />
+        ${hasProjects ? `
+          <div class="projects-grid">
+            ${state.projects.map(renderProjectCard).join("")}
+          </div>
+        ` : `
+          <div class="empty">No projects yet. Create one to start tracking your manuscript.</div>
+        `}
+      </section>
+    </section>
+  `;
+
+  bindProjectEvents();
+}
+
+function renderCreateProject() {
+  document.getElementById("view-create-project").innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Create New Project</h2>
+            <p>Start with the essentials, then refine everything later inside the project dashboard.</p>
+          </div>
+        </div>
+        ${renderCreateProjectForm()}
+      </section>
+    </section>
+  `;
+  bindCreateProjectEvents();
+}
+
+function renderCreateProjectForm() {
+  return `
+    <form id="create-project-form" class="form-grid">
+      <label class="full">Project title
+        <input name="bookTitle" placeholder="Example: The Hollow Orchard" required />
+      </label>
+      <label>Target word count estimate
+        <input type="number" min="0" name="targetWordCount" value="80000" required />
+      </label>
+      <label>Words written so far
+        <input type="number" min="0" name="currentWordCount" value="0" required />
+      </label>
+      <label class="full">Deadline to completion
+        <input type="date" name="deadline" />
+      </label>
+      <div class="full">
+        <button class="primary-btn" type="submit">Create project</button>
+      </div>
+    </form>
+  `;
+}
+
+function renderProjectCard(bundle) {
+  const stats = getStats(bundle);
+  return `
+    <div class="card project-card">
+      <div>
+        <p class="small-copy">Project</p>
+        <h3 class="hero-title">${escapeHtml(bundle.project.bookTitle)}</h3>
+        <div class="meta-line">
+          <span class="pill">${formatNumber(bundle.project.currentWordCount)} / ${formatNumber(bundle.project.targetWordCount)} words</span>
+          <span class="pill">${bundle.project.deadline ? `Due ${formatDate(bundle.project.deadline)}` : "No deadline"}</span>
+        </div>
+      </div>
+      <div class="progress-block">
+        <div class="progress-label-row">
+          <strong>Completion</strong>
+          <span>${stats.totalProgress.toFixed(1)}%</span>
+        </div>
+        <div class="progress-rail">
+          <div class="progress-fill" style="width:${stats.totalProgress}%"></div>
+        </div>
+      </div>
+      <div class="metrics" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
+        <div class="metric">
+          <div class="label">Words today</div>
+          <div class="value">${formatNumber(stats.wordsToday)}</div>
+        </div>
+        <div class="metric">
+          <div class="label">Current streak</div>
+          <div class="value">${formatNumber(stats.currentStreak)}</div>
+        </div>
+      </div>
+      <div class="meta-line">
+        <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">Open project</button>
+        <button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>
+        <button class="inline-btn" data-action="delete-project" data-id="${bundle.id}">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+
+function renderStats(bundle) {
+  if (!bundle) {
+    document.getElementById("view-stats").innerHTML = renderWorkspaceEmptyState("Stats");
+    bindWorkspaceEmptyActions();
+    return;
+  }
+  const stats = getStats(bundle);
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  document.getElementById("view-stats").innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Statistics Dashboard</h2>
+            <p>Patterns over time, session quality, and project trajectory.</p>
+          </div>
+        </div>
+        <div class="stats-grid">
+          <div class="metric"><div class="label">Total words written</div><div class="value">${formatNumber(stats.totalWritten)}</div></div>
+          <div class="metric"><div class="label">Average words per day</div><div class="value">${formatNumber(stats.dailyAverage)}</div></div>
+          <div class="metric"><div class="label">Average words per session</div><div class="value">${formatNumber(stats.avgSession)}</div></div>
+          <div class="metric"><div class="label">Most productive day</div><div class="value" style="font-size: 1.2rem;">${dayNames[stats.mostProductiveDayIndex]}</div></div>
+          <div class="metric"><div class="label">Best writing day</div><div class="value">${stats.bestDay.words ? formatNumber(stats.bestDay.words) : "0"}</div><div class="hint">${stats.bestDay.key ? formatDate(stats.bestDay.key) : "No writing days logged yet"}</div></div>
+          <div class="metric"><div class="label">Longest writing session</div><div class="value">${formatNumber(stats.longestSession)}</div><div class="hint">Minutes</div></div>
+          <div class="metric"><div class="label">Words written this month</div><div class="value">${formatNumber(stats.wordsMonth)}</div></div>
+          <div class="metric"><div class="label">Completion percentage</div><div class="value">${stats.totalProgress.toFixed(1)}%</div></div>
+          <div class="metric"><div class="label">Predicted finish date</div><div class="value" style="font-size: 1.08rem;">${stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Not enough pace data"}</div></div>
+        </div>
+      </section>
+
+      <section class="split">
+        <div class="card">
+          <div class="section-head"><div><h3>Word Count Over Time</h3><p>Total manuscript growth across writing days.</p></div></div>
+          <div class="chart-card chart-shell">${renderLineChart(bundle)}</div>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h3>Weekly Productivity</h3><p>Rolling week totals to show your pace trends.</p></div></div>
+          <div class="chart-card chart-shell">${renderBarChart(bundle)}</div>
+        </div>
+      </section>
+
+    </section>
+  `;
+}
+
+function renderSessions(bundle) {
+  const view = document.getElementById("view-sessions");
+  if (!bundle) {
+    view.innerHTML = "";
+    return;
+  }
+  const sessions = [...bundle.sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  view.innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>All Sessions</h2>
+            <p>View and delete every session logged for this project.</p>
+          </div>
+          <button class="ghost-btn" id="back-to-dashboard-btn" type="button">Back to dashboard</button>
+        </div>
+        <div class="list">
+          ${sessions.length ? sessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged yet.</div>`}
+        </div>
+      </section>
+    </section>
+  `;
+  const backButton = document.getElementById("back-to-dashboard-btn");
+  if (backButton) {
+    backButton.addEventListener("click", () => {
+      activeView = sessionsReturnView;
+      render();
+    });
+  }
+  bindSessionActions();
+}
+
+function renderEditProject(bundle) {
+  const view = document.getElementById("view-edit-project");
+  if (!bundle) {
+    view.innerHTML = "";
+    return;
+  }
+  view.innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Edit Project</h2>
+            <p>Update the manuscript setup from its own dedicated page.</p>
+          </div>
+          <button class="ghost-btn" id="back-to-projects-btn" type="button">Back to projects</button>
+        </div>
+        <form id="project-form" class="form-grid triple">
+          <label class="full">Book title
+            <input name="bookTitle" value="${escapeAttr(bundle.project.bookTitle)}" placeholder="Book title" />
+          </label>
+          <label>Target word count
+            <input type="number" min="0" name="targetWordCount" value="${escapeAttr(bundle.project.targetWordCount)}" />
+          </label>
+          <label>Current word count
+            <input type="number" min="0" name="currentWordCount" value="${escapeAttr(bundle.project.currentWordCount)}" />
+          </label>
+          <label>Deadline
+            <input type="date" name="deadline" value="${escapeAttr(bundle.project.deadline)}" />
+          </label>
+          <label>Daily target
+            <input type="number" min="0" name="dailyTarget" value="${escapeAttr(bundle.project.dailyTarget)}" />
+          </label>
+          <label>Project start date
+            <input type="date" name="projectStartDate" value="${escapeAttr(bundle.project.projectStartDate)}" />
+          </label>
+          <div class="full">
+            <button class="primary-btn" type="submit">Save project</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  `;
+  bindEditProjectEvents();
+}
+
+function bindCreateProjectEvents() {
+  const createForm = document.getElementById("create-project-form");
+  if (!createForm) return;
+  createForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const bundle = createProjectBundle(
+      formData.get("bookTitle").trim(),
+      formData.get("targetWordCount"),
+      formData.get("currentWordCount"),
+      formData.get("deadline")
+    );
+    state.projects.unshift(bundle);
+    state.activeProjectId = bundle.id;
+    activeView = preferredWorkspaceView();
+    persistAndRender();
+    showToast("Project created", `${bundle.project.bookTitle} is ready for tracking.`);
+  });
+}
+
+function bindProjectEvents() {
+  const openCreateButton = document.getElementById("open-create-project-btn");
+  const importProjectCsvInput = document.getElementById("import-project-csv-input");
+  if (openCreateButton) {
+    openCreateButton.addEventListener("click", () => {
+      activeView = "create-project";
+      render();
+    });
+  }
+
+  if (importProjectCsvInput) {
+    importProjectCsvInput.addEventListener("change", () => {
+      handleImportProjectFile(importProjectCsvInput.files?.[0]);
+      importProjectCsvInput.value = "";
+    });
+  }
+
+  document.querySelectorAll("[data-action='open-project']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeProjectId = button.dataset.id;
+      activeView = preferredWorkspaceView();
+      saveState();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='edit-project']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeProjectId = button.dataset.id;
+      activeView = "edit-project";
+      saveState();
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='delete-project']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const projectId = button.dataset.id;
+      state.projects = state.projects.filter((project) => project.id !== projectId);
+      if (state.activeProjectId === projectId) {
+        state.activeProjectId = state.projects[0]?.id || null;
+        activeView = state.activeProjectId ? preferredWorkspaceView() : DEFAULT_VIEW;
+      }
+      persistAndRender();
+    });
+  });
+}
+
+
+function bindEditProjectEvents() {
+  const form = document.getElementById("project-form");
+  const backButton = document.getElementById("back-to-projects-btn");
+  if (backButton) {
+    backButton.addEventListener("click", () => {
+      activeView = "projects";
+      saveState();
+      render();
+    });
+  }
+  if (!form) return;
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+    updateCurrentBundle((projectBundle) => ({
+      ...projectBundle,
+      project: {
+        ...projectBundle.project,
+        bookTitle: String(formData.get("bookTitle") || "").trim() || projectBundle.project.bookTitle,
+        targetWordCount: number(formData.get("targetWordCount")),
+        currentWordCount: number(formData.get("currentWordCount")),
+        deadline: String(formData.get("deadline") || ""),
+        dailyTarget: number(formData.get("dailyTarget")),
+        projectStartDate: String(formData.get("projectStartDate") || "") || projectBundle.project.projectStartDate
+      }
+    }));
+    activeView = "projects";
+    persistAndRender();
+    showToast("Project updated", "Your manuscript settings have been saved.");
+  });
+}
+
+function renderGoalCard(goal) {
+  return `
+    <div class="item" data-goal-id="${goal.id}">
+      <div class="item-top">
+        <h4>${escapeHtml(goal.title)}</h4>
+        <div class="goal-actions">
+          <button class="icon-btn" type="button" data-action="delete-goal" data-id="${goal.id}" aria-label="Delete goal">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7h14"></path>
+              <path d="M9 7V4h6v3"></path>
+              <path d="M8 7l1 12h6l1-12"></path>
+              <path d="M10 11v5"></path>
+              <path d="M14 11v5"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
+      <div class="meta-line">
+        <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderIssueCard(issue) {
+  const priorityClass = `priority-${String(issue.priority || "Medium").toLowerCase()}`;
+  const statusClass = `status-${String(issue.status || "Open").toLowerCase()}`;
+  return `
+    <div class="item">
+      <div class="item-top">
+        <div>
+          <p class="session-kind">Open issue</p>
+          <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
+          <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
+        </div>
+        <div class="goal-actions">
+          <button class="icon-btn" type="button" data-action="edit-issue" data-id="${issue.id}" aria-label="Edit issue">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+              <path d="M13.5 6.5l4 4"></path>
+            </svg>
+          </button>
+          <button class="inline-btn" type="button" data-action="toggle-issue-status" data-id="${issue.id}">
+            ${issue.status === "Resolved" ? "Reopen" : "Resolve"}
+          </button>
+          <button class="icon-btn" type="button" data-action="delete-issue" data-id="${issue.id}" aria-label="Delete issue">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7h14"></path>
+              <path d="M9 7V4h6v3"></path>
+              <path d="M8 7l1 12h6l1-12"></path>
+              <path d="M10 11v5"></path>
+              <path d="M14 11v5"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="meta-line">
+        <span class="pill">${escapeHtml(issue.type)}</span>
+        <span class="pill issue-priority ${priorityClass}">${escapeHtml(issue.priority)}</span>
+        <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
+        ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
+      </div>
+      ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderSessionCard(bundle, session) {
+  const isEditSession = session.type === "edit";
+  const title = isEditSession
+    ? `${formatNumber(session.wordsEdited)} words edited`
+    : `${formatNumber(session.wordsWritten)} words written`;
+  const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
+  const passPill = isEditSession && session.passName ? `<span class="pill">${escapeHtml(session.passName)}</span>` : "";
+  return `
+    <div class="item">
+      <div class="item-top">
+        <div>
+          <p class="session-kind">${isEditSession ? "Editing session" : "Writing session"}</p>
+          <h4>${title}</h4>
+          <p class="small-copy">${formatDate(session.date)}</p>
+        </div>
+        <div class="goal-actions">
+          <button class="icon-btn" type="button" data-action="edit-session" data-id="${session.id}" aria-label="Edit session">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4"></path>
+              <path d="M13.5 6.5l4 4"></path>
+            </svg>
+          </button>
+          <button class="icon-btn" type="button" data-action="delete-session" data-id="${session.id}" aria-label="Delete session">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 7h14"></path>
+              <path d="M9 7V4h6v3"></path>
+              <path d="M8 7l1 12h6l1-12"></path>
+              <path d="M10 11v5"></path>
+              <path d="M14 11v5"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="meta-line">
+        <span class="pill">${formatNumber(session.durationMinutes)} min</span>
+        ${passPill}
+        ${sectionPill}
+      </div>
+      ${session.notes ? `<p class="small-copy" style="margin-top: 10px;">${escapeHtml(session.notes)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderLineChart(bundle) {
+  const entries = [...getStats(bundle).groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return `<div class="empty">Log sessions to populate the chart.</div>`;
+  let running = 0;
+  const series = entries.map(([key, value]) => {
+    running += value.words;
+    return { key, total: running };
+  });
+  const width = 720;
+  const height = 280;
+  const max = Math.max(...series.map((point) => point.total), 1);
+  const points = series.map((point, index) => {
+    const x = 40 + (index * (width - 80)) / Math.max(1, series.length - 1);
+    const y = height - 30 - ((point.total / max) * (height - 70));
+    return `${x},${y}`;
+  }).join(" ");
+  return `
+    <svg viewBox="0 0 ${width} ${height}" aria-label="Word count over time line chart">
+      <line x1="40" y1="${height - 30}" x2="${width - 20}" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+      <line x1="40" y1="20" x2="40" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+      <polyline fill="none" stroke="#b85c38" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+      ${series.map((point, index) => {
+        const x = 40 + (index * (width - 80)) / Math.max(1, series.length - 1);
+        const y = height - 30 - ((point.total / max) * (height - 70));
+        return `<circle cx="${x}" cy="${y}" r="4" fill="#b85c38" />`;
+      }).join("")}
+      <text x="42" y="18" fill="#6d6257" font-size="12">Total words</text>
+      <text x="${width - 24}" y="${height - 10}" text-anchor="end" fill="#6d6257" font-size="12">${series[series.length - 1].key}</text>
+    </svg>
+  `;
+}
+
+function renderBarChart(bundle) {
+  const entries = [...getStats(bundle).groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+  if (!entries.length) return `<div class="empty">Log sessions to populate the chart.</div>`;
+  const weekly = new Map();
+  entries.forEach(([key, value]) => {
+    const date = new Date(key);
+    const monday = startOfDay(date);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weekKey = monday.toISOString().slice(0, 10);
+    weekly.set(weekKey, (weekly.get(weekKey) || 0) + value.words);
+  });
+  const series = [...weekly.entries()].sort(([a], [b]) => a.localeCompare(b)).slice(-8);
+  const width = 720;
+  const height = 280;
+  const max = Math.max(...series.map(([, value]) => value), 1);
+  const barWidth = (width - 90) / Math.max(1, series.length);
+  return `
+    <svg viewBox="0 0 ${width} ${height}" aria-label="Weekly productivity bar chart">
+      <line x1="40" y1="${height - 30}" x2="${width - 20}" y2="${height - 30}" stroke="rgba(96,70,54,0.16)" />
+      ${series.map(([key, value], index) => {
+        const x = 48 + index * barWidth;
+        const barHeight = (value / max) * (height - 80);
+        const y = height - 30 - barHeight;
+        return `
+          <rect x="${x}" y="${y}" width="${Math.max(barWidth - 14, 20)}" height="${barHeight}" rx="12" fill="rgba(184,92,56,0.78)" />
+          <text x="${x + (Math.max(barWidth - 14, 20) / 2)}" y="${height - 10}" text-anchor="middle" fill="#6d6257" font-size="12">${key.slice(5)}</text>
+        `;
+      }).join("")}
+    </svg>
+  `;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
+initializeApp();

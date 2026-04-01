@@ -1,0 +1,293 @@
+.goal-editor-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.writing-launch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 18px;
+  align-items: center;
+}
+
+.writing-launch-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.writing-launch-copy h3,
+.writing-launch-copy p {
+  margin: 0;
+}
+
+.writing-launch-copy p {
+  color: var(--muted);
+}
+
+.writing-launch-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.writing-launch-cta {
+  justify-self: end;
+  min-width: 220px;
+  min-height: 64px;
+  font-size: 1.02rem;
+}
+
+.session-setup {
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+  text-align: center;
+}
+
+.session-dial-wrap {
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  width: 100%;
+}
+
+.session-dial {
+  width: min(100%, 360px);
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.session-dial.dragging {
+  cursor: grabbing;
+}
+
+.session-dial text {
+  font-family: var(--serif);
+  fill: var(--ink);
+}
+
+.session-dial-rail {
+  fill: none;
+  stroke: rgba(96, 70, 54, 0.16);
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.session-dial-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 12;
+  stroke-linecap: round;
+}
+
+.session-dial-handle {
+  fill: #fffaf3;
+  stroke: rgba(31, 26, 23, 0.72);
+  stroke-width: 2;
+  filter: drop-shadow(0 8px 18px rgba(24, 19, 17, 0.14));
+}
+
+.session-dial-caption {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.session-complete-form {
+  display: grid;
+  gap: 14px;
+}
+
+.writing-session-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background:
+    radial-gradient(circle at top, rgba(226, 190, 151, 0.24), transparent 40%),
+    rgba(255, 249, 241, 0.98);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.writing-session-shell {
+  display: grid;
+  gap: 22px;
+  justify-items: center;
+  text-align: center;
+  width: min(760px, 100%);
+}
+
+.writing-session-shell p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.writing-session-clock {
+  font-family: var(--serif);
+  font-size: clamp(4rem, 14vw, 8rem);
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  margin: 0;
+  color: var(--ink);
+}
+
+.quiet-btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px rgba(96, 70, 54, 0.14);
+}
+
+.quiet-btn:hover {
+  background: rgba(96, 70, 54, 0.06);
+  color: var(--ink);
+  transform: none;
+}
+
+.heatmap-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.heatmap-toolbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.heatmap-title {
+  font-family: var(--serif);
+  font-size: 1.1rem;
+  margin: 0;
+  text-align: center;
+}
+
+.heatmap-nav {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(96, 70, 54, 0.16);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  font-size: 1.35rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.heatmap-nav:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 70, 54, 0.28);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.heatmap-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmap-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(31, 26, 23, 0.08);
+}
+
+.heatmap-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.heatmap-cell {
+  min-height: 58px;
+  border-radius: 6px;
+  background: rgba(96, 70, 54, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(31, 26, 23, 0.06);
+  padding: 6px;
+  display: flex;
+  align-items: start;
+  justify-content: end;
+  cursor: default;
+}
+
+.heatmap-daynum {
+  font-size: 0.78rem;
+  color: rgba(31, 26, 23, 0.76);
+  line-height: 1;
+}
+
+.heatmap-cell.none {
+  background: rgba(96, 70, 54, 0.08);
+}
+
+.heatmap-swatch.fail,
+.heatmap-cell.fail {
+  background: rgba(206, 88, 78, 0.78);
+}
+
+.heatmap-swatch.partial,
+.heatmap-cell.partial {
+  background: rgba(223, 178, 72, 0.88);
+}
+
+.heatmap-swatch.met,
+.heatmap-cell.met {
+  background: rgba(69, 151, 96, 0.88);
+}
+
+.heatmap-swatch.exceeded,
+.heatmap-cell.exceeded {
+  background: rgba(127, 92, 196, 0.88);
+}
+
+.footer-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.project-card {
+  display: grid;
+  gap: 14px;
+  min-height: 240px;
+}
+
+.project-card .hero-title {
+  font-size: clamp(1.5rem, 2.8vw, 2.5rem);
+}
+

@@ -1,0 +1,139 @@
+.edit-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 18px;
+}
+
+.open-issues-focus .list {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+}
+
+.open-issues-focus .item {
+  padding: 14px;
+}
+
+.open-issues-focus .issue-note {
+  margin-top: 8px;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.pass-focus {
+  display: grid;
+  gap: 18px;
+}
+
+.pass-copy {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink);
+  max-width: 64ch;
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.snapshot-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.snapshot-card strong,
+.snapshot-card p {
+  margin: 0;
+}
+
+.snapshot-card strong {
+  display: block;
+  font-size: 0.86rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.snapshot-card p {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.snapshot-card span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.issue-title {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.issue-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.pill.status-open {
+  background: rgba(184, 92, 56, 0.14);
+  color: var(--accent-strong);
+}
+
+.pill.status-deferred {
+  background: rgba(162, 102, 23, 0.14);
+  color: var(--warning);
+}
+
+.pill.status-resolved {
+  background: rgba(47, 125, 74, 0.14);
+  color: var(--success);
+}
+
+.pill.issue-priority {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.pill.issue-priority.priority-high {
+  background: rgba(194, 45, 45, 0.2);
+  color: #8f1d1d;
+  box-shadow: inset 0 0 0 1px rgba(194, 45, 45, 0.32);
+}
+
+.pill.issue-priority.priority-medium {
+  background: rgba(221, 171, 48, 0.26);
+  color: #835d00;
+  box-shadow: inset 0 0 0 1px rgba(168, 119, 0, 0.34);
+}
+
+.pill.issue-priority.priority-low {
+  background: rgba(72, 166, 97, 0.24);
+  color: #1c6a34;
+  box-shadow: inset 0 0 0 1px rgba(45, 132, 70, 0.34);
+}
+
+.issue-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.issue-breakdown-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
