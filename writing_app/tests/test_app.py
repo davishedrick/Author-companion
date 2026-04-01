@@ -1,4 +1,9 @@
+from pathlib import Path
+
 from app import app
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_home_page_loads():
@@ -107,7 +112,6 @@ def test_edit_dashboard_supports_passes_issues_and_edit_sessions():
     assert "function getEditStats(bundle)" in html
     assert 'row_type: "issue"' in html
 
-
 def test_workspace_empty_states_exist_for_no_project_flow():
     client = app.test_client()
     response = client.get("/")
@@ -117,6 +121,17 @@ def test_workspace_empty_states_exist_for_no_project_flow():
     assert 'function renderWorkspaceEmptyState(label)' in html
     assert "Create a project to track your progress" in html
     assert 'Create first project' in html
+
+
+def test_initial_load_and_project_deletion_fall_back_to_dashboard_workspace():
+    client = app.test_client()
+    response = client.get("/")
+    html = response.data.decode()
+
+    assert "const hasProjects = Array.isArray(stored?.projects)" in html
+    assert "if (!hasProjects) return DEFAULT_VIEW;" in html
+    assert "return isProjectWorkspaceView(storedView) ? storedView : DEFAULT_VIEW;" in html
+    assert 'activeView = state.activeProjectId ? preferredWorkspaceView() : DEFAULT_VIEW;' in html
 
 
 def test_last_workspace_tab_is_persisted_separately_from_active_view():
@@ -155,3 +170,12 @@ def test_state_loading_reconnects_active_project_id_to_normalized_projects():
     )
     assert "activeProjectId: hasStoredActiveId" in html
     assert "normalizedProjects[0]?.id || null" in html
+
+
+def test_pages_artifact_matches_flask_template():
+    template_file = REPO_ROOT / "writing_app" / "templates" / "index.html"
+    pages_file = REPO_ROOT / "docs" / "index.html"
+
+    assert pages_file.read_text(encoding="utf-8") == template_file.read_text(
+        encoding="utf-8"
+    )

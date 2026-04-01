@@ -1719,7 +1719,12 @@
     function loadActiveView() {
       try {
         const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        return views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+        const storedView = views.includes(stored?.activeView) ? stored.activeView : DEFAULT_VIEW;
+        const hasProjects = Array.isArray(stored?.projects)
+          ? stored.projects.length > 0
+          : Boolean(stored?.project);
+        if (!hasProjects) return DEFAULT_VIEW;
+        return isProjectWorkspaceView(storedView) ? storedView : DEFAULT_VIEW;
       } catch (error) {
         return DEFAULT_VIEW;
       }
@@ -3334,7 +3339,7 @@
           state.projects = state.projects.filter((project) => project.id !== projectId);
           if (state.activeProjectId === projectId) {
             state.activeProjectId = state.projects[0]?.id || null;
-            activeView = state.activeProjectId ? "dashboard" : "projects";
+            activeView = state.activeProjectId ? preferredWorkspaceView() : DEFAULT_VIEW;
           }
           persistAndRender();
         });

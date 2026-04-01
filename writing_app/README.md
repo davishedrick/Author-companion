@@ -29,3 +29,17 @@ Then visit:
 
 - The app listens on port `8000` by default.
 - Because the development server binds to `127.0.0.1`, it is only reachable from the same machine unless the host setting is changed.
+
+## GitHub Pages deployment gotcha
+
+GitHub Pages only serves static files from the configured Pages source (typically the repository root, `/docs`, or the `gh-pages` branch). It does **not** run Flask, so updates to `app.py` never appear on Pages by themselves.
+
+In this repository, the Pages artifact is `docs/index.html`. If you edit `writing_app/templates/index.html` for local Flask development, sync the Pages copy before pushing if you want the GitHub Pages site to reflect the change.
+
+From the repository root:
+
+```bash
+./sync-pages.sh
+```
+
+That copies `writing_app/templates/index.html` to `docs/index.html`. The test suite also checks that those two files stay in sync.
