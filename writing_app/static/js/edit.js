@@ -25,8 +25,10 @@ function renderEditDashboard(bundle) {
       return new Date(b.createdAt) - new Date(a.createdAt);
     });
   const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
+  const resolvedIssues = issues.filter((issue) => issue.status === "Resolved");
   const currentPassIssues = visibleIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
   const issueList = (currentPassIssues.length ? currentPassIssues : visibleIssues).slice(0, 6);
+  const resolvedIssueArchive = resolvedIssues.slice(0, 8);
   const issueCounts = issueList.reduce((summary, issue) => {
     summary[issue.type] = (summary[issue.type] || 0) + 1;
     return summary;
@@ -120,6 +122,18 @@ function renderEditDashboard(bundle) {
         </div>
         <div class="list">
           ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
+        </div>
+      </section>
+
+      <section class="card issue-archive">
+        <div class="section-head">
+          <div>
+            <h3>Resolved Archive</h3>
+            <p>Keep a lightweight record of the issues you already closed during this project.</p>
+          </div>
+        </div>
+        <div class="list">
+          ${resolvedIssueArchive.length ? resolvedIssueArchive.map((issue) => renderIssueCard(issue, { archived: true })).join("") : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
         </div>
       </section>
 
@@ -502,14 +516,16 @@ function closeIssueModal() {
 }
 
 
-function renderIssueCard(issue) {
+function renderIssueCard(issue, options = {}) {
+  const { archived = false } = options;
   const priorityClass = `priority-${String(issue.priority || "Medium").toLowerCase()}`;
   const statusClass = `status-${String(issue.status || "Open").toLowerCase()}`;
+  const issueLabel = issue.status === "Resolved" ? "Resolved issue" : "Open issue";
   return `
-    <div class="item">
+    <div class="item ${archived ? "archived-issue" : ""}">
       <div class="item-top">
         <div>
-          <p class="session-kind">Open issue</p>
+          <p class="session-kind">${issueLabel}</p>
           <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
           <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
         </div>

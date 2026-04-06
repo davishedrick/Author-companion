@@ -27,7 +27,7 @@ async function initializeApp() {
 
 function render() {
   const bundle = currentBundle();
-  if (!bundle && !["dashboard", "edit", "stats", "projects", "create-project"].includes(activeView)) {
+  if (!bundle && !["dashboard", "plot", "edit", "stats", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
   if (!bundle && activeView === "projects") {
@@ -41,6 +41,7 @@ function render() {
   renderProjects();
   renderCreateProject();
   renderDashboard(bundle);
+  renderPlotDashboard(bundle);
   renderEditDashboard(bundle);
   renderSessions(bundle);
   renderStats(bundle);
@@ -68,11 +69,12 @@ function renderBrand(bundle) {
 
 function renderNav(bundle) {
   const nav = document.getElementById("nav");
-  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && ["dashboard", "edit", "stats"].includes(activeView))
-    ? ["dashboard", "edit", "stats"]
+  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && ["dashboard", "plot", "edit", "stats"].includes(activeView))
+    ? ["dashboard", "plot", "edit", "stats"]
     : [];
   const navLabels = {
     dashboard: "Write",
+    plot: "Plot",
     edit: "Edit",
     stats: "Stats"
   };

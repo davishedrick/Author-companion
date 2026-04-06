@@ -1,8 +1,9 @@
 const STORAGE_KEY = "author-engine-mvp";
 const STATE_API_ENDPOINT = "/api/state";
 const DEFAULT_VIEW = "dashboard";
-const WORKSPACE_VIEWS = ["dashboard", "edit", "stats"];
-const views = ["projects", "create-project", "dashboard", "edit", "sessions", "stats", "edit-project"];
+const PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
+const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "stats"];
+const views = ["projects", "create-project", "dashboard", "plot", "edit", "sessions", "stats", "edit-project"];
 const requiredImportColumns = [
   "row_type",
   "project_id",
@@ -87,6 +88,13 @@ function createDefaultEditingState() {
   };
 }
 
+function createDefaultPlotState() {
+  return {
+    activeSection: PLOT_SECTION_IDS[0],
+    sections: Object.fromEntries(PLOT_SECTION_IDS.map((sectionId) => [sectionId, []]))
+  };
+}
+
 function cloneValue(value) {
   if (typeof structuredClone === "function") return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
@@ -109,6 +117,7 @@ const defaultProjectTemplate = {
     projectStartDate: new Date().toISOString().slice(0, 10)
   },
   editing: createDefaultEditingState(),
+  plot: createDefaultPlotState(),
   goals: [],
   sessions: [],
   issues: [],
@@ -245,10 +254,40 @@ function normalizeProjectBundle(bundle) {
     id: bundle.id || createId(),
     project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
     editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
+    plot: normalizePlotState(bundle.plot),
     goals: Array.isArray(bundle.goals) ? bundle.goals : [],
     sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
     issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+  };
+}
+
+function normalizePlotState(plot) {
+  const defaultPlot = createDefaultPlotState();
+  const activeSection = PLOT_SECTION_IDS.includes(plot?.activeSection)
+    ? plot.activeSection
+    : defaultPlot.activeSection;
+  const sections = Object.fromEntries(PLOT_SECTION_IDS.map((sectionId) => {
+    const storedEntries = plot?.sections?.[sectionId] || plot?.[sectionId];
+    return [sectionId, Array.isArray(storedEntries) ? storedEntries.map(normalizePlotEntry) : []];
+  }));
+
+  return {
+    ...defaultPlot,
+    ...plot,
+    activeSection,
+    sections
+  };
+}
+
+function normalizePlotEntry(entry) {
+  return {
+    id: entry?.id || createId(),
+    title: String(entry?.title || ""),
+    summary: String(entry?.summary || ""),
+    anchor: String(entry?.anchor || ""),
+    notes: String(entry?.notes || ""),
+    updatedAt: entry?.updatedAt || new Date().toISOString()
   };
 }
 

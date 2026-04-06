@@ -1,0 +1,203 @@
+.plot-hero-panel {
+  display: grid;
+  gap: 20px;
+}
+
+.plot-hero-copy {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted);
+}
+
+.plot-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plot-overview-card,
+.plot-guidance-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.plot-overview-card strong,
+.plot-guidance-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.plot-overview-card p,
+.plot-guidance-card p {
+  margin: 0;
+}
+
+.plot-overview-card p {
+  font-size: 1.22rem;
+  font-weight: 700;
+  line-height: 1.08;
+}
+
+.plot-overview-card span {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.plot-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.plot-section-rail,
+.plot-section-detail {
+  display: grid;
+  gap: 18px;
+}
+
+.plot-section-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.plot-section-tab {
+  width: 100%;
+  padding: 16px;
+  border: 0;
+  border-radius: 20px;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.plot-section-tab:hover {
+  transform: translateY(-1px);
+}
+
+.plot-section-tab.active {
+  background: var(--ink);
+  color: #fff7ef;
+}
+
+.plot-section-tab.active .plot-section-count {
+  background: rgba(255, 247, 239, 0.14);
+  color: #fff7ef;
+}
+
+.plot-section-tab strong,
+.plot-section-tab p {
+  margin: 0;
+}
+
+.plot-section-tab strong {
+  font-size: 1.02rem;
+}
+
+.plot-section-tab p {
+  color: inherit;
+  opacity: 0.82;
+  line-height: 1.45;
+}
+
+.plot-section-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(184, 92, 56, 0.12);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.14);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.plot-guidance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plot-guidance-card p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.plot-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.plot-entry-card {
+  display: grid;
+  gap: 12px;
+  height: 100%;
+}
+
+.plot-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.plot-entry-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.plot-empty {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.plot-empty strong,
+.plot-empty p {
+  margin: 0;
+}
+
+@media (max-width: 1080px) {
+  .plot-workspace,
+  .plot-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plot-section-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .plot-guidance-grid,
+  .plot-entry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .plot-overview-card,
+  .plot-guidance-card {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 620px) {
+  .plot-section-nav {
+    grid-template-columns: 1fr;
+  }
+}

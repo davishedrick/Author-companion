@@ -5,7 +5,7 @@
 }
 
 .open-issues-focus .list {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
 
@@ -19,9 +19,24 @@
   line-height: 1.35;
 }
 
+.issue-archive .list {
+  gap: 10px;
+}
+
+.archived-issue {
+  background: rgba(248, 246, 241, 0.74);
+}
+
+.archived-issue .issue-note,
+.archived-issue .small-copy {
+  color: var(--muted);
+}
+
 .pass-focus {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
+  width: 100%;
 }
 
 .pass-copy {
@@ -29,6 +44,34 @@
   font-size: 1rem;
   color: var(--ink);
   max-width: 64ch;
+}
+
+.pass-focus .section-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.pass-focus .meta-line {
+  margin-top: 0;
+}
+
+@media (max-width: 1280px) {
+  .pass-focus .section-head {
+    grid-template-columns: 1fr;
+  }
+
+  .pass-focus .meta-line {
+    width: 100%;
+  }
+
+  .pass-focus .meta-line .ghost-btn {
+    width: 100%;
+  }
+
+  .pass-copy {
+    max-width: none;
+  }
 }
 
 .snapshot-grid {
@@ -136,4 +179,39 @@
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.58);
   box-shadow: inset 0 0 0 1px var(--line);
+}
+
+@media (max-width: 900px) {
+  .edit-columns,
+  .snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .open-issues-focus .list {
+    grid-template-columns: 1fr;
+  }
+
+  .open-issues-focus .item {
+    padding: 12px;
+  }
+
+  .pass-copy {
+    font-size: 0.95rem;
+  }
+
+  .snapshot-card,
+  .issue-breakdown-row {
+    padding: 14px;
+  }
+
+  .snapshot-card p {
+    font-size: 1.08rem;
+  }
+
+  .issue-breakdown-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

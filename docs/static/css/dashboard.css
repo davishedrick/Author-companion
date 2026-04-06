@@ -15,6 +15,7 @@
 .writing-launch-copy {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .writing-launch-copy h3,
@@ -37,6 +38,43 @@
   min-width: 220px;
   min-height: 64px;
   font-size: 1.02rem;
+}
+
+@media (max-width: 900px) {
+  .writing-launch {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .writing-launch-cta {
+    justify-self: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .goal-editor-list {
+    grid-template-columns: 1fr;
+  }
+
+  .writing-launch {
+    gap: 14px;
+  }
+
+  .writing-launch-meta {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .writing-launch-copy p,
+  .session-dial-caption {
+    font-size: 0.94rem;
+  }
+
+  .session-dial {
+    width: min(100%, 300px);
+  }
 }
 
 .session-setup {
@@ -291,3 +329,45 @@
   font-size: clamp(1.5rem, 2.8vw, 2.5rem);
 }
 
+@media (max-width: 760px) {
+  .heatmap-legend {
+    gap: 8px 12px;
+    font-size: 0.86rem;
+  }
+
+  .projects-grid {
+    gap: 14px;
+  }
+
+  .project-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .writing-session-screen {
+    padding: 16px;
+  }
+
+  .writing-session-shell {
+    gap: 18px;
+  }
+
+  .quiet-btn {
+    width: 100%;
+  }
+
+  .heatmap-shell {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .heatmap-weekdays,
+  .heatmap-grid {
+    min-width: 312px;
+  }
+
+  .project-card .hero-title {
+    font-size: clamp(1.35rem, 7vw, 2rem);
+  }
+}

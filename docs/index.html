@@ -19,6 +19,7 @@
       <main id="view-projects" class="view"></main>
       <main id="view-create-project" class="view hidden"></main>
       <main id="view-dashboard" class="view hidden"></main>
+      <main id="view-plot" class="view hidden"></main>
       <main id="view-edit" class="view hidden"></main>
       <main id="view-sessions" class="view hidden"></main>
       <main id="view-stats" class="view hidden"></main>
@@ -296,9 +297,39 @@
       </form>
     </div>
   </div>
+  <div class="modal-backdrop hidden" id="plot-entry-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="plot-entry-modal-title">Add Plot Entry</h3>
+          <p id="plot-entry-modal-copy">Capture story references so your plot dashboard stays useful as the manuscript grows.</p>
+        </div>
+        <button class="ghost-btn" id="close-plot-entry-modal-btn" type="button">Close</button>
+      </div>
+      <form id="plot-entry-form" class="form-grid">
+        <p class="small-copy full" id="plot-entry-section-copy"></p>
+        <label class="full"><span id="plot-entry-title-label">Title</span>
+          <input id="plot-entry-title-input" name="title" required />
+        </label>
+        <label><span id="plot-entry-summary-label">Summary</span>
+          <input id="plot-entry-summary-input" name="summary" />
+        </label>
+        <label><span id="plot-entry-anchor-label">Anchor</span>
+          <input id="plot-entry-anchor-input" name="anchor" />
+        </label>
+        <label class="full"><span id="plot-entry-notes-label">Notes</span>
+          <textarea id="plot-entry-notes-input" name="notes"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="plot-entry-submit-btn" type="submit">Save entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="static/js/state.js"></script>
   <script src="static/js/dashboard.js"></script>
+  <script src="static/js/plot.js"></script>
   <script src="static/js/edit.js"></script>
   <script src="static/js/app.js"></script>
 </body>

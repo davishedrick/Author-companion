@@ -98,10 +98,17 @@
 }
 
 .content-shell {
+  width: 100%;
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 18px;
+}
+
+.content-shell > * {
+  width: 100%;
+  min-width: 0;
 }
 
 .brand h1 {
@@ -148,6 +155,13 @@
   color: #fff8f1;
 }
 
+.hero-title,
+.brand h1,
+.item h4,
+.issue-title {
+  overflow-wrap: anywhere;
+}
+
 .grid {
   display: grid;
   gap: 18px;
@@ -164,10 +178,19 @@
 
 .stack {
   display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
+.stack > * {
+  width: 100%;
+  min-width: 0;
+}
+
 .card {
+  width: 100%;
+  min-width: 0;
   background: var(--panel);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.55);
@@ -192,6 +215,10 @@
   margin-bottom: 14px;
 }
 
+.section-head > * {
+  min-width: 0;
+}
+
 .section-head p,
 .small-copy,
 .muted {
@@ -201,11 +228,22 @@
 
 .hero {
   display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
 
+.hero > * {
+  width: 100%;
+  min-width: 0;
+}
+
 .hero-panel {
+  width: 100%;
+  min-width: 0;
+  justify-self: stretch;
+  align-self: stretch;
   padding: 28px;
   border-radius: 28px;
   background:
@@ -486,11 +524,16 @@ textarea {
   gap: 12px;
 }
 
+.item-top > * {
+  min-width: 0;
+}
+
 .goal-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .icon-btn {
@@ -533,6 +576,12 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 8px;
+}
+
+.meta-line > .primary-btn,
+.meta-line > .ghost-btn,
+.meta-line > .inline-btn {
+  flex: 1 1 160px;
 }
 
 .stats-grid {
@@ -686,7 +735,6 @@ textarea {
 
   .dashboard-grid,
   .dashboard-top,
-  .hero,
   .edit-columns,
   .snapshot-grid,
   .projects-grid,
@@ -700,6 +748,12 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
   .section-head,
   .heatmap-toolbar,
   .item-top,
@@ -728,10 +782,34 @@ textarea {
   .writing-launch-cta {
     justify-self: stretch;
     width: 100%;
+    min-width: 0;
   }
 
   .app-shell {
     padding: 14px;
+  }
+
+  .sidebar {
+    gap: 14px;
+  }
+
+  .brand h1 {
+    font-size: clamp(1.7rem, 9vw, 2.5rem);
+  }
+
+  .brand p,
+  .footer-note {
+    max-width: none;
+    font-size: 0.9rem;
+  }
+
+  .nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .nav button {
+    text-align: center;
+    padding: 12px 10px;
   }
 
   .card,
@@ -743,3 +821,150 @@ textarea {
     min-height: 44px;
     padding: 5px;
   }
+
+  .section-head .ghost-btn,
+  .section-head .primary-btn,
+  .section-head .inline-btn,
+  .section-head .meta-line {
+    width: 100%;
+  }
+
+  .section-head .meta-line {
+    margin-top: 0;
+  }
+
+  .section-head .meta-line .ghost-btn,
+  .section-head .meta-line .primary-btn,
+  .section-head .meta-line .inline-btn {
+    flex: 1 1 auto;
+  }
+
+  .progress-label-row,
+  .metric-row,
+  .summary-row,
+  .page-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-action-bar > * {
+    width: 100%;
+  }
+
+  .item,
+  .metric,
+  .chart-card,
+  .empty,
+  .modal-card {
+    padding: 16px;
+  }
+
+  .goal-actions {
+    width: 100%;
+  }
+
+  .goal-actions .inline-btn {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    padding: 10px;
+  }
+
+  .sidebar,
+  .card,
+  .hero-panel,
+  .empty-panel {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .section-head {
+    gap: 10px;
+  }
+
+  .sidebar {
+    gap: 12px;
+  }
+
+  .sidebar-footer {
+    margin-top: 0;
+  }
+
+  .nav {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .nav button {
+    text-align: left;
+  }
+
+  .hero-title {
+    font-size: clamp(1.55rem, 8vw, 2.25rem);
+  }
+
+  .signal-card {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .modal-card {
+    max-height: calc(100vh - 20px);
+    border-radius: 20px;
+    padding: 14px;
+  }
+
+  .chart-shell {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .chart-shell svg {
+    min-width: 520px;
+  }
+
+  .empty-panel {
+    padding: 22px 18px;
+  }
+
+  .toast {
+    width: calc(100vw - 20px);
+    bottom: 12px;
+    right: 10px;
+    left: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .nav button,
+  .primary-btn,
+  .ghost-btn,
+  .inline-btn {
+    width: 100%;
+  }
+
+  .badge,
+  .pill {
+    max-width: 100%;
+  }
+
+  .metric .value {
+    font-size: 1.3rem;
+  }
+
+  .empty-state {
+    min-height: 44vh;
+  }
+
+  .sidebar-projects-btn,
+  .nav button,
+  .primary-btn,
+  .ghost-btn,
+  .inline-btn {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
