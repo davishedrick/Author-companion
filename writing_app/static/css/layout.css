@@ -111,6 +111,47 @@
   min-width: 0;
 }
 
+.project-topbar {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 24px;
+  background: rgba(255, 250, 243, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.project-topbar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.project-topbar-nav button {
+  border: 0;
+  cursor: pointer;
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 0.98rem;
+  font-weight: 600;
+  transition: transform 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.project-topbar-nav button.active,
+.project-topbar-nav button:hover {
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .brand h1 {
   margin: 0;
   font-family: var(--serif);
@@ -757,6 +798,7 @@ textarea {
   .section-head,
   .heatmap-toolbar,
   .item-top,
+  .project-topbar,
   .metric-row,
   .summary-row {
     flex-direction: column;
@@ -805,6 +847,15 @@ textarea {
 
   .nav {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .project-topbar-nav {
+    justify-content: stretch;
+  }
+
+  .project-topbar-nav button {
+    flex: 1 1 160px;
+    text-align: center;
   }
 
   .nav button {
@@ -876,6 +927,7 @@ textarea {
   .sidebar,
   .card,
   .hero-panel,
+  .project-topbar,
   .empty-panel {
     padding: 16px;
     border-radius: 20px;
@@ -896,6 +948,18 @@ textarea {
   .nav {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .project-topbar-nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 0;
+  }
+
+  .project-topbar-nav button {
+    padding: 14px 12px;
+    border-radius: 14px;
   }
 
   .nav button {

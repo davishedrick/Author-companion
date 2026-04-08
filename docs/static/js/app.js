@@ -27,7 +27,7 @@ async function initializeApp() {
 
 function render() {
   const bundle = currentBundle();
-  if (!bundle && !["dashboard", "plot", "edit", "stats", "projects", "create-project"].includes(activeView)) {
+  if (!bundle && !["dashboard", "plot", "edit", "goals", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
   if (!bundle && activeView === "projects") {
@@ -43,8 +43,8 @@ function render() {
   renderDashboard(bundle);
   renderPlotDashboard(bundle);
   renderEditDashboard(bundle);
+  renderGoalsDashboard(bundle);
   renderSessions(bundle);
-  renderStats(bundle);
   renderEditProject(bundle);
   views.forEach((view) => {
     if (!bundle && ["sessions", "edit-project"].includes(view)) {
@@ -69,17 +69,18 @@ function renderBrand(bundle) {
 
 function renderNav(bundle) {
   const nav = document.getElementById("nav");
-  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && ["dashboard", "plot", "edit", "stats"].includes(activeView))
-    ? ["dashboard", "plot", "edit", "stats"]
+  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView))
+    ? ["plot", "dashboard", "edit", "goals"]
     : [];
+  const highlightedView = availableViews.includes(activeView) ? activeView : "";
   const navLabels = {
-    dashboard: "Write",
     plot: "Plot",
+    dashboard: "Write",
     edit: "Edit",
-    stats: "Stats"
+    goals: "Goals",
   };
   nav.innerHTML = availableViews.map((view) => `
-    <button data-view="${view}" class="${activeView === view ? "active" : ""}">
+    <button data-view="${view}" class="${highlightedView === view ? "active" : ""}">
       ${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}
     </button>
   `).join("");
@@ -294,50 +295,6 @@ function renderProjectCard(bundle) {
 }
 
 
-function renderStats(bundle) {
-  if (!bundle) {
-    document.getElementById("view-stats").innerHTML = renderWorkspaceEmptyState("Stats");
-    bindWorkspaceEmptyActions();
-    return;
-  }
-  const stats = getStats(bundle);
-  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  document.getElementById("view-stats").innerHTML = `
-    <section class="stack">
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h2>Statistics Dashboard</h2>
-            <p>Patterns over time, session quality, and project trajectory.</p>
-          </div>
-        </div>
-        <div class="stats-grid">
-          <div class="metric"><div class="label">Total words written</div><div class="value">${formatNumber(stats.totalWritten)}</div></div>
-          <div class="metric"><div class="label">Average words per day</div><div class="value">${formatNumber(stats.dailyAverage)}</div></div>
-          <div class="metric"><div class="label">Average words per session</div><div class="value">${formatNumber(stats.avgSession)}</div></div>
-          <div class="metric"><div class="label">Most productive day</div><div class="value" style="font-size: 1.2rem;">${dayNames[stats.mostProductiveDayIndex]}</div></div>
-          <div class="metric"><div class="label">Best writing day</div><div class="value">${stats.bestDay.words ? formatNumber(stats.bestDay.words) : "0"}</div><div class="hint">${stats.bestDay.key ? formatDate(stats.bestDay.key) : "No writing days logged yet"}</div></div>
-          <div class="metric"><div class="label">Longest writing session</div><div class="value">${formatNumber(stats.longestSession)}</div><div class="hint">Minutes</div></div>
-          <div class="metric"><div class="label">Words written this month</div><div class="value">${formatNumber(stats.wordsMonth)}</div></div>
-          <div class="metric"><div class="label">Completion percentage</div><div class="value">${stats.totalProgress.toFixed(1)}%</div></div>
-          <div class="metric"><div class="label">Predicted finish date</div><div class="value" style="font-size: 1.08rem;">${stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Not enough pace data"}</div></div>
-        </div>
-      </section>
-
-      <section class="split">
-        <div class="card">
-          <div class="section-head"><div><h3>Word Count Over Time</h3><p>Total manuscript growth across writing days.</p></div></div>
-          <div class="chart-card chart-shell">${renderLineChart(bundle)}</div>
-        </div>
-        <div class="card">
-          <div class="section-head"><div><h3>Weekly Productivity</h3><p>Rolling week totals to show your pace trends.</p></div></div>
-          <div class="chart-card chart-shell">${renderBarChart(bundle)}</div>
-        </div>
-      </section>
-
-    </section>
-  `;
-}
 
 function renderSessions(bundle) {
   const view = document.getElementById("view-sessions");
@@ -524,21 +481,32 @@ function renderGoalCard(goal) {
       <div class="item-top">
         <h4>${escapeHtml(goal.title)}</h4>
         <div class="goal-actions">
-          <button class="icon-btn" type="button" data-action="delete-goal" data-id="${goal.id}" aria-label="Delete goal">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 7h14"></path>
-              <path d="M9 7V4h6v3"></path>
-              <path d="M8 7l1 12h6l1-12"></path>
-              <path d="M10 11v5"></path>
-              <path d="M14 11v5"></path>
-            </svg>
-          </button>
+          <button class="inline-btn" type="button" data-action="archive-goal" data-id="${goal.id}">Archive</button>
         </div>
       </div>
       <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
       <div class="meta-line">
         <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
       </div>
+    </div>
+  `;
+}
+
+function renderArchivedGoalCard(goal) {
+  return `
+    <div class="item" data-goal-id="${goal.id}">
+      <div class="item-top">
+        <h4>${escapeHtml(goal.title)}</h4>
+        <div class="goal-actions">
+          <span class="pill">Archived ${escapeHtml(formatDate(goal.archivedAt || goal.createdAt))}</span>
+          <button class="inline-btn" type="button" data-action="restore-goal" data-id="${goal.id}">Restore</button>
+          <button class="inline-btn" type="button" data-action="delete-goal-permanently" data-id="${goal.id}">Delete permanently</button>
+        </div>
+      </div>
+      <div class="meta-line">
+        <span class="pill">${goalTypeContext(goal.type)} target ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)}</span>
+      </div>
+      <p class="small-copy" style="margin-top: 10px;">This goal is no longer active, but days that were tracked against it will keep showing the right target in the heatmap.</p>
     </div>
   `;
 }

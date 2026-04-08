@@ -2,8 +2,9 @@ const STORAGE_KEY = "author-engine-mvp";
 const STATE_API_ENDPOINT = "/api/state";
 const DEFAULT_VIEW = "dashboard";
 const PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
-const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "stats"];
-const views = ["projects", "create-project", "dashboard", "plot", "edit", "sessions", "stats", "edit-project"];
+const PRIMARY_WORKSPACE_VIEWS = ["plot", "dashboard", "edit"];
+const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals"];
+const views = ["projects", "create-project", "dashboard", "plot", "edit", "goals", "sessions", "edit-project"];
 const requiredImportColumns = [
   "row_type",
   "project_id",
@@ -46,6 +47,8 @@ const exportColumns = [
   "goal_title",
   "goal_target_value",
   "goal_created_at",
+  "goal_status",
+  "goal_archived_at",
   "issue_id",
   "issue_title",
   "issue_type",
@@ -142,6 +145,7 @@ let editingSessionId = null;
 let editingEditSessionId = null;
 let editingIssueId = null;
 let heatmapMonthOffset = 0;
+let selectedHeatmapDayKey = null;
 let sessionDraftMinutes = 25;
 let activeWritingSession = null;
 let pendingCompletedSession = null;
@@ -150,6 +154,10 @@ let sessionsReturnView = "dashboard";
 
 function isProjectWorkspaceView(view) {
   return WORKSPACE_VIEWS.includes(view);
+}
+
+function isPrimaryWorkspaceView(view) {
+  return PRIMARY_WORKSPACE_VIEWS.includes(view);
 }
 
 function createProjectBundle(title, targetWordCount, currentWordCount, deadline) {
@@ -223,8 +231,8 @@ function normalizeStoredActiveView(snapshot, normalizedState = normalizeLoadedSt
 }
 
 function normalizeStoredLastWorkspaceView(snapshot) {
-  if (WORKSPACE_VIEWS.includes(snapshot?.lastWorkspaceView)) return snapshot.lastWorkspaceView;
-  if (WORKSPACE_VIEWS.includes(snapshot?.activeView)) return snapshot.activeView;
+  if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.lastWorkspaceView)) return snapshot.lastWorkspaceView;
+  if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.activeView)) return snapshot.activeView;
   return DEFAULT_VIEW;
 }
 
@@ -255,10 +263,27 @@ function normalizeProjectBundle(bundle) {
     project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
     editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
     plot: normalizePlotState(bundle.plot),
-    goals: Array.isArray(bundle.goals) ? bundle.goals : [],
+    goals: Array.isArray(bundle.goals) ? bundle.goals.map(normalizeGoal) : [],
     sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
     issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+  };
+}
+
+function normalizeGoal(goal) {
+  const status = goal?.status === "archived" ? "archived" : "active";
+  const archivedAt = status === "archived"
+    ? goal?.archivedAt || goal?.deletedAt || goal?.endedAt || new Date().toISOString()
+    : "";
+
+  return {
+    id: goal?.id || createId(),
+    type: goal?.type === "write_minutes" ? "write_minutes" : "write_words",
+    title: String(goal?.title || ""),
+    targetValue: Math.max(1, number(goal?.targetValue) || 1),
+    createdAt: goal?.createdAt || new Date().toISOString(),
+    status,
+    archivedAt
   };
 }
 
@@ -390,7 +415,7 @@ function saveState() {
 }
 
 function preferredWorkspaceView() {
-  return isProjectWorkspaceView(lastWorkspaceView) ? lastWorkspaceView : DEFAULT_VIEW;
+  return isPrimaryWorkspaceView(lastWorkspaceView) ? lastWorkspaceView : DEFAULT_VIEW;
 }
 
 function currentBundle() {
@@ -652,8 +677,22 @@ function goalValueForDate(bundle, goal, key) {
     .reduce((sum, session) => sum + goalValueForSession(goal.type, session), 0);
 }
 
+function activeGoalsForBundle(bundle) {
+  return bundle.goals.filter((goal) => goal.status !== "archived");
+}
+
+function archivedGoalsForBundle(bundle) {
+  return bundle.goals
+    .filter((goal) => goal.status === "archived")
+    .sort((a, b) => new Date(b.archivedAt || b.createdAt) - new Date(a.archivedAt || a.createdAt));
+}
+
 function goalUnit(goalType) {
   return goalType === "write_minutes" ? "minutes" : "words";
+}
+
+function goalHistoryLabel(goalType) {
+  return goalType === "write_minutes" ? "minutes" : "written";
 }
 
 function applyGoalTypePreset(form, goalType) {
@@ -688,6 +727,49 @@ function goalTypeContext(type) {
   return type === "write_minutes" ? "WRITE TIME" : "WRITE";
 }
 
+function isGoalTrackedOnDate(goal, cursor) {
+  const createdAt = goal.createdAt ? startOfDay(new Date(goal.createdAt)) : null;
+  if (createdAt && createdAt > cursor) return false;
+  if (goal.status !== "archived") return true;
+  if (!goal.archivedAt) return true;
+  return startOfDay(new Date(goal.archivedAt)) >= cursor;
+}
+
+function buildGoalSnapshotForDate(bundle, goal, key) {
+  const value = goalValueForDate(bundle, goal, key);
+  const target = Math.max(1, number(goal.targetValue));
+  return {
+    id: goal.id,
+    title: goal.title || (goal.type === "write_minutes" ? "Spend time writing" : "Write words"),
+    type: goal.type,
+    status: goal.status === "archived" ? "archived" : "active",
+    value,
+    target,
+    unit: goalUnit(goal.type),
+    metricText: `${formatNumber(value)} / ${formatNumber(target)} ${goalHistoryLabel(goal.type)}`,
+    ratio: value / target
+  };
+}
+
+function heatmapStatusCopy(status) {
+  return {
+    fail: "Missed goal",
+    partial: "Partial progress",
+    met: "Goal met",
+    exceeded: "Goal exceeded",
+    none: "No goals set"
+  }[status] || "No activity";
+}
+
+function preferredHeatmapDayKey(days) {
+  const selectableDays = days.filter((day) => !day.outsideMonth);
+  if (!selectableDays.length) return null;
+  const selectedDay = selectableDays.find((day) => day.key === selectedHeatmapDayKey);
+  if (selectedDay) return selectedDay.key;
+  const latestPastDay = [...selectableDays].reverse().find((day) => !day.future);
+  return latestPastDay?.key || selectableDays[0]?.key || null;
+}
+
 function getHeatmapMonth(bundle, monthOffset = 0) {
   const today = startOfDay(new Date());
   const targetMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
@@ -708,45 +790,63 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
       continue;
     }
     if (cursor > today) {
-      days.push({ key, status: "none", label: `${longDate}\nFuture day`, dayNumber: cursor.getDate() });
+      days.push({
+        key,
+        status: "none",
+        label: `${longDate}\nFuture day`,
+        dayNumber: cursor.getDate(),
+        future: true,
+        longDate,
+        detailSummary: "Future day",
+        detailCopy: "Goal progress will appear here once the day arrives.",
+        sessionCount: 0,
+        goalSummaries: []
+      });
       continue;
     }
     const daySessions = getWriteSessions(bundle).filter((session) => dateKey(session.date) === key);
-    const activeGoals = bundle.goals.filter((goal) =>
+    const trackedGoals = bundle.goals.filter((goal) =>
       (goal.type === "write_words" || goal.type === "write_minutes") &&
-      (!goal.createdAt || startOfDay(new Date(goal.createdAt)) <= cursor)
+      isGoalTrackedOnDate(goal, cursor)
     );
-    if (!activeGoals.length) {
+    if (!trackedGoals.length) {
       const noGoalLines = [longDate, "No goals set", `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`];
-      days.push({ key, status: "none", label: noGoalLines.join("\n"), dayNumber: cursor.getDate() });
+      days.push({
+        key,
+        status: "none",
+        label: noGoalLines.join("\n"),
+        dayNumber: cursor.getDate(),
+        longDate,
+        detailSummary: "No goals set",
+        detailCopy: "No writing goals were active on this date.",
+        sessionCount: daySessions.length,
+        goalSummaries: []
+      });
       continue;
     }
-    const goalSummaries = activeGoals.map((goal) => {
-      const value = goalValueForDate(bundle, goal, key);
-      const unit = goalUnit(goal.type);
-      return {
-        value,
-        target: Math.max(1, number(goal.targetValue)),
-        text: `${goalTypeContext(goal.type)} ${formatNumber(value)}/${formatNumber(goal.targetValue)} ${unit}`
-      };
-    });
+    const goalSummaries = trackedGoals.map((goal) => buildGoalSnapshotForDate(bundle, goal, key));
     const averageRatio = goalSummaries.reduce((sum, goal) => {
-      return sum + (goal.value / goal.target);
-    }, 0) / activeGoals.length;
+      return sum + goal.ratio;
+    }, 0) / trackedGoals.length;
     const status = averageRatio > 1.2 ? "exceeded" : averageRatio >= 1 ? "met" : averageRatio > 0 ? "partial" : "fail";
-    const statusCopy = {
-      fail: "Missed goal",
-      partial: "Partial progress",
-      met: "Goal met",
-      exceeded: "Goal exceeded"
-    };
+    const statusLabel = heatmapStatusCopy(status);
     const labelLines = [
       longDate,
-      statusCopy[status],
-      ...goalSummaries.map((goal) => goal.text),
+      statusLabel,
+      ...goalSummaries.map((goal) => `${goal.title}: ${goal.metricText}`),
       `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`
     ];
-    days.push({ key, status, label: labelLines.join("\n"), dayNumber: cursor.getDate() });
+    days.push({
+      key,
+      status,
+      label: labelLines.join("\n"),
+      dayNumber: cursor.getDate(),
+      longDate,
+      detailSummary: statusLabel,
+      detailCopy: "Hover, focus, or tap a day to compare what you did against the goal that was active then.",
+      sessionCount: daySessions.length,
+      goalSummaries
+    });
   }
 
   return {
@@ -755,15 +855,52 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
   };
 }
 
+function renderHeatmapDayDetail(day) {
+  if (!day) return "";
+  const sessionsLabel = `${day.sessionCount} ${day.sessionCount === 1 ? "session" : "sessions"}`;
+  const goalMarkup = day.goalSummaries.length
+    ? `
+      <div class="heatmap-detail-goals">
+        ${day.goalSummaries.map((goal) => `
+          <article class="heatmap-detail-goal">
+            <div class="heatmap-detail-goal-head">
+              <strong>${escapeHtml(goal.title)}</strong>
+              <span class="pill heatmap-goal-status ${goal.status === "archived" ? "archived" : "active"}">${goal.status === "archived" ? "Archived goal" : "Active goal"}</span>
+            </div>
+            <span>${escapeHtml(goal.metricText)}</span>
+          </article>
+        `).join("")}
+      </div>
+    `
+    : `<p class="small-copy heatmap-detail-empty">${escapeHtml(day.detailCopy || "No goal snapshot for this day yet.")}</p>`;
+
+  return `
+    <div class="heatmap-detail-head">
+      <div>
+        <p class="small-copy">Daily Goal Snapshot</p>
+        <h4>${escapeHtml(day.longDate || "")}</h4>
+      </div>
+      <div class="heatmap-detail-meta">
+        <span class="pill">${escapeHtml(day.detailSummary || heatmapStatusCopy(day.status))}</span>
+        <span class="pill">${sessionsLabel}</span>
+      </div>
+    </div>
+    ${goalMarkup}
+  `;
+}
+
 function renderGoalHeatmap(bundle) {
   const weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   const { days, monthLabel } = getHeatmapMonth(bundle, heatmapMonthOffset);
+  const selectedDayKey = preferredHeatmapDayKey(days);
+  selectedHeatmapDayKey = selectedDayKey;
+  const selectedDay = days.find((day) => day.key === selectedDayKey) || null;
   return `
     <section class="card">
       <div class="section-head">
         <div>
           <h3>Goal Heatmap</h3>
-          <p>Daily goal performance, one month at a time.</p>
+          <p>Daily goal performance, one month at a time. Hover, focus, or tap a day to inspect the goal snapshot behind it.</p>
         </div>
       </div>
       <div class="heatmap-shell">
@@ -782,8 +919,11 @@ function renderGoalHeatmap(bundle) {
         <div class="heatmap-grid">
           ${days.map((day) => day.outsideMonth
             ? `<div class="heatmap-cell none" aria-hidden="true"></div>`
-            : `<div class="heatmap-cell ${day.status}" title="${escapeAttr(day.label)}" aria-label="${escapeAttr(day.label)}"><span class="heatmap-daynum">${day.dayNumber}</span></div>`
+            : `<button class="heatmap-cell ${day.status}${day.key === selectedDayKey ? " is-selected" : ""}" data-heatmap-day="${day.key}" type="button" title="${escapeAttr(day.label)}" aria-label="${escapeAttr(day.label)}"><span class="heatmap-daynum">${day.dayNumber}</span></button>`
           ).join("")}
+        </div>
+        <div class="heatmap-detail" id="heatmap-detail-panel">
+          ${renderHeatmapDayDetail(selectedDay)}
         </div>
       </div>
     </section>
@@ -913,6 +1053,8 @@ function projectExportBaseRow(bundle) {
     goal_title: "",
     goal_target_value: "",
     goal_created_at: "",
+    goal_status: "",
+    goal_archived_at: "",
     issue_id: "",
     issue_title: "",
     issue_type: "",
@@ -949,7 +1091,9 @@ function buildProjectExportRows(bundle, mode = "all") {
         goal_type: goal.type || "",
         goal_title: goal.title || "",
         goal_target_value: number(goal.targetValue),
-        goal_created_at: goal.createdAt || ""
+        goal_created_at: goal.createdAt || "",
+        goal_status: goal.status || "active",
+        goal_archived_at: goal.archivedAt || ""
       });
     });
   }
@@ -1084,7 +1228,9 @@ function buildBundleFromImportedRows(rows) {
         type: row.goal_type || "write_words",
         title: row.goal_title || "Imported goal",
         targetValue: number(row.goal_target_value),
-        createdAt: row.goal_created_at || new Date().toISOString()
+        createdAt: row.goal_created_at || new Date().toISOString(),
+        status: row.goal_status === "archived" ? "archived" : "active",
+        archivedAt: row.goal_archived_at || ""
       })),
     issues: rows
       .filter((row) => row.row_type === "issue")

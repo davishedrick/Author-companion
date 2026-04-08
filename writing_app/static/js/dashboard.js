@@ -5,7 +5,6 @@ function renderDashboard(bundle) {
     return;
   }
   const stats = getStats(bundle);
-  const goals = bundle.goals.map((goal) => evaluateGoal(bundle, goal));
   const deadlineLabel = bundle.project.deadline ? formatDate(bundle.project.deadline) : "Flexible timeline";
   const completionLabel = stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Build pace to predict";
   const momentumState = stats.momentum === "Increasing"
@@ -89,21 +88,14 @@ function renderDashboard(bundle) {
             </div>
           </div>
 
-          <div>
-            <div class="section-head" style="margin-top: 18px; margin-bottom: 10px;">
-              <div>
-                <h3 style="margin-bottom: 4px;">Goals</h3>
-                <p>Simple writing targets, tracked against your current numbers.</p>
-              </div>
-              <button class="ghost-btn" id="open-goal-modal-btn" type="button">Create goal</button>
+          <div class="writing-workspace-note">
+            <div>
+              <h3 style="margin-bottom: 4px;">Goals moved into the shared layer</h3>
+              <p>Use the project bar at the top for goal planning, archives, and the progress heatmap. This dashboard stays focused on drafting momentum.</p>
             </div>
-            <div class="goal-editor-list">
-              ${goals.length ? goals.map((goal) => renderGoalCard(goal)).join("") : `<div class="empty">No goals yet.</div>`}
-            </div>
+            <button class="ghost-btn" id="open-goals-view-btn" type="button">Open Goals</button>
           </div>
         </section>
-
-        ${renderGoalHeatmap(bundle)}
 
         <section class="card">
           <div class="section-head">
@@ -128,8 +120,6 @@ function bindDashboardEvents(bundle) {
   const sessionModal = document.getElementById("session-modal");
   const sessionCompleteModal = document.getElementById("session-complete-modal");
   const endSessionConfirmModal = document.getElementById("end-session-confirm-modal");
-  const goalModal = document.getElementById("goal-modal");
-  const goalForm = document.getElementById("goal-form");
   const openSessionButton = document.getElementById("open-session-modal-btn");
   const closeSessionButton = document.getElementById("close-session-modal-btn");
   const closeSessionCompleteButton = document.getElementById("close-session-complete-btn");
@@ -137,8 +127,7 @@ function bindDashboardEvents(bundle) {
   const endSessionButton = document.getElementById("end-session-btn");
   const cancelEndSessionButton = document.getElementById("cancel-end-session-btn");
   const confirmEndSessionButton = document.getElementById("confirm-end-session-btn");
-  const openGoalButton = document.getElementById("open-goal-modal-btn");
-  const closeGoalButton = document.getElementById("close-goal-modal-btn");
+  const openGoalsViewButton = document.getElementById("open-goals-view-btn");
   const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
   const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
   const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
@@ -181,30 +170,12 @@ function bindDashboardEvents(bundle) {
     };
   }
 
-  if (openGoalButton) {
-    openGoalButton.onclick = () => {
-      openGoalModal();
+  if (openGoalsViewButton) {
+    openGoalsViewButton.onclick = () => {
+      activeView = "goals";
+      render();
     };
   }
-
-  if (closeGoalButton) {
-    closeGoalButton.onclick = () => {
-      closeGoalModal();
-    };
-  }
-
-  if (goalForm?.elements?.type && goalForm.dataset.goalTypeBound !== "true") {
-    goalForm.dataset.goalTypeBound = "true";
-    goalForm.elements.type.addEventListener("change", (event) => {
-      applyGoalTypePreset(goalForm, event.target.value);
-    });
-  }
-
-  goalModal.onclick = (event) => {
-    if (event.target === goalModal) {
-      closeGoalModal();
-    }
-  };
 
   if (closeSessionButton) {
     closeSessionButton.onclick = () => {
@@ -243,33 +214,6 @@ function bindDashboardEvents(bundle) {
       render();
     };
   }
-
-  if (prevHeatmapButton) {
-    prevHeatmapButton.onclick = () => {
-      heatmapMonthOffset -= 1;
-      render();
-    };
-  }
-
-  if (nextHeatmapButton) {
-    nextHeatmapButton.onclick = () => {
-      heatmapMonthOffset += 1;
-      render();
-    };
-  }
-
-  document.querySelectorAll("[data-action='delete-goal']").forEach((button) => {
-    button.onclick = () => {
-      const goal = bundle.goals.find((item) => item.id === button.dataset.id);
-      if (!goal) return;
-      updateCurrentBundle((projectBundle) => ({
-        ...projectBundle,
-        goals: projectBundle.goals.filter((item) => item.id !== goal.id)
-      }));
-      persistAndRender();
-      showToast("Goal deleted", "That goal has been removed.");
-    };
-  });
 
   document.getElementById("session-complete-form").onsubmit = (event) => {
     event.preventDefault();
@@ -352,27 +296,220 @@ function bindDashboardEvents(bundle) {
     persistAndRender();
   };
 
-  goalForm.onsubmit = (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.target);
-    updateCurrentBundle((projectBundle) => ({
-      ...projectBundle,
-      goals: [{
-        id: createId(),
-        type: formData.get("type"),
-        title: formData.get("title").trim(),
-        targetValue: number(formData.get("targetValue")),
-        createdAt: new Date().toISOString()
-      }, ...projectBundle.goals]
-    }));
-    closeGoalModal();
-    persistAndRender();
-    showToast("Goal added", "Your new goal is now visible on the dashboard.");
-  };
-
   bindSessionDial();
   bindSessionActions();
 
+}
+
+function renderGoalsDashboard(bundle) {
+  const view = document.getElementById("view-goals");
+  if (!bundle) {
+    view.innerHTML = renderWorkspaceEmptyState("Goals");
+    bindWorkspaceEmptyActions();
+    return;
+  }
+
+  const activeGoals = activeGoalsForBundle(bundle).map((goal) => evaluateGoal(bundle, goal));
+  const archivedGoals = archivedGoalsForBundle(bundle);
+  const wordGoals = activeGoals.filter((goal) => goal.type === "write_words");
+  const minuteGoals = activeGoals.filter((goal) => goal.type === "write_minutes");
+  const totalLiveProgress = activeGoals.reduce((sum, goal) => sum + goal.liveValue, 0);
+
+  view.innerHTML = `
+    <section class="stack">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <p class="small-copy">Shared project layer</p>
+            <h2 class="hero-title">Goals Dashboard</h2>
+            <p class="muted">Manage active targets, preserve archived context, and inspect day-by-day progress history in one place.</p>
+          </div>
+          <button class="primary-btn" id="open-goal-modal-btn" type="button">Create goal</button>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="label">Active goals</div><div class="value">${formatNumber(activeGoals.length)}</div></div>
+          <div class="metric"><div class="label">Archived goals</div><div class="value">${formatNumber(archivedGoals.length)}</div></div>
+          <div class="metric"><div class="label">Word-count goals</div><div class="value">${formatNumber(wordGoals.length)}</div></div>
+          <div class="metric"><div class="label">Time goals</div><div class="value">${formatNumber(minuteGoals.length)}</div></div>
+          <div class="metric"><div class="label">Tracked effort today</div><div class="value">${formatNumber(totalLiveProgress)}</div><div class="hint">Across all active goals</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h3>Active Goals</h3>
+            <p>These are the targets currently shaping new progress days.</p>
+          </div>
+        </div>
+        <div class="goal-editor-list">
+          ${activeGoals.length ? activeGoals.map((goal) => renderGoalCard(goal)).join("") : `<div class="empty">No active goals yet.</div>`}
+        </div>
+      </section>
+
+      ${archivedGoals.length ? `
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h3>Archived Goals</h3>
+              <p>Past goal targets stay here so old heatmap days keep the context they were earned under.</p>
+            </div>
+          </div>
+          <div class="goal-editor-list archived-goal-list">
+            ${archivedGoals.map((goal) => renderArchivedGoalCard(goal)).join("")}
+          </div>
+        </section>
+      ` : ""}
+
+      ${renderGoalHeatmap(bundle)}
+    </section>
+  `;
+
+  bindGoalsDashboardEvents(bundle);
+}
+
+function bindGoalsDashboardEvents(bundle) {
+  const goalModal = document.getElementById("goal-modal");
+  const goalForm = document.getElementById("goal-form");
+  const openGoalButton = document.getElementById("open-goal-modal-btn");
+  const closeGoalButton = document.getElementById("close-goal-modal-btn");
+  const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
+  const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
+
+  if (openGoalButton) {
+    openGoalButton.onclick = () => {
+      openGoalModal();
+    };
+  }
+
+  if (closeGoalButton) {
+    closeGoalButton.onclick = () => {
+      closeGoalModal();
+    };
+  }
+
+  if (goalForm?.elements?.type && goalForm.dataset.goalTypeBound !== "true") {
+    goalForm.dataset.goalTypeBound = "true";
+    goalForm.elements.type.addEventListener("change", (event) => {
+      applyGoalTypePreset(goalForm, event.target.value);
+    });
+  }
+
+  if (goalModal) {
+    goalModal.onclick = (event) => {
+      if (event.target === goalModal) {
+        closeGoalModal();
+      }
+    };
+  }
+
+  if (goalForm) {
+    goalForm.onsubmit = (event) => {
+      event.preventDefault();
+      const formData = new FormData(event.target);
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        goals: [{
+          id: createId(),
+          type: formData.get("type"),
+          title: formData.get("title").trim(),
+          targetValue: number(formData.get("targetValue")),
+          createdAt: new Date().toISOString()
+        }, ...projectBundle.goals]
+      }));
+      closeGoalModal();
+      persistAndRender();
+      showToast("Goal added", "Your new goal is now visible on the goals dashboard.");
+    };
+  }
+
+  if (prevHeatmapButton) {
+    prevHeatmapButton.onclick = () => {
+      heatmapMonthOffset -= 1;
+      render();
+    };
+  }
+
+  if (nextHeatmapButton) {
+    nextHeatmapButton.onclick = () => {
+      heatmapMonthOffset += 1;
+      render();
+    };
+  }
+
+  bindHeatmapInteractions(bundle);
+
+  document.querySelectorAll("[data-action='archive-goal']").forEach((button) => {
+    button.onclick = () => {
+      const goal = bundle.goals.find((item) => item.id === button.dataset.id);
+      if (!goal) return;
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        goals: projectBundle.goals.map((item) => item.id === goal.id
+          ? { ...item, status: "archived", archivedAt: new Date().toISOString() }
+          : item
+        )
+      }));
+      persistAndRender();
+      showToast("Goal archived", "That goal moved into the archive, and its old heatmap days will still make sense.");
+    };
+  });
+
+  document.querySelectorAll("[data-action='restore-goal']").forEach((button) => {
+    button.onclick = () => {
+      const goal = bundle.goals.find((item) => item.id === button.dataset.id);
+      if (!goal) return;
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        goals: projectBundle.goals.map((item) => item.id === goal.id
+          ? { ...item, status: "active", archivedAt: "" }
+          : item
+        )
+      }));
+      persistAndRender();
+      showToast("Goal restored", "That goal is active again and will count toward new heatmap days going forward.");
+    };
+  });
+
+  document.querySelectorAll("[data-action='delete-goal-permanently']").forEach((button) => {
+    button.onclick = () => {
+      const goal = bundle.goals.find((item) => item.id === button.dataset.id);
+      if (!goal || goal.status !== "archived") return;
+      const confirmed = window.confirm("Delete this archived goal permanently? Past heatmap days tied to it will lose that goal context.");
+      if (!confirmed) return;
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        goals: projectBundle.goals.filter((item) => item.id !== goal.id)
+      }));
+      persistAndRender();
+      showToast("Archived goal deleted", "That archived goal was removed permanently.");
+    };
+  });
+}
+
+function bindHeatmapInteractions(bundle) {
+  const detailPanel = document.getElementById("heatmap-detail-panel");
+  const cells = [...document.querySelectorAll("[data-heatmap-day]")];
+  if (!detailPanel || !cells.length) return;
+
+  const { days } = getHeatmapMonth(bundle, heatmapMonthOffset);
+  const dayLookup = new Map(days.filter((day) => !day.outsideMonth).map((day) => [day.key, day]));
+
+  const updateSelection = (key) => {
+    const day = dayLookup.get(key);
+    if (!day) return;
+    selectedHeatmapDayKey = key;
+    detailPanel.innerHTML = renderHeatmapDayDetail(day);
+    cells.forEach((cell) => {
+      cell.classList.toggle("is-selected", cell.dataset.heatmapDay === key);
+    });
+  };
+
+  cells.forEach((cell) => {
+    cell.addEventListener("mouseenter", () => updateSelection(cell.dataset.heatmapDay));
+    cell.addEventListener("focus", () => updateSelection(cell.dataset.heatmapDay));
+    cell.addEventListener("click", () => updateSelection(cell.dataset.heatmapDay));
+  });
 }
 
 
@@ -601,7 +738,7 @@ function openGoalModal() {
   form.elements.type.value = "write_words";
   applyGoalTypePreset(form, "write_words");
   title.textContent = "Create Goal";
-  copy.textContent = "Set a simple daily target you can scan quickly from the dashboard.";
+  copy.textContent = "Set a simple daily target you can review quickly from the goals dashboard.";
   modal.classList.remove("hidden");
 }
 
@@ -649,30 +786,4 @@ function bindSessionActions() {
     });
   });
 
-}
-
-
-function renderGoalCard(goal) {
-  return `
-    <div class="item" data-goal-id="${goal.id}">
-      <div class="item-top">
-        <h4>${escapeHtml(goal.title)}</h4>
-        <div class="goal-actions">
-          <button class="icon-btn" type="button" data-action="delete-goal" data-id="${goal.id}" aria-label="Delete goal">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M5 7h14"></path>
-              <path d="M9 7V4h6v3"></path>
-              <path d="M8 7l1 12h6l1-12"></path>
-              <path d="M10 11v5"></path>
-              <path d="M14 11v5"></path>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
-      <div class="meta-line">
-        <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
-      </div>
-    </div>
-  `;
 }

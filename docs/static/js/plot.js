@@ -264,6 +264,7 @@ function renderPlotDashboard(bundle) {
   const totalEntries = totalPlotEntryCount(bundle);
   const populatedSections = populatedPlotSectionCount(bundle);
   const busiestSection = mostPopulatedPlotSection(bundle);
+  const coveragePercent = Math.round((populatedSections / PLOT_SECTION_IDS.length) * 100);
 
   view.innerHTML = `
     <section class="stack">
@@ -302,6 +303,21 @@ function renderPlotDashboard(bundle) {
               <span>Outline can plug into these references later without rebuilding your world notes.</span>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h3>Atlas Snapshot</h3>
+            <p>The most useful plot-reference stats, kept close to the story material they describe.</p>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><div class="label">Total entries</div><div class="value">${formatNumber(totalEntries)}</div></div>
+          <div class="metric"><div class="label">Sections populated</div><div class="value">${formatNumber(populatedSections)}</div><div class="hint">${coveragePercent}% of atlas filled</div></div>
+          <div class="metric"><div class="label">Current section</div><div class="value">${formatNumber(activeEntries.length)}</div><div class="hint">${activeSection.label}</div></div>
+          <div class="metric"><div class="label">Most documented area</div><div class="value" style="font-size: 1.08rem;">${busiestSection?.count ? plotSectionConfig(busiestSection.sectionId).label : "No entries yet"}</div><div class="hint">${busiestSection?.count ? `${formatNumber(busiestSection.count)} entries` : "Start building the atlas"}</div></div>
         </div>
       </section>
 
