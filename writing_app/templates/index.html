@@ -91,7 +91,10 @@
     <div class="writing-session-shell">
       <p id="writing-session-copy">Writing session in progress</p>
       <h2 class="writing-session-clock" id="writing-session-clock">25:00</h2>
-      <button class="quiet-btn" id="end-session-btn" type="button">End writing session</button>
+      <div class="writing-session-actions">
+        <button class="quiet-btn quiet-btn-secondary" id="leave-writing-focus-mode-btn" type="button">Minimize</button>
+        <button class="quiet-btn" id="end-session-btn" type="button">End writing session</button>
+      </div>
     </div>
   </div>
   <div class="modal-backdrop hidden" id="end-session-confirm-modal">
@@ -121,7 +124,7 @@
         <label>Goal type
           <select name="type">
             <option value="write_words">Write words</option>
-            <option value="write_minutes">Spend time writing</option>
+            <option value="write_minutes">Spend time writing or editing</option>
           </select>
         </label>
         <label><span id="goal-target-label">Daily target (words)</span>
@@ -214,12 +217,71 @@
       </form>
     </div>
   </div>
+  <div class="modal-backdrop hidden" id="edit-session-start-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit-session-start-title">Start Editing Session</h3>
+          <p id="edit-session-start-copy">Choose how long you want to edit, then begin.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit-session-start-btn" type="button">Close</button>
+      </div>
+      <div class="session-setup">
+        <div class="session-dial-wrap">
+          <svg class="session-dial" id="edit-session-dial" viewBox="0 0 320 220" aria-label="Editing session duration dial">
+            <path class="session-dial-rail" id="edit-session-dial-rail" pathLength="100" d="M40 180 A120 120 0 0 1 280 180"></path>
+            <path class="session-dial-progress" id="edit-session-dial-progress" pathLength="100" d="M40 180 A120 120 0 0 1 280 180"></path>
+            <circle class="session-dial-handle" id="edit-session-dial-handle" cx="40" cy="180" r="11"></circle>
+            <text id="edit-session-dial-value" x="160" y="118" text-anchor="middle" font-size="44">45</text>
+            <text x="160" y="145" text-anchor="middle" font-size="16">minutes</text>
+          </svg>
+          <p class="session-dial-caption" id="edit-session-dial-caption">Drag the dial to set your timer.</p>
+        </div>
+        <button class="primary-btn writing-launch-cta" id="start-edit-session-btn" type="button">Start editing session</button>
+      </div>
+    </div>
+  </div>
+  <div class="writing-session-screen hidden" id="editing-session-screen">
+    <div class="writing-session-shell">
+      <p id="editing-session-copy">Editing session in progress</p>
+      <h2 class="writing-session-clock" id="editing-session-clock">45:00</h2>
+      <div class="writing-session-actions">
+        <button class="quiet-btn quiet-btn-secondary" id="leave-edit-focus-mode-btn" type="button">Minimize</button>
+        <button class="quiet-btn" id="end-edit-session-btn" type="button">End editing session</button>
+      </div>
+    </div>
+  </div>
+  <div class="floating-focus-timer hidden" id="floating-focus-timer" aria-live="polite">
+    <p class="floating-focus-copyline" id="floating-focus-label">Writing session running</p>
+    <div class="floating-focus-copy">
+      <strong id="floating-focus-clock">25:00</strong>
+      <span id="floating-focus-meta">Stay in motion while you check the rest of the project.</span>
+    </div>
+    <div class="floating-focus-actions">
+      <button class="primary-btn floating-focus-return" id="floating-focus-return-btn" type="button">Expand</button>
+      <button class="ghost-btn floating-focus-end" id="floating-focus-end-btn" type="button">End session</button>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="end-edit-session-confirm-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3>End editing session early?</h3>
+          <p>Your timer is still running. Are you sure you want to stop this editing session now?</p>
+        </div>
+      </div>
+      <div class="meta-line" style="margin-top: 18px;">
+        <button class="ghost-btn" id="cancel-end-edit-session-btn" type="button">Keep editing</button>
+        <button class="primary-btn" id="confirm-end-edit-session-btn" type="button">End session</button>
+      </div>
+    </div>
+  </div>
   <div class="modal-backdrop hidden" id="edit-session-modal">
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="edit-session-title">Log Editing Session</h3>
-          <p id="edit-session-copy">Capture time spent revising, what section you touched, and anything you want to remember.</p>
+          <h3 id="edit-session-title">Editing Session Complete</h3>
+          <p id="edit-session-copy">Capture what you worked on, how much you edited, and anything you want to remember.</p>
         </div>
         <button class="ghost-btn" id="close-edit-session-btn" type="button">Close</button>
       </div>

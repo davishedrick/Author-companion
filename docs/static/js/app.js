@@ -11,6 +11,226 @@ function persistAndRender() {
   render();
 }
 
+let floatingFocusTimerDock = "top-right";
+let floatingFocusTimerResizeBound = false;
+let floatingFocusTimerPosition = null;
+
+function getActiveFocusSession() {
+  const activeSessions = [];
+  if (activeWritingSession) {
+    activeSessions.push({
+      type: "write",
+      plannedMinutes: number(activeWritingSession.plannedMinutes),
+      endsAt: number(activeWritingSession.endsAt),
+      startedAt: number(activeWritingSession.startedAt),
+      focusMode: Boolean(writingSessionInFocusMode)
+    });
+  }
+  if (activeEditingSession) {
+    activeSessions.push({
+      type: "edit",
+      plannedMinutes: number(activeEditingSession.plannedMinutes),
+      endsAt: number(activeEditingSession.endsAt),
+      startedAt: number(activeEditingSession.startedAt),
+      focusMode: Boolean(editingSessionInFocusMode)
+    });
+  }
+  return activeSessions.sort((a, b) => b.startedAt - a.startedAt)[0] || null;
+}
+
+function getFloatingFocusTimerBounds(widget) {
+  const margin = 16;
+  const contentRect = document.querySelector(".content-shell")?.getBoundingClientRect();
+  const width = widget.offsetWidth || 300;
+  const height = widget.offsetHeight || 170;
+  const contentLeft = contentRect ? contentRect.left + margin : margin;
+  const contentRight = contentRect ? contentRect.right - width - margin : window.innerWidth - width - margin;
+  const minLeft = Math.max(margin, contentLeft);
+  const maxLeft = Math.max(minLeft, Math.min(window.innerWidth - width - margin, contentRight));
+  const minTop = margin;
+  const maxTop = Math.max(minTop, window.innerHeight - height - margin);
+  return { minLeft, maxLeft, minTop, maxTop };
+}
+
+function clampFloatingFocusTimerPosition(widget, position) {
+  if (!widget || !position) return null;
+  const bounds = getFloatingFocusTimerBounds(widget);
+  const left = Number(position.left);
+  const top = Number(position.top);
+  return {
+    left: Math.min(bounds.maxLeft, Math.max(bounds.minLeft, Number.isFinite(left) ? left : bounds.minLeft)),
+    top: Math.min(bounds.maxTop, Math.max(bounds.minTop, Number.isFinite(top) ? top : bounds.minTop))
+  };
+}
+
+function getFloatingFocusTimerAnchors(widget) {
+  const bounds = getFloatingFocusTimerBounds(widget);
+  const horizontalSteps = 5;
+  const verticalSteps = 4;
+  const anchors = [];
+  for (let yIndex = 0; yIndex < verticalSteps; yIndex += 1) {
+    const verticalRatio = verticalSteps === 1 ? 0 : yIndex / (verticalSteps - 1);
+    const top = Math.round(bounds.minTop + ((bounds.maxTop - bounds.minTop) * verticalRatio));
+    for (let xIndex = 0; xIndex < horizontalSteps; xIndex += 1) {
+      const horizontalRatio = horizontalSteps === 1 ? 0 : xIndex / (horizontalSteps - 1);
+      const left = Math.round(bounds.minLeft + ((bounds.maxLeft - bounds.minLeft) * horizontalRatio));
+      anchors.push({
+        dock: `grid-${yIndex}-${xIndex}`,
+        left,
+        top
+      });
+    }
+  }
+  return anchors;
+}
+
+function applyFloatingFocusTimerPosition(position = null) {
+  const widget = document.getElementById("floating-focus-timer");
+  if (!widget || widget.classList.contains("hidden")) return;
+  const anchors = getFloatingFocusTimerAnchors(widget);
+  const nextPosition = clampFloatingFocusTimerPosition(widget, position || floatingFocusTimerPosition)
+    || anchors.find((anchor) => anchor.dock === floatingFocusTimerDock)
+    || anchors[0];
+  floatingFocusTimerPosition = {
+    left: nextPosition.left,
+    top: nextPosition.top
+  };
+  widget.style.left = `${nextPosition.left}px`;
+  widget.style.top = `${nextPosition.top}px`;
+}
+
+function syncFloatingFocusTimer() {
+  const widget = document.getElementById("floating-focus-timer");
+  const label = document.getElementById("floating-focus-label");
+  const clock = document.getElementById("floating-focus-clock");
+  const meta = document.getElementById("floating-focus-meta");
+  const returnButton = document.getElementById("floating-focus-return-btn");
+  const endButton = document.getElementById("floating-focus-end-btn");
+  if (!widget || !label || !clock || !meta || !returnButton || !endButton) return;
+
+  const session = getActiveFocusSession();
+  if (!session || session.focusMode) {
+    widget.classList.add("hidden");
+    return;
+  }
+
+  const remainingSeconds = Math.max(0, Math.round((session.endsAt - Date.now()) / 1000));
+  const wasHidden = widget.classList.contains("hidden");
+  widget.dataset.sessionType = session.type;
+  label.textContent = session.type === "edit" ? "Editing session running" : "Writing session running";
+  meta.textContent = `${describeMinutes(session.plannedMinutes)} planned. Keep the timer nearby while you review the rest of the project.`;
+  clock.textContent = formatClock(remainingSeconds);
+  returnButton.textContent = "Expand";
+  endButton.textContent = session.type === "edit" ? "End editing session" : "End writing session";
+  widget.classList.remove("hidden");
+  if (wasHidden || !floatingFocusTimerPosition) {
+    applyFloatingFocusTimerPosition();
+  }
+}
+
+function bindFloatingFocusTimer() {
+  const widget = document.getElementById("floating-focus-timer");
+  const returnButton = document.getElementById("floating-focus-return-btn");
+  const endButton = document.getElementById("floating-focus-end-btn");
+  if (!widget || !returnButton || !endButton || widget.dataset.bound === "true") return;
+  widget.dataset.bound = "true";
+
+  let dragState = null;
+
+  const setDragSelectionState = (isDragging) => {
+    document.body.classList.toggle("dragging-floating-focus-timer", Boolean(isDragging));
+  };
+
+  const clampToBounds = (left, top) => {
+    const bounds = getFloatingFocusTimerBounds(widget);
+    return {
+      left: Math.min(bounds.maxLeft, Math.max(bounds.minLeft, left)),
+      top: Math.min(bounds.maxTop, Math.max(bounds.minTop, top))
+    };
+  };
+
+  const snapToNearestAnchor = (left, top) => {
+    const anchors = getFloatingFocusTimerAnchors(widget);
+    const snapped = anchors.reduce((closest, anchor) => {
+      const closestDistance = Math.hypot(closest.left - left, closest.top - top);
+      const nextDistance = Math.hypot(anchor.left - left, anchor.top - top);
+      return nextDistance < closestDistance ? anchor : closest;
+    });
+    floatingFocusTimerDock = snapped.dock;
+    floatingFocusTimerPosition = {
+      left: snapped.left,
+      top: snapped.top
+    };
+    applyFloatingFocusTimerPosition(snapped);
+  };
+
+  widget.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("button")) return;
+    if (widget.classList.contains("hidden")) return;
+    event.preventDefault();
+    const rect = widget.getBoundingClientRect();
+    dragState = {
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top
+    };
+    widget.classList.add("dragging");
+    setDragSelectionState(true);
+    widget.setPointerCapture(event.pointerId);
+  });
+
+  widget.addEventListener("pointermove", (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const next = clampToBounds(event.clientX - dragState.offsetX, event.clientY - dragState.offsetY);
+    floatingFocusTimerPosition = next;
+    widget.style.left = `${next.left}px`;
+    widget.style.top = `${next.top}px`;
+  });
+
+  const releaseDrag = (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const rect = widget.getBoundingClientRect();
+    snapToNearestAnchor(rect.left, rect.top);
+    widget.classList.remove("dragging");
+    setDragSelectionState(false);
+    if (widget.hasPointerCapture(event.pointerId)) widget.releasePointerCapture(event.pointerId);
+    dragState = null;
+  };
+
+  widget.addEventListener("pointerup", releaseDrag);
+  widget.addEventListener("pointercancel", releaseDrag);
+  widget.addEventListener("lostpointercapture", () => {
+    widget.classList.remove("dragging");
+    setDragSelectionState(false);
+    dragState = null;
+  });
+  widget.addEventListener("dragstart", (event) => {
+    event.preventDefault();
+  });
+
+  returnButton.addEventListener("click", () => {
+    const session = getActiveFocusSession();
+    if (!session) return;
+    if (session.type === "edit") {
+      enterEditingFocusMode?.();
+      return;
+    }
+    enterWritingFocusMode?.();
+  });
+
+  endButton.addEventListener("click", () => {
+    const session = getActiveFocusSession();
+    if (!session) return;
+    if (session.type === "edit") {
+      openEndEditSessionConfirmModal?.();
+      return;
+    }
+    openEndSessionConfirmModal?.();
+  });
+}
+
 async function initializeApp() {
   remoteSyncSuspended = true;
   try {
@@ -54,6 +274,8 @@ function render() {
     document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
   });
   bindImportExportModals();
+  bindFloatingFocusTimer();
+  syncFloatingFocusTimer();
   saveState();
 }
 
@@ -675,3 +897,13 @@ function escapeAttr(value) {
 }
 
 initializeApp();
+
+if (!floatingFocusTimerResizeBound) {
+  floatingFocusTimerResizeBound = true;
+  window.addEventListener("resize", () => {
+    if (floatingFocusTimerPosition) {
+      applyFloatingFocusTimerPosition(floatingFocusTimerPosition);
+    }
+    syncFloatingFocusTimer();
+  });
+}

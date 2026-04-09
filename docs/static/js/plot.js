@@ -326,7 +326,6 @@ function renderPlotDashboard(bundle) {
           <div class="section-head">
             <div>
               <h3>Story Areas</h3>
-              <p>Jump into any section at any time and keep each part of the story world evolving together.</p>
             </div>
           </div>
           <div class="plot-section-nav">
@@ -376,7 +375,6 @@ function renderPlotSectionTab(bundle, sectionId, activeSectionId) {
     <button class="plot-section-tab ${sectionId === activeSectionId ? "active" : ""}" data-plot-section="${sectionId}" type="button">
       <span class="plot-section-count">${formatNumber(count)}</span>
       <strong>${config.label}</strong>
-      <p>${config.navCopy}</p>
     </button>
   `;
 }

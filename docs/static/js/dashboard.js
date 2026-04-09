@@ -125,6 +125,7 @@ function bindDashboardEvents(bundle) {
   const closeSessionCompleteButton = document.getElementById("close-session-complete-btn");
   const startSessionButton = document.getElementById("start-session-btn");
   const endSessionButton = document.getElementById("end-session-btn");
+  const leaveFocusModeButton = document.getElementById("leave-writing-focus-mode-btn");
   const cancelEndSessionButton = document.getElementById("cancel-end-session-btn");
   const confirmEndSessionButton = document.getElementById("confirm-end-session-btn");
   const openGoalsViewButton = document.getElementById("open-goals-view-btn");
@@ -134,6 +135,10 @@ function bindDashboardEvents(bundle) {
 
   if (openSessionButton) {
     openSessionButton.onclick = () => {
+      if (getActiveFocusSession()) {
+        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
+        return;
+      }
       openSessionModal();
     };
   }
@@ -154,6 +159,12 @@ function bindDashboardEvents(bundle) {
   if (endSessionButton) {
     endSessionButton.onclick = () => {
       openEndSessionConfirmModal();
+    };
+  }
+
+  if (leaveFocusModeButton) {
+    leaveFocusModeButton.onclick = () => {
+      leaveWritingFocusMode();
     };
   }
 
@@ -637,8 +648,13 @@ function syncSessionDial(minutes = sessionDraftMinutes) {
 
 function bindSessionDial() {
   const dial = document.getElementById("session-dial");
-  if (!dial || dial.dataset.bound === "true") return;
+  const dialWrap = document.querySelector("#session-start-modal .session-dial-wrap");
+  if (!dial || !dialWrap || dial.dataset.bound === "true") return;
   dial.dataset.bound = "true";
+
+  let rafId = 0;
+  let pendingPointer = null;
+  let activePointerId = null;
 
   const updateFromPointer = (clientX, clientY) => {
     const bounds = dial.getBoundingClientRect();
@@ -648,29 +664,61 @@ function bindSessionDial() {
     const y = (clientY - bounds.top) * scaleY;
     const angle = Math.max(0, Math.min(Math.PI, Math.atan2(180 - y, x - 160)));
     const progress = (Math.PI - angle) / Math.PI;
-    const minutes = 15 + Math.round((progress * 105) / 5) * 5;
+    const rawMinutes = 15 + progress * 105;
+    const snappedMinutes = Math.round(rawMinutes / 2.5) * 2.5;
+    const minutes = Math.min(120, Math.max(15, Math.round(snappedMinutes / 5) * 5));
     syncSessionDial(minutes);
   };
 
-  const move = (event) => {
-    if (event.buttons === 0 && event.type === "pointermove") return;
-    updateFromPointer(event.clientX, event.clientY);
+  const scheduleUpdate = (clientX, clientY) => {
+    pendingPointer = { clientX, clientY };
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      if (!pendingPointer) return;
+      updateFromPointer(pendingPointer.clientX, pendingPointer.clientY);
+      pendingPointer = null;
+    });
   };
 
-  dial.addEventListener("pointerdown", (event) => {
-    dial.classList.add("dragging");
-    dial.setPointerCapture(event.pointerId);
-    updateFromPointer(event.clientX, event.clientY);
-  });
+  const startDrag = (event) => {
+    if (event.target.closest("button")) return;
+    activePointerId = event.pointerId;
+    dialWrap.classList.add("dragging");
+    dialWrap.setPointerCapture(event.pointerId);
+    scheduleUpdate(event.clientX, event.clientY);
+  };
 
-  dial.addEventListener("pointermove", move);
-  dial.addEventListener("pointerup", (event) => {
-    dial.classList.remove("dragging");
-    if (dial.hasPointerCapture(event.pointerId)) dial.releasePointerCapture(event.pointerId);
-  });
-  dial.addEventListener("pointercancel", (event) => {
-    dial.classList.remove("dragging");
-    if (dial.hasPointerCapture(event.pointerId)) dial.releasePointerCapture(event.pointerId);
+  const move = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    if (event.buttons === 0 && event.type === "pointermove") return;
+    scheduleUpdate(event.clientX, event.clientY);
+  };
+
+  const endDrag = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    activePointerId = null;
+    dialWrap.classList.remove("dragging");
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      pendingPointer = null;
+    }
+    if (dialWrap.hasPointerCapture(event.pointerId)) dialWrap.releasePointerCapture(event.pointerId);
+  };
+
+  dialWrap.addEventListener("pointerdown", startDrag);
+  dialWrap.addEventListener("pointermove", move);
+  dialWrap.addEventListener("pointerup", endDrag);
+  dialWrap.addEventListener("pointercancel", endDrag);
+  dialWrap.addEventListener("lostpointercapture", () => {
+    activePointerId = null;
+    dialWrap.classList.remove("dragging");
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      pendingPointer = null;
+    }
   });
 
   syncSessionDial(sessionDraftMinutes);
@@ -683,6 +731,30 @@ function stopWritingSessionTimer() {
   }
 }
 
+function enterWritingFocusMode() {
+  if (!activeWritingSession) return;
+  writingSessionInFocusMode = true;
+  document.getElementById("writing-session-screen")?.classList.remove("hidden");
+  syncFloatingFocusTimer?.();
+  updateWritingSessionScreen();
+}
+
+function leaveWritingFocusMode() {
+  if (!activeWritingSession) return;
+  writingSessionInFocusMode = false;
+  document.getElementById("writing-session-screen")?.classList.add("hidden");
+  syncFloatingFocusTimer?.();
+}
+
+let isWritingSessionMinimized = false;
+
+function setWritingSessionMinimized(minimized) {
+  const screen = document.getElementById("writing-session-screen");
+  isWritingSessionMinimized = Boolean(minimized);
+  screen?.classList.toggle("hidden", isWritingSessionMinimized);
+  syncFloatingFocusTimer?.();
+}
+
 function updateWritingSessionScreen() {
   const screen = document.getElementById("writing-session-screen");
   const clock = document.getElementById("writing-session-clock");
@@ -691,11 +763,14 @@ function updateWritingSessionScreen() {
   const remainingSeconds = (activeWritingSession.endsAt - Date.now()) / 1000;
   if (remainingSeconds <= 0) {
     clock.textContent = "00:00";
+    syncFloatingFocusTimer?.();
     finishActiveWritingSession(true);
     return;
   }
+  screen.classList.toggle("hidden", !writingSessionInFocusMode);
   clock.textContent = formatClock(remainingSeconds);
   copy.textContent = `${describeMinutes(activeWritingSession.plannedMinutes)} session in progress`;
+  syncFloatingFocusTimer?.();
 }
 
 function startWritingSession(startWordCount) {
@@ -705,9 +780,11 @@ function startWritingSession(startWordCount) {
     endsAt: Date.now() + (sessionDraftMinutes * 60000),
     startWordCount: number(startWordCount)
   };
+  writingSessionInFocusMode = true;
+  isWritingSessionMinimized = false;
   closeEndSessionConfirmModal();
   closeSessionModal();
-  document.getElementById("writing-session-screen").classList.remove("hidden");
+  setWritingSessionMinimized(false);
   updateWritingSessionScreen();
   stopWritingSessionTimer();
   sessionTimerHandle = setInterval(updateWritingSessionScreen, 250);
@@ -723,9 +800,12 @@ function finishActiveWritingSession(autoCompleted = false) {
     startWordCount: number(activeWritingSession.startWordCount)
   };
   activeWritingSession = null;
+  writingSessionInFocusMode = true;
   closeEndSessionConfirmModal();
   stopWritingSessionTimer();
+  isWritingSessionMinimized = false;
   document.getElementById("writing-session-screen").classList.add("hidden");
+  syncFloatingFocusTimer?.();
   openSessionCompleteModal();
 }
 

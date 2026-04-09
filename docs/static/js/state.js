@@ -148,6 +148,7 @@ let heatmapMonthOffset = 0;
 let selectedHeatmapDayKey = null;
 let sessionDraftMinutes = 25;
 let activeWritingSession = null;
+let writingSessionInFocusMode = true;
 let pendingCompletedSession = null;
 let sessionTimerHandle = null;
 let sessionsReturnView = "dashboard";
@@ -173,6 +174,7 @@ function createProjectBundle(title, targetWordCount, currentWordCount, deadline)
       projectStartDate: new Date().toISOString().slice(0, 10)
     },
     editing: createDefaultEditingState(),
+    plot: createDefaultPlotState(),
     goals: [],
     sessions: [],
     issues: [],
@@ -666,8 +668,8 @@ function getEditStats(bundle) {
 }
 
 function goalValueForSession(goalType, session) {
-  if (session.type === "edit") return 0;
   if (goalType === "write_minutes") return number(session.durationMinutes);
+  if (session.type === "edit") return 0;
   return number(session.wordsWritten);
 }
 
@@ -704,8 +706,8 @@ function applyGoalTypePreset(form, goalType) {
   if (goalType === "write_minutes") {
     targetLabel.textContent = "Daily target (minutes)";
     targetInput.value = 30;
-    titleInput.placeholder = "Example: Spend 30 minutes writing today";
-    titleInput.value = titleInput.value || "Spend 30 focused minutes writing";
+    titleInput.placeholder = "Example: Spend 60 minutes writing or editing today";
+    titleInput.value = titleInput.value || "Spend 60 focused minutes writing or editing";
     return;
   }
   targetLabel.textContent = "Daily target (words)";
@@ -724,7 +726,7 @@ function evaluateGoal(bundle, goal) {
 }
 
 function goalTypeContext(type) {
-  return type === "write_minutes" ? "WRITE TIME" : "WRITE";
+  return type === "write_minutes" ? "FOCUS TIME" : "WRITE";
 }
 
 function isGoalTrackedOnDate(goal, cursor) {
@@ -740,7 +742,7 @@ function buildGoalSnapshotForDate(bundle, goal, key) {
   const target = Math.max(1, number(goal.targetValue));
   return {
     id: goal.id,
-    title: goal.title || (goal.type === "write_minutes" ? "Spend time writing" : "Write words"),
+    title: goal.title || (goal.type === "write_minutes" ? "Spend time writing or editing" : "Write words"),
     type: goal.type,
     status: goal.status === "archived" ? "archived" : "active",
     value,

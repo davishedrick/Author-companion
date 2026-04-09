@@ -1,3 +1,9 @@
+let editSessionDraftMinutes = 45;
+let activeEditingSession = null;
+let editingSessionInFocusMode = true;
+let pendingCompletedEditSession = null;
+let editSessionTimerHandle = null;
+
 function renderEditDashboard(bundle) {
   const view = document.getElementById("view-edit");
   if (!bundle) {
@@ -52,7 +58,7 @@ function renderEditDashboard(bundle) {
               <span class="pill">${formatHours(editStats.minutesToday)} edited today</span>
             </div>
           </div>
-          <button class="primary-btn writing-launch-cta" id="open-edit-session-modal-btn" type="button">Log editing session</button>
+          <button class="primary-btn writing-launch-cta" id="open-edit-session-modal-btn" type="button">Start editing session</button>
         </div>
       </section>
 
@@ -210,6 +216,7 @@ function renderEditDashboard(bundle) {
 
 function bindEditDashboardEvents(bundle) {
   const passModal = document.getElementById("edit-pass-modal");
+  const editSessionStartModal = document.getElementById("edit-session-start-modal");
   const editSessionModal = document.getElementById("edit-session-modal");
   const issueModal = document.getElementById("issue-modal");
   const passForm = document.getElementById("edit-pass-form");
@@ -217,6 +224,12 @@ function bindEditDashboardEvents(bundle) {
   const issueForm = document.getElementById("issue-form");
   const openPassButton = document.getElementById("open-edit-pass-btn");
   const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
+  const closeEditSessionStartButton = document.getElementById("close-edit-session-start-btn");
+  const startEditSessionButton = document.getElementById("start-edit-session-btn");
+  const endEditSessionButton = document.getElementById("end-edit-session-btn");
+  const leaveEditFocusModeButton = document.getElementById("leave-edit-focus-mode-btn");
+  const cancelEndEditSessionButton = document.getElementById("cancel-end-edit-session-btn");
+  const confirmEndEditSessionButton = document.getElementById("confirm-end-edit-session-btn");
   const openIssueButton = document.getElementById("open-issue-modal-btn");
   const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
   const closePassButton = document.getElementById("close-edit-pass-btn");
@@ -231,7 +244,42 @@ function bindEditDashboardEvents(bundle) {
 
   if (openEditSessionButton) {
     openEditSessionButton.onclick = () => {
-      openEditSessionModal();
+      if (getActiveFocusSession()) {
+        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
+        return;
+      }
+      openEditSessionStartModal();
+    };
+  }
+
+  if (startEditSessionButton) {
+    startEditSessionButton.onclick = () => {
+      startEditingSession();
+    };
+  }
+
+  if (endEditSessionButton) {
+    endEditSessionButton.onclick = () => {
+      openEndEditSessionConfirmModal();
+    };
+  }
+
+  if (leaveEditFocusModeButton) {
+    leaveEditFocusModeButton.onclick = () => {
+      leaveEditingFocusMode();
+    };
+  }
+
+  if (cancelEndEditSessionButton) {
+    cancelEndEditSessionButton.onclick = () => {
+      closeEndEditSessionConfirmModal();
+    };
+  }
+
+  if (confirmEndEditSessionButton) {
+    confirmEndEditSessionButton.onclick = () => {
+      closeEndEditSessionConfirmModal();
+      finishActiveEditingSession(false);
     };
   }
 
@@ -261,6 +309,12 @@ function bindEditDashboardEvents(bundle) {
     };
   }
 
+  if (closeEditSessionStartButton) {
+    closeEditSessionStartButton.onclick = () => {
+      closeEditSessionStartModal();
+    };
+  }
+
   if (closeIssueButton) {
     closeIssueButton.onclick = () => {
       closeIssueModal();
@@ -276,6 +330,19 @@ function bindEditDashboardEvents(bundle) {
   if (editSessionModal) {
     editSessionModal.onclick = (event) => {
       if (event.target === editSessionModal) closeEditSessionModal();
+    };
+  }
+
+  if (editSessionStartModal) {
+    editSessionStartModal.onclick = (event) => {
+      if (event.target === editSessionStartModal) closeEditSessionStartModal();
+    };
+  }
+
+  const endEditSessionConfirmModal = document.getElementById("end-edit-session-confirm-modal");
+  if (endEditSessionConfirmModal) {
+    endEditSessionConfirmModal.onclick = (event) => {
+      if (event.target === endEditSessionConfirmModal) closeEndEditSessionConfirmModal();
     };
   }
 
@@ -407,6 +474,7 @@ function bindEditDashboardEvents(bundle) {
   });
 
   bindSessionActions();
+  bindEditSessionDial();
 }
 
 function openEditPassModal() {
@@ -451,10 +519,12 @@ function openEditSessionModal(sessionId = null) {
     form.elements.sessionNotes.value = existingSession.notes || "";
     submit.textContent = "Save changes";
   } else {
-    title.textContent = "Log Editing Session";
-    copy.textContent = "Capture time spent revising, what section you touched, and anything you want to remember.";
-    form.elements.sessionDate.value = toInputDate(new Date().toISOString());
-    form.elements.durationMinutes.value = "45";
+    title.textContent = "Editing Session Complete";
+    copy.textContent = pendingCompletedEditSession
+      ? `You edited for ${describeMinutes(pendingCompletedEditSession.durationMinutes)}. Add what you worked on before you move on.`
+      : "Capture what you worked on, how much you edited, and anything you want to remember.";
+    form.elements.sessionDate.value = toInputDate(pendingCompletedEditSession?.endedAt || new Date().toISOString());
+    form.elements.durationMinutes.value = String(Math.max(1, number(pendingCompletedEditSession?.durationMinutes || editSessionDraftMinutes)));
     form.elements.sectionLabel.value = "";
     form.elements.wordsEdited.value = "0";
     form.elements.sessionNotes.value = "";
@@ -469,6 +539,204 @@ function closeEditSessionModal() {
   const form = document.getElementById("edit-session-form");
   form.reset();
   editingEditSessionId = null;
+  pendingCompletedEditSession = null;
+  modal.classList.add("hidden");
+}
+
+function openEditSessionStartModal() {
+  const modal = document.getElementById("edit-session-start-modal");
+  const title = document.getElementById("edit-session-start-title");
+  const copy = document.getElementById("edit-session-start-copy");
+  title.textContent = "Start Editing Session";
+  copy.textContent = "Choose how long you want to edit, then begin.";
+  syncEditSessionDial(editSessionDraftMinutes);
+  modal.classList.remove("hidden");
+}
+
+function closeEditSessionStartModal() {
+  const modal = document.getElementById("edit-session-start-modal");
+  modal.classList.add("hidden");
+}
+
+function syncEditSessionDial(minutes = editSessionDraftMinutes) {
+  const dialValue = document.getElementById("edit-session-dial-value");
+  const dialProgress = document.getElementById("edit-session-dial-progress");
+  const dialHandle = document.getElementById("edit-session-dial-handle");
+  const dialCaption = document.getElementById("edit-session-dial-caption");
+  if (!dialValue || !dialProgress || !dialHandle || !dialCaption) return;
+  const clampedMinutes = Math.min(120, Math.max(15, Math.round(number(minutes) / 5) * 5 || 45));
+  editSessionDraftMinutes = clampedMinutes;
+  const progress = (clampedMinutes - 15) / 105;
+  const angle = Math.PI - (progress * Math.PI);
+  const cx = 160;
+  const cy = 180;
+  const radius = 120;
+  const x = cx + Math.cos(angle) * radius;
+  const y = cy - Math.sin(angle) * radius;
+  dialValue.textContent = String(clampedMinutes);
+  dialProgress.setAttribute("stroke-dasharray", `${progress * 100} 100`);
+  dialHandle.setAttribute("cx", x.toFixed(2));
+  dialHandle.setAttribute("cy", y.toFixed(2));
+  dialCaption.textContent = `${describeMinutes(clampedMinutes)} of focused editing time.`;
+}
+
+function bindEditSessionDial() {
+  const dial = document.getElementById("edit-session-dial");
+  const dialWrap = document.querySelector("#edit-session-start-modal .session-dial-wrap");
+  if (!dial || !dialWrap || dial.dataset.bound === "true") return;
+  dial.dataset.bound = "true";
+
+  let rafId = 0;
+  let pendingPointer = null;
+  let activePointerId = null;
+
+  const updateFromPointer = (clientX, clientY) => {
+    const bounds = dial.getBoundingClientRect();
+    const scaleX = 320 / bounds.width;
+    const scaleY = 220 / bounds.height;
+    const x = (clientX - bounds.left) * scaleX;
+    const y = (clientY - bounds.top) * scaleY;
+    const angle = Math.max(0, Math.min(Math.PI, Math.atan2(180 - y, x - 160)));
+    const progress = (Math.PI - angle) / Math.PI;
+    const rawMinutes = 15 + progress * 105;
+    const snappedMinutes = Math.round(rawMinutes / 2.5) * 2.5;
+    const minutes = Math.min(120, Math.max(15, Math.round(snappedMinutes / 5) * 5));
+    syncEditSessionDial(minutes);
+  };
+
+  const scheduleUpdate = (clientX, clientY) => {
+    pendingPointer = { clientX, clientY };
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      if (!pendingPointer) return;
+      updateFromPointer(pendingPointer.clientX, pendingPointer.clientY);
+      pendingPointer = null;
+    });
+  };
+
+  const startDrag = (event) => {
+    if (event.target.closest("button")) return;
+    activePointerId = event.pointerId;
+    dial.classList.add("dragging");
+    dialWrap.setPointerCapture(event.pointerId);
+    scheduleUpdate(event.clientX, event.clientY);
+  };
+
+  const move = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    if (event.buttons === 0 && event.type === "pointermove") return;
+    scheduleUpdate(event.clientX, event.clientY);
+  };
+
+  const endDrag = (event) => {
+    if (activePointerId !== event.pointerId) return;
+    activePointerId = null;
+    dial.classList.remove("dragging");
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      pendingPointer = null;
+    }
+    if (dialWrap.hasPointerCapture(event.pointerId)) dialWrap.releasePointerCapture(event.pointerId);
+  };
+
+  dialWrap.addEventListener("pointerdown", startDrag);
+  dialWrap.addEventListener("pointermove", move);
+  dialWrap.addEventListener("pointerup", endDrag);
+  dialWrap.addEventListener("pointercancel", endDrag);
+  dialWrap.addEventListener("lostpointercapture", () => {
+    activePointerId = null;
+    dial.classList.remove("dragging");
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+      pendingPointer = null;
+    }
+  });
+
+  syncEditSessionDial(editSessionDraftMinutes);
+}
+
+function stopEditingSessionTimer() {
+  if (editSessionTimerHandle) {
+    clearInterval(editSessionTimerHandle);
+    editSessionTimerHandle = null;
+  }
+}
+
+function enterEditingFocusMode() {
+  if (!activeEditingSession) return;
+  editingSessionInFocusMode = true;
+  document.getElementById("editing-session-screen")?.classList.remove("hidden");
+  syncFloatingFocusTimer?.();
+  updateEditingSessionScreen();
+}
+
+function leaveEditingFocusMode() {
+  if (!activeEditingSession) return;
+  editingSessionInFocusMode = false;
+  document.getElementById("editing-session-screen")?.classList.add("hidden");
+  syncFloatingFocusTimer?.();
+}
+
+function updateEditingSessionScreen() {
+  const screen = document.getElementById("editing-session-screen");
+  const clock = document.getElementById("editing-session-clock");
+  const copy = document.getElementById("editing-session-copy");
+  if (!screen || !clock || !copy || !activeEditingSession) return;
+  const remainingSeconds = (activeEditingSession.endsAt - Date.now()) / 1000;
+  if (remainingSeconds <= 0) {
+    clock.textContent = "00:00";
+    syncFloatingFocusTimer?.();
+    finishActiveEditingSession(true);
+    return;
+  }
+  screen.classList.toggle("hidden", !editingSessionInFocusMode);
+  clock.textContent = formatClock(remainingSeconds);
+  copy.textContent = `${describeMinutes(activeEditingSession.plannedMinutes)} editing session in progress`;
+  syncFloatingFocusTimer?.();
+}
+
+function startEditingSession() {
+  activeEditingSession = {
+    startedAt: Date.now(),
+    plannedMinutes: editSessionDraftMinutes,
+    endsAt: Date.now() + (editSessionDraftMinutes * 60000)
+  };
+  editingSessionInFocusMode = true;
+  closeEndEditSessionConfirmModal();
+  closeEditSessionStartModal();
+  document.getElementById("editing-session-screen").classList.remove("hidden");
+  updateEditingSessionScreen();
+  stopEditingSessionTimer();
+  editSessionTimerHandle = setInterval(updateEditingSessionScreen, 250);
+}
+
+function finishActiveEditingSession(autoCompleted = false) {
+  if (!activeEditingSession) return;
+  const endedAt = Date.now();
+  const elapsedMinutes = Math.max(1, Math.round((endedAt - activeEditingSession.startedAt) / 60000));
+  pendingCompletedEditSession = {
+    durationMinutes: autoCompleted ? activeEditingSession.plannedMinutes : elapsedMinutes,
+    endedAt: new Date(endedAt).toISOString()
+  };
+  activeEditingSession = null;
+  editingSessionInFocusMode = true;
+  closeEndEditSessionConfirmModal();
+  stopEditingSessionTimer();
+  document.getElementById("editing-session-screen").classList.add("hidden");
+  syncFloatingFocusTimer?.();
+  openEditSessionModal();
+}
+
+function openEndEditSessionConfirmModal() {
+  const modal = document.getElementById("end-edit-session-confirm-modal");
+  modal.classList.remove("hidden");
+}
+
+function closeEndEditSessionConfirmModal() {
+  const modal = document.getElementById("end-edit-session-confirm-modal");
   modal.classList.add("hidden");
 }
 
