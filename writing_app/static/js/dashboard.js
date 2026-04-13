@@ -12,14 +12,9 @@ function renderDashboard(bundle) {
     : stats.momentum === "Slowing"
       ? { icon: "↓", label: "Declining", className: "down", detail: `Pace is slipping. Finish forecast ${completionLabel}` }
       : { icon: "→", label: "Steady", className: "flat", detail: `Projected finish ${completionLabel}` };
-  const reachedMilestones = milestoneTargets.filter((target) => number(bundle.project.currentWordCount) >= target);
-  const nextMilestone = milestoneTargets.find((target) => number(bundle.project.currentWordCount) < target);
-  const milestoneSummary = reachedMilestones.length
-    ? `Milestones reached: ${reachedMilestones.map((target) => formatNumber(target)).join(", ")} words.`
-    : "No milestones reached yet.";
-  const milestoneSubtext = nextMilestone
-    ? `${milestoneSummary} Next milestone: ${formatNumber(nextMilestone)} words.`
-    : `${milestoneSummary} All milestone markers cleared.`;
+  const targetWordCount = Math.max(1, number(bundle.project.targetWordCount));
+  const currentWordCount = number(bundle.project.currentWordCount);
+  const completionCheckpoints = getProjectCompletionCheckpoints(targetWordCount);
   const todayKey = new Date().toISOString().slice(0, 10);
   const todaySessions = [...getWriteSessions(bundle)]
     .filter((session) => dateKey(session.date) === todayKey)
@@ -59,18 +54,32 @@ function renderDashboard(bundle) {
 
             <div class="progress-block">
               <div class="progress-label-row">
-                <strong>Book completion</strong>
+                <span
+                  class="progress-info-icon"
+                  aria-label="manuscript word count"
+                  data-tooltip="manuscript word count"
+                  tabindex="0"
+                >?</span>
                 <span>${stats.totalProgress.toFixed(1)}%</span>
               </div>
-              <div class="progress-rail">
+              <div class="progress-rail progress-rail-checkpoints" aria-label="Book completion progress">
                 <div class="progress-fill" style="width: ${stats.totalProgress}%"></div>
+                ${completionCheckpoints.map((checkpoint, index) => `
+                  <span
+                    class="progress-checkpoint ${currentWordCount >= checkpoint ? "reached" : ""} ${index === 0 ? "edge-start" : ""} ${index === completionCheckpoints.length - 1 ? "edge-end" : ""}"
+                    style="left: ${((checkpoint / targetWordCount) * 100).toFixed(3)}%;"
+                    title="${formatNumber(checkpoint)} words"
+                    aria-hidden="true"
+                  >
+                    <span class="progress-checkpoint-label">${formatCompactCheckpoint(checkpoint)}</span>
+                  </span>
+                `).join("")}
               </div>
-              <p class="small-copy" style="margin-top: 10px;">${milestoneSubtext}</p>
             </div>
 
-            <div class="signal-band">
-              <div class="signal-card">
-                <div class="signal-icon">${momentumState.icon}</div>
+          <div class="signal-band">
+            <div class="signal-card">
+              <div class="signal-icon">${momentumState.icon}</div>
                 <div class="signal-copy">
                   <strong>Momentum</strong>
                   <div class="momentum-status ${momentumState.className}">${momentumState.label}</div>
@@ -83,18 +92,10 @@ function renderDashboard(bundle) {
                   <strong>Streak</strong>
                   <span>${formatNumber(stats.currentStreak)} days</span>
                   <p>Longest streak ${formatNumber(stats.longestStreak)} days</p>
-                </div>
               </div>
             </div>
           </div>
-
-          <div class="writing-workspace-note">
-            <div>
-              <h3 style="margin-bottom: 4px;">Goals moved into the shared layer</h3>
-              <p>Use the project bar at the top for goal planning, archives, and the progress heatmap. This dashboard stays focused on drafting momentum.</p>
-            </div>
-            <button class="ghost-btn" id="open-goals-view-btn" type="button">Open Goals</button>
-          </div>
+        </div>
         </section>
 
         <section class="card">
@@ -116,6 +117,32 @@ function renderDashboard(bundle) {
   bindDashboardEvents(bundle);
 }
 
+function getProjectCompletionCheckpoints(targetWordCount) {
+  const target = Math.max(1, number(targetWordCount));
+  const desiredSegments = target <= 30000 ? 4 : target <= 90000 ? 5 : 6;
+  const candidateSteps = [500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+  const fallbackStep = Math.max(500, Math.round(target / desiredSegments));
+  const step = candidateSteps.reduce((best, candidate) => {
+    const candidateSegments = target / candidate;
+    const bestSegments = target / best;
+    const candidateScore = Math.abs(candidateSegments - desiredSegments);
+    const bestScore = Math.abs(bestSegments - desiredSegments);
+    return candidateScore < bestScore ? candidate : best;
+  }, fallbackStep);
+  const checkpoints = [];
+  for (let checkpoint = step; checkpoint < target; checkpoint += step) {
+    checkpoints.push(checkpoint);
+  }
+  return checkpoints;
+}
+
+function formatCompactCheckpoint(value) {
+  const amount = Math.max(0, number(value));
+  if (amount >= 1000000) return `${Math.round(amount / 100000) / 10}m`;
+  if (amount >= 1000) return `${Math.round(amount / 100) / 10}k`.replace(".0k", "k");
+  return String(Math.round(amount));
+}
+
 function bindDashboardEvents(bundle) {
   const sessionModal = document.getElementById("session-modal");
   const sessionCompleteModal = document.getElementById("session-complete-modal");
@@ -128,7 +155,6 @@ function bindDashboardEvents(bundle) {
   const leaveFocusModeButton = document.getElementById("leave-writing-focus-mode-btn");
   const cancelEndSessionButton = document.getElementById("cancel-end-session-btn");
   const confirmEndSessionButton = document.getElementById("confirm-end-session-btn");
-  const openGoalsViewButton = document.getElementById("open-goals-view-btn");
   const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
   const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
   const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
@@ -178,13 +204,6 @@ function bindDashboardEvents(bundle) {
     confirmEndSessionButton.onclick = () => {
       closeEndSessionConfirmModal();
       finishActiveWritingSession(false);
-    };
-  }
-
-  if (openGoalsViewButton) {
-    openGoalsViewButton.onclick = () => {
-      activeView = "goals";
-      render();
     };
   }
 
@@ -399,10 +418,18 @@ function bindGoalsDashboardEvents(bundle) {
     };
   }
 
-  if (goalForm?.elements?.type && goalForm.dataset.goalTypeBound !== "true") {
+  if (goalForm && goalForm.dataset.goalTypeBound !== "true") {
     goalForm.dataset.goalTypeBound = "true";
-    goalForm.elements.type.addEventListener("change", (event) => {
+    goalForm.elements.type?.addEventListener("change", (event) => {
       applyGoalTypePreset(goalForm, event.target.value);
+      syncGoalFormState(goalForm);
+    });
+    goalForm.elements.scheduleMode?.addEventListener("change", () => {
+      syncGoalFormState(goalForm);
+      applyGoalTypePreset(goalForm, goalForm.elements.type.value);
+    });
+    goalForm.elements.trackingMode?.addEventListener("change", () => {
+      syncGoalFormState(goalForm);
     });
   }
 
@@ -418,14 +445,45 @@ function bindGoalsDashboardEvents(bundle) {
     goalForm.onsubmit = (event) => {
       event.preventDefault();
       const formData = new FormData(event.target);
+      const trackingMode = formData.get("trackingMode") === "date_range" ? "date_range" : "ongoing";
+      const scheduleMode = formData.get("scheduleMode") === "custom_days" ? "custom_days" : "daily";
+      const startDate = String(formData.get("startDate") || toInputDate(new Date().toISOString()));
+      const endDate = trackingMode === "date_range" ? String(formData.get("endDate") || "") : "";
+      const targetValue = Math.max(1, number(formData.get("targetValue")));
+      const dayTargets = GOAL_DAY_KEYS.reduce((targets, dayKey) => {
+        targets[dayKey] = Math.max(0, number(formData.get(`target_${dayKey}`)));
+        return targets;
+      }, {});
+
+      if (trackingMode === "date_range") {
+        if (!endDate) {
+          goalForm.elements.endDate.reportValidity();
+          return;
+        }
+        if (new Date(endDate) < new Date(startDate)) {
+          showToast("Goal dates need a tweak", "Choose an end date that comes after the start date.");
+          return;
+        }
+      }
+
+      if (scheduleMode === "custom_days" && !Object.values(dayTargets).some((value) => value > 0)) {
+        showToast("Add at least one target day", "Custom schedules need one or more days with a target greater than zero.");
+        return;
+      }
+
       updateCurrentBundle((projectBundle) => ({
         ...projectBundle,
         goals: [{
           id: createId(),
           type: formData.get("type"),
           title: formData.get("title").trim(),
-          targetValue: number(formData.get("targetValue")),
-          createdAt: new Date().toISOString()
+          targetValue: scheduleMode === "custom_days" ? Math.max(...Object.values(dayTargets)) || targetValue : targetValue,
+          createdAt: new Date().toISOString(),
+          trackingMode,
+          startDate,
+          endDate,
+          scheduleMode,
+          dayTargets
         }, ...projectBundle.goals]
       }));
       closeGoalModal();
@@ -816,9 +874,14 @@ function openGoalModal() {
   const copy = document.getElementById("goal-modal-copy");
   form.reset();
   form.elements.type.value = "write_words";
+  form.elements.trackingMode.value = "ongoing";
+  form.elements.scheduleMode.value = "daily";
+  form.elements.startDate.value = toInputDate(new Date().toISOString());
+  form.elements.endDate.value = "";
   applyGoalTypePreset(form, "write_words");
+  syncGoalFormState(form);
   title.textContent = "Create Goal";
-  copy.textContent = "Set a simple daily target you can review quickly from the goals dashboard.";
+  copy.textContent = "Set a goal that can run for a custom stretch of time and change by day when your writing rhythm does.";
   modal.classList.remove("hidden");
 }
 
@@ -826,7 +889,33 @@ function closeGoalModal() {
   const modal = document.getElementById("goal-modal");
   const form = document.getElementById("goal-form");
   form.reset();
+  syncGoalFormState(form);
   modal.classList.add("hidden");
+}
+
+function syncGoalFormState(form) {
+  if (!form?.elements) return;
+  const trackingMode = form.elements.trackingMode?.value === "date_range" ? "date_range" : "ongoing";
+  const scheduleMode = form.elements.scheduleMode?.value === "custom_days" ? "custom_days" : "daily";
+  const endDateField = document.getElementById("goal-end-date-field");
+  const customScheduleFields = document.getElementById("goal-custom-schedule-fields");
+  const sharedTargetField = document.getElementById("goal-target-field");
+
+  if (endDateField) {
+    endDateField.classList.toggle("hidden", trackingMode !== "date_range");
+  }
+  if (form.elements.endDate) {
+    form.elements.endDate.required = trackingMode === "date_range";
+  }
+  if (customScheduleFields) {
+    customScheduleFields.classList.toggle("hidden", scheduleMode !== "custom_days");
+  }
+  if (sharedTargetField) {
+    sharedTargetField.classList.toggle("hidden", scheduleMode === "custom_days");
+  }
+  if (form.elements.targetValue) {
+    form.elements.targetValue.required = scheduleMode !== "custom_days";
+  }
 }
 
 function bindSessionActions() {

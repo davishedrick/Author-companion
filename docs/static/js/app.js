@@ -14,6 +14,7 @@ function persistAndRender() {
 let floatingFocusTimerDock = "top-right";
 let floatingFocusTimerResizeBound = false;
 let floatingFocusTimerPosition = null;
+let sidebarCollapseResizeBound = false;
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -245,6 +246,64 @@ async function initializeApp() {
   remoteSyncSuspended = false;
 }
 
+function applyThemePreference() {
+  const themePreference = state.themePreference === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = themePreference;
+}
+
+function canCollapseSidebar() {
+  return window.innerWidth > 1080 && isProjectWorkspaceView(activeView);
+}
+
+function getSidebarCollapseIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m14.5 6-6 6 6 6" />
+    </svg>
+  `;
+}
+
+function applySidebarCollapseState() {
+  const appShell = document.querySelector(".app-shell");
+  const collapseButton = document.getElementById("sidebar-collapse-btn");
+  if (!appShell) return;
+  const shouldCollapse = canCollapseSidebar() && Boolean(state.sidebarCollapsed) && !appShell.classList.contains("no-sidebar");
+  appShell.classList.toggle("sidebar-collapsed", shouldCollapse);
+  if (collapseButton) {
+    collapseButton.classList.toggle("is-collapsed", shouldCollapse);
+    collapseButton.setAttribute("aria-label", shouldCollapse ? "Expand sidebar" : "Collapse sidebar");
+    collapseButton.setAttribute("title", shouldCollapse ? "Expand sidebar" : "Collapse sidebar");
+  }
+  applyFloatingFocusTimerPosition();
+}
+
+function bindSidebarCollapseToggle() {
+  const collapseButton = document.getElementById("sidebar-collapse-btn");
+  if (collapseButton && collapseButton.dataset.bound !== "true") {
+    collapseButton.dataset.bound = "true";
+    collapseButton.addEventListener("click", () => {
+      state.sidebarCollapsed = !state.sidebarCollapsed;
+      applySidebarCollapseState();
+      saveState();
+    });
+  }
+  if (!sidebarCollapseResizeBound) {
+    window.addEventListener("resize", () => {
+      applySidebarCollapseState();
+    });
+    sidebarCollapseResizeBound = true;
+  }
+}
+
+function syncThemePreferenceControls() {
+  const themeInputs = document.querySelectorAll("input[name='themePreference']");
+  if (!themeInputs.length) return;
+  const themePreference = state.themePreference === "dark" ? "dark" : "light";
+  themeInputs.forEach((input) => {
+    input.checked = input.value === themePreference;
+  });
+}
+
 function render() {
   const bundle = currentBundle();
   if (!bundle && !["dashboard", "plot", "edit", "goals", "projects", "create-project"].includes(activeView)) {
@@ -253,6 +312,7 @@ function render() {
   if (!bundle && activeView === "projects") {
     activeView = "dashboard";
   }
+  applyThemePreference();
   const appShell = document.querySelector(".app-shell");
   appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
   renderBrand(bundle);
@@ -274,6 +334,8 @@ function render() {
     document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
   });
   bindImportExportModals();
+  bindSidebarCollapseToggle();
+  applySidebarCollapseState();
   bindFloatingFocusTimer();
   syncFloatingFocusTimer();
   saveState();
@@ -281,12 +343,57 @@ function render() {
 
 function renderBrand(bundle) {
   document.getElementById("brand").innerHTML = bundle && isProjectWorkspaceView(activeView) ? `
-    <h1>The Author Engine</h1>
-    <p>${escapeHtml(bundle.project.bookTitle)}. Make progress visible, measurable, and satisfying.</p>
+    <div class="brand-head">
+      <div class="brand-copy">
+        <h1>The Author Engine</h1>
+        <p>${escapeHtml(bundle.project.bookTitle)}</p>
+      </div>
+      <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
+        ${getSidebarCollapseIcon()}
+      </button>
+    </div>
   ` : `
-    <h1>The Author Engine</h1>
-    <p>Build momentum toward finishing your book every single day.</p>
+    <div class="brand-head">
+      <div class="brand-copy">
+        <h1>The Author Engine</h1>
+        <p>Write. Track. Finish.</p>
+      </div>
+    </div>
   `;
+}
+
+function getNavIcon(view) {
+  const icons = {
+    plot: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 18h14" />
+        <path d="M7 15l3-3 3 2 4-5" />
+        <path d="M16 7h1.5V8.5" />
+      </svg>
+    `,
+    dashboard: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1.5" />
+        <rect x="14" y="4" width="6" height="6" rx="1.5" />
+        <rect x="4" y="14" width="6" height="6" rx="1.5" />
+        <rect x="14" y="14" width="6" height="6" rx="1.5" />
+      </svg>
+    `,
+    edit: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20h5l9.5-9.5a2.1 2.1 0 0 0-5-5L4 15v5Z" />
+        <path d="m13 6 5 5" />
+      </svg>
+    `,
+    goals: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="7.5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="12" cy="12" r="1.5" />
+      </svg>
+    `,
+  };
+  return icons[view] || "";
 }
 
 function renderNav(bundle) {
@@ -302,8 +409,9 @@ function renderNav(bundle) {
     goals: "Goals",
   };
   nav.innerHTML = availableViews.map((view) => `
-    <button data-view="${view}" class="${highlightedView === view ? "active" : ""}">
-      ${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}
+    <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}" title="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
+      <span class="nav-icon">${getNavIcon(view)}</span>
+      <span class="nav-label">${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}</span>
     </button>
   `).join("");
 
@@ -316,6 +424,33 @@ function renderNav(bundle) {
   });
 }
 
+function getSidebarFooterIcon(action) {
+  const icons = {
+    projects: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1.5" />
+        <rect x="14" y="4" width="6" height="6" rx="1.5" />
+        <rect x="4" y="14" width="6" height="6" rx="1.5" />
+        <rect x="14" y="14" width="6" height="6" rx="1.5" />
+      </svg>
+    `,
+    settings: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 4.5h1.3l.5 2.1a5.8 5.8 0 0 1 1.7.7l1.8-1.2 1 1-1.2 1.8a5.8 5.8 0 0 1 .7 1.7l2.1.5v1.3l-2.1.5a5.8 5.8 0 0 1-.7 1.7l1.2 1.8-1 1-1.8-1.2a5.8 5.8 0 0 1-1.7.7l-.5 2.1H12.1l-.5-2.1a5.8 5.8 0 0 1-1.7-.7l-1.8 1.2-1-1 1.2-1.8a5.8 5.8 0 0 1-.7-1.7l-2.1-.5v-1.3l2.1-.5a5.8 5.8 0 0 1 .7-1.7L7.1 7.1l1-1 1.8 1.2a5.8 5.8 0 0 1 1.7-.7Z" />
+      </svg>
+    `,
+    logout: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 5H6.8A1.8 1.8 0 0 0 5 6.8v10.4A1.8 1.8 0 0 0 6.8 19H10" />
+        <path d="M14 8.5 18 12l-4 3.5" />
+        <path d="M9 12h9" />
+      </svg>
+    `,
+  };
+  return icons[action] || "";
+}
+
 function renderSidebarFooter(bundle) {
   const footer = document.getElementById("sidebar-footer");
   if (!isProjectWorkspaceView(activeView)) {
@@ -324,12 +459,22 @@ function renderSidebarFooter(bundle) {
   }
   footer.innerHTML = `
     <div class="sidebar-footer-actions">
-      ${bundle ? `<button class="ghost-btn sidebar-projects-btn" id="view-all-projects-btn" type="button">View all projects</button>` : ""}
-      <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button">
-        <span aria-hidden="true">⚙</span>
-        <span>Settings</span>
+      ${bundle ? `
+        <button class="sidebar-text-btn" id="view-all-projects-btn" type="button" aria-label="View all projects" title="View all projects">
+          <span class="sidebar-action-icon">${getSidebarFooterIcon("projects")}</span>
+          <span class="sidebar-action-label">View all projects</span>
+        </button>
+      ` : ""}
+      <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button" aria-label="Settings" title="Settings">
+        <span class="sidebar-action-icon">${getSidebarFooterIcon("settings")}</span>
+        <span class="sidebar-action-label">Settings</span>
       </button>
-      ${persistenceMode === "remote" ? `<a class="sidebar-text-btn" id="logout-link" href="/logout">Log out</a>` : ""}
+      ${persistenceMode === "remote" ? `
+        <a class="sidebar-text-btn" id="logout-link" href="/logout" aria-label="Log out" title="Log out">
+          <span class="sidebar-action-icon">${getSidebarFooterIcon("logout")}</span>
+          <span class="sidebar-action-label">Log out</span>
+        </a>
+      ` : ""}
     </div>
   `;
   if (bundle) {
@@ -340,6 +485,7 @@ function renderSidebarFooter(bundle) {
     });
   }
   document.getElementById("open-settings-modal-btn").addEventListener("click", () => {
+    syncThemePreferenceControls();
     openSettingsModal();
   });
 }
@@ -352,6 +498,7 @@ function bindImportExportModals() {
   const exportEditButton = document.getElementById("export-edit-modal-btn");
   const exportAllButton = document.getElementById("export-all-modal-btn");
   const importProjectCsvInput = document.getElementById("import-project-csv-input");
+  const themeInputs = document.querySelectorAll("input[name='themePreference']");
   const hasBundle = Boolean(currentBundle());
 
   if (closeSettingsButton) {
@@ -405,6 +552,18 @@ function bindImportExportModals() {
       if (event.target === settingsModal) closeSettingsModal();
     };
   }
+
+  themeInputs.forEach((input) => {
+    if (input.dataset.bound === "true") return;
+    input.dataset.bound = "true";
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      state.themePreference = input.value === "dark" ? "dark" : "light";
+      applyThemePreference();
+      saveState();
+    });
+  });
+  syncThemePreferenceControls();
 }
 
 function renderProjects() {
@@ -708,8 +867,10 @@ function renderGoalCard(goal) {
       </div>
       <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
       <div class="meta-line">
-        <span class="pill">${goalTypeContext(goal.type)} (${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)})</span>
+        <span class="pill">${goalTypeContext(goal.type)} ${goal.trackedToday ? `(${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValueToday)} ${goalUnit(goal.type)})` : "(Not scheduled today)"}</span>
       </div>
+      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal))}</p>
+      <p class="small-copy">${escapeHtml(goalWindowSummary(goal))}</p>
     </div>
   `;
 }
@@ -726,8 +887,10 @@ function renderArchivedGoalCard(goal) {
         </div>
       </div>
       <div class="meta-line">
-        <span class="pill">${goalTypeContext(goal.type)} target ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)}</span>
+        <span class="pill">${goalTypeContext(goal.type)} target plan</span>
       </div>
+      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal))}</p>
+      <p class="small-copy">${escapeHtml(goalWindowSummary(goal))}</p>
       <p class="small-copy" style="margin-top: 10px;">This goal is no longer active, but days that were tracked against it will keep showing the right target in the heatmap.</p>
     </div>
   `;

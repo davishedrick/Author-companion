@@ -2,6 +2,16 @@ const STORAGE_KEY = "author-engine-mvp";
 const STATE_API_ENDPOINT = "/api/state";
 const DEFAULT_VIEW = "dashboard";
 const PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
+const GOAL_DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const GOAL_DAY_LABELS = {
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+  sunday: "Sun"
+};
 const PRIMARY_WORKSPACE_VIEWS = ["plot", "dashboard", "edit"];
 const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals"];
 const views = ["projects", "create-project", "dashboard", "plot", "edit", "goals", "sessions", "edit-project"];
@@ -19,6 +29,17 @@ const requiredImportColumns = [
   "goal_title",
   "goal_target_value",
   "goal_created_at",
+  "goal_tracking_mode",
+  "goal_start_date",
+  "goal_end_date",
+  "goal_schedule_mode",
+  "goal_monday_target",
+  "goal_tuesday_target",
+  "goal_wednesday_target",
+  "goal_thursday_target",
+  "goal_friday_target",
+  "goal_saturday_target",
+  "goal_sunday_target",
   "session_id",
   "session_date",
   "session_duration_minutes",
@@ -49,6 +70,17 @@ const exportColumns = [
   "goal_created_at",
   "goal_status",
   "goal_archived_at",
+  "goal_tracking_mode",
+  "goal_start_date",
+  "goal_end_date",
+  "goal_schedule_mode",
+  "goal_monday_target",
+  "goal_tuesday_target",
+  "goal_wednesday_target",
+  "goal_thursday_target",
+  "goal_friday_target",
+  "goal_saturday_target",
+  "goal_sunday_target",
   "issue_id",
   "issue_title",
   "issue_type",
@@ -129,7 +161,9 @@ const defaultProjectTemplate = {
 
 const defaultState = {
   projects: [],
-  activeProjectId: null
+  activeProjectId: null,
+  themePreference: "light",
+  sidebarCollapsed: false
 };
 
 let persistenceMode = "local";
@@ -202,7 +236,9 @@ function normalizeLoadedState(snapshot) {
       projects: normalizedProjects,
       activeProjectId: hasStoredActiveId
         ? snapshot.activeProjectId
-        : normalizedProjects[0]?.id || null
+        : normalizedProjects[0]?.id || null,
+      themePreference: normalizeThemePreference(snapshot.themePreference),
+      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed)
     };
   }
 
@@ -218,7 +254,9 @@ function normalizeLoadedState(snapshot) {
     });
     return {
       projects: [migrated],
-      activeProjectId: migrated.id
+      activeProjectId: migrated.id,
+      themePreference: normalizeThemePreference(snapshot.themePreference),
+      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed)
     };
   }
 
@@ -236,6 +274,14 @@ function normalizeStoredLastWorkspaceView(snapshot) {
   if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.lastWorkspaceView)) return snapshot.lastWorkspaceView;
   if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.activeView)) return snapshot.activeView;
   return DEFAULT_VIEW;
+}
+
+function normalizeThemePreference(value) {
+  return value === "dark" ? "dark" : "light";
+}
+
+function normalizeSidebarCollapsed(value) {
+  return Boolean(value);
 }
 
 function normalizePersistedSnapshot(snapshot) {
@@ -277,16 +323,47 @@ function normalizeGoal(goal) {
   const archivedAt = status === "archived"
     ? goal?.archivedAt || goal?.deletedAt || goal?.endedAt || new Date().toISOString()
     : "";
+  const scheduleMode = goal?.scheduleMode === "custom_days" ? "custom_days" : "daily";
+  const trackingMode = goal?.trackingMode === "date_range" ? "date_range" : "ongoing";
+  const createdAt = goal?.createdAt || new Date().toISOString();
+  const representativeTarget = Math.max(1, number(goal?.targetValue) || 1);
+  const dayTargets = normalizeGoalDayTargets(goal, representativeTarget);
 
   return {
     id: goal?.id || createId(),
     type: goal?.type === "write_minutes" ? "write_minutes" : "write_words",
     title: String(goal?.title || ""),
-    targetValue: Math.max(1, number(goal?.targetValue) || 1),
-    createdAt: goal?.createdAt || new Date().toISOString(),
+    targetValue: representativeTarget,
+    createdAt,
     status,
-    archivedAt
+    archivedAt,
+    trackingMode,
+    startDate: normalizeGoalDateValue(goal?.startDate || toInputDate(createdAt)),
+    endDate: trackingMode === "date_range" ? normalizeGoalDateValue(goal?.endDate || "") : "",
+    scheduleMode,
+    dayTargets
   };
+}
+
+function normalizeGoalDayTargets(goal, fallbackTargetValue = 1) {
+  const fallbackTarget = Math.max(0, number(fallbackTargetValue));
+  return GOAL_DAY_KEYS.reduce((targets, dayKey) => {
+    const legacyFieldName = `${dayKey}Target`;
+    const rowFieldName = `goal_${dayKey}_target`;
+    const rawValue = goal?.dayTargets?.[dayKey]
+      ?? goal?.[legacyFieldName]
+      ?? goal?.[rowFieldName]
+      ?? fallbackTarget;
+    targets[dayKey] = Math.max(0, number(rawValue));
+    return targets;
+  }, {});
+}
+
+function normalizeGoalDateValue(value) {
+  if (!value) return "";
+  const normalized = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  return toInputDate(normalized);
 }
 
 function normalizePlotState(plot) {
@@ -313,6 +390,7 @@ function normalizePlotEntry(entry) {
     title: String(entry?.title || ""),
     summary: String(entry?.summary || ""),
     anchor: String(entry?.anchor || ""),
+    detail: String(entry?.detail || ""),
     notes: String(entry?.notes || ""),
     updatedAt: entry?.updatedAt || new Date().toISOString()
   };
@@ -353,6 +431,8 @@ function serializeStateSnapshot() {
   return {
     projects: cloneValue(state.projects),
     activeProjectId: state.activeProjectId,
+    themePreference: normalizeThemePreference(state.themePreference),
+    sidebarCollapsed: normalizeSidebarCollapsed(state.sidebarCollapsed),
     activeView,
     lastWorkspaceView
   };
@@ -703,26 +783,44 @@ function applyGoalTypePreset(form, goalType) {
   const titleInput = form.elements.title;
   const targetLabel = document.getElementById("goal-target-label");
   if (!targetInput || !titleInput || !targetLabel) return;
+  const normalizedType = goalType === "write_minutes" ? "write_minutes" : "write_words";
+  const defaultTarget = normalizedType === "write_minutes" ? 60 : 1000;
+  const dailySchedule = form.elements.scheduleMode?.value !== "custom_days";
   if (goalType === "write_minutes") {
     targetLabel.textContent = "Daily target (minutes)";
-    targetInput.value = 30;
+    if (dailySchedule || targetInput.value === "") targetInput.value = defaultTarget;
     titleInput.placeholder = "Example: Spend 60 minutes writing or editing today";
     titleInput.value = titleInput.value || "Spend 60 focused minutes writing or editing";
-    return;
+  } else {
+    targetLabel.textContent = "Daily target (words)";
+    if (dailySchedule || targetInput.value === "") targetInput.value = defaultTarget;
+    titleInput.placeholder = "Example: Write 1,000 words today";
+    titleInput.value = titleInput.value || "Write 1,000 words today";
   }
-  targetLabel.textContent = "Daily target (words)";
-  targetInput.value = 1000;
-  titleInput.placeholder = "Example: Write 1,000 words today";
-  titleInput.value = titleInput.value || "Write 1,000 words today";
+  GOAL_DAY_KEYS.forEach((dayKey) => {
+    const dayInput = form.elements[`target_${dayKey}`];
+    if (!dayInput) return;
+    if (dayInput.value === "") {
+      dayInput.value = String(defaultTarget);
+    }
+  });
 }
 
 function evaluateGoal(bundle, goal) {
-  const target = Math.max(1, number(goal.targetValue));
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const value = goalValueForDate(bundle, goal, todayKey);
-  const progress = Math.min(100, (value / target) * 100);
-  const completed = progress >= 100;
-  return { ...goal, liveValue: value, progress, completed };
+  const today = startOfDay(new Date());
+  const value = goalValueForDate(bundle, goal, today.toISOString().slice(0, 10));
+  const trackedToday = isGoalTrackedOnDate(goal, today);
+  const target = trackedToday ? Math.max(1, goalTargetForDate(goal, today)) : 0;
+  const progress = trackedToday ? Math.min(100, (value / target) * 100) : 0;
+  const completed = trackedToday && progress >= 100;
+  return {
+    ...goal,
+    liveValue: value,
+    progress,
+    completed,
+    trackedToday,
+    targetValueToday: target
+  };
 }
 
 function goalTypeContext(type) {
@@ -732,14 +830,56 @@ function goalTypeContext(type) {
 function isGoalTrackedOnDate(goal, cursor) {
   const createdAt = goal.createdAt ? startOfDay(new Date(goal.createdAt)) : null;
   if (createdAt && createdAt > cursor) return false;
+  const startDate = goal.startDate ? startOfDay(new Date(goal.startDate)) : createdAt;
+  if (startDate && startDate > cursor) return false;
+  if (goal.trackingMode === "date_range" && goal.endDate) {
+    const endDate = startOfDay(new Date(goal.endDate));
+    if (endDate < cursor) return false;
+  }
+  if (goalTargetForDate(goal, cursor) <= 0) return false;
   if (goal.status !== "archived") return true;
   if (!goal.archivedAt) return true;
   return startOfDay(new Date(goal.archivedAt)) >= cursor;
 }
 
+function goalTargetForDate(goal, dateValue) {
+  const cursor = startOfDay(new Date(dateValue));
+  if (goal.scheduleMode !== "custom_days") {
+    return Math.max(0, number(goal.targetValue));
+  }
+  const dayKey = GOAL_DAY_KEYS[(cursor.getDay() + 6) % 7];
+  return Math.max(0, number(goal.dayTargets?.[dayKey]));
+}
+
+function goalScheduleSummary(goal) {
+  if (goal.scheduleMode !== "custom_days") {
+    return `Every day: ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)}`;
+  }
+
+  const weekdayTargets = GOAL_DAY_KEYS.slice(0, 5).map((dayKey) => number(goal.dayTargets?.[dayKey]));
+  const weekendTargets = GOAL_DAY_KEYS.slice(5).map((dayKey) => number(goal.dayTargets?.[dayKey]));
+  const uniqueWeekdayTargets = [...new Set(weekdayTargets)];
+  const uniqueWeekendTargets = [...new Set(weekendTargets)];
+
+  if (uniqueWeekdayTargets.length === 1 && uniqueWeekendTargets.length === 1) {
+    return `Weekdays ${formatNumber(uniqueWeekdayTargets[0])}, weekends ${formatNumber(uniqueWeekendTargets[0])} ${goalUnit(goal.type)}`;
+  }
+
+  return GOAL_DAY_KEYS
+    .map((dayKey) => `${GOAL_DAY_LABELS[dayKey]} ${formatNumber(goal.dayTargets?.[dayKey])}`)
+    .join(" • ");
+}
+
+function goalWindowSummary(goal) {
+  if (goal.trackingMode !== "date_range" || !goal.endDate) {
+    return `Starts ${formatDate(goal.startDate || goal.createdAt)}`;
+  }
+  return `${formatDate(goal.startDate || goal.createdAt)} to ${formatDate(goal.endDate)}`;
+}
+
 function buildGoalSnapshotForDate(bundle, goal, key) {
   const value = goalValueForDate(bundle, goal, key);
-  const target = Math.max(1, number(goal.targetValue));
+  const target = Math.max(1, goalTargetForDate(goal, key));
   return {
     id: goal.id,
     title: goal.title || (goal.type === "write_minutes" ? "Spend time writing or editing" : "Write words"),
@@ -755,12 +895,17 @@ function buildGoalSnapshotForDate(bundle, goal, key) {
 
 function heatmapStatusCopy(status) {
   return {
-    fail: "Missed goal",
+    fail: "Nothing done",
     partial: "Partial progress",
-    met: "Goal met",
+    met: "Complete",
     exceeded: "Goal exceeded",
     none: "No goals set"
   }[status] || "No activity";
+}
+
+function heatmapFillPercent(ratio) {
+  if (ratio <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)));
 }
 
 function preferredHeatmapDayKey(days) {
@@ -788,7 +933,15 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
     const inMonth = cursor.getMonth() === monthStart.getMonth() && cursor.getFullYear() === monthStart.getFullYear();
     const longDate = cursor.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     if (!inMonth) {
-      days.push({ key, status: "none", label: "", outsideMonth: true, dayNumber: cursor.getDate() });
+      days.push({
+        key,
+        status: "none",
+        label: "",
+        outsideMonth: true,
+        dayNumber: cursor.getDate(),
+        fillPercent: 0,
+        progressPercent: 0
+      });
       continue;
     }
     if (cursor > today) {
@@ -802,7 +955,9 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
         detailSummary: "Future day",
         detailCopy: "Goal progress will appear here once the day arrives.",
         sessionCount: 0,
-        goalSummaries: []
+        goalSummaries: [],
+        fillPercent: 0,
+        progressPercent: 0
       });
       continue;
     }
@@ -822,7 +977,9 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
         detailSummary: "No goals set",
         detailCopy: "No writing goals were active on this date.",
         sessionCount: daySessions.length,
-        goalSummaries: []
+        goalSummaries: [],
+        fillPercent: 0,
+        progressPercent: 0
       });
       continue;
     }
@@ -830,11 +987,14 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
     const averageRatio = goalSummaries.reduce((sum, goal) => {
       return sum + goal.ratio;
     }, 0) / trackedGoals.length;
-    const status = averageRatio > 1.2 ? "exceeded" : averageRatio >= 1 ? "met" : averageRatio > 0 ? "partial" : "fail";
+    const fillPercent = heatmapFillPercent(averageRatio);
+    const progressPercent = averageRatio > 0 ? Math.max(1, Math.round(averageRatio * 100)) : 0;
+    const status = averageRatio > 1 ? "exceeded" : averageRatio >= 1 ? "met" : averageRatio > 0 ? "partial" : "fail";
     const statusLabel = heatmapStatusCopy(status);
     const labelLines = [
       longDate,
       statusLabel,
+      `${formatNumber(progressPercent)}% of combined daily target`,
       ...goalSummaries.map((goal) => `${goal.title}: ${goal.metricText}`),
       `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`
     ];
@@ -847,7 +1007,9 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
       detailSummary: statusLabel,
       detailCopy: "Hover, focus, or tap a day to compare what you did against the goal that was active then.",
       sessionCount: daySessions.length,
-      goalSummaries
+      goalSummaries,
+      fillPercent,
+      progressPercent
     });
   }
 
@@ -884,6 +1046,7 @@ function renderHeatmapDayDetail(day) {
       </div>
       <div class="heatmap-detail-meta">
         <span class="pill">${escapeHtml(day.detailSummary || heatmapStatusCopy(day.status))}</span>
+        ${day.goalSummaries?.length ? `<span class="pill">${formatNumber(day.progressPercent || 0)}% complete</span>` : ""}
         <span class="pill">${sessionsLabel}</span>
       </div>
     </div>
@@ -912,16 +1075,16 @@ function renderGoalHeatmap(bundle) {
           <button class="heatmap-nav" id="heatmap-next-month-btn" type="button" aria-label="Next month">›</button>
         </div>
         <div class="heatmap-legend">
-          <span><i class="heatmap-swatch fail"></i> Missed</span>
+          <span><i class="heatmap-swatch fail"></i> Nothing done</span>
           <span><i class="heatmap-swatch partial"></i> Partial</span>
-          <span><i class="heatmap-swatch met"></i> Met</span>
+          <span><i class="heatmap-swatch met"></i> Complete</span>
           <span><i class="heatmap-swatch exceeded"></i> Exceeded</span>
         </div>
         <div class="heatmap-weekdays">${weekdayLabels.map((label) => `<span>${label}</span>`).join("")}</div>
         <div class="heatmap-grid">
           ${days.map((day) => day.outsideMonth
-            ? `<div class="heatmap-cell none" aria-hidden="true"></div>`
-            : `<button class="heatmap-cell ${day.status}${day.key === selectedDayKey ? " is-selected" : ""}" data-heatmap-day="${day.key}" type="button" title="${escapeAttr(day.label)}" aria-label="${escapeAttr(day.label)}"><span class="heatmap-daynum">${day.dayNumber}</span></button>`
+            ? `<div class="heatmap-cell none outside-month" aria-hidden="true"></div>`
+            : `<button class="heatmap-cell ${day.status}${day.key === selectedDayKey ? " is-selected" : ""}" data-heatmap-day="${day.key}" type="button" style="--heatmap-fill:${day.fillPercent || 0}%;" title="${escapeAttr(day.label)}" aria-label="${escapeAttr(day.label)}"><span class="heatmap-daynum">${day.dayNumber}</span></button>`
           ).join("")}
         </div>
         <div class="heatmap-detail" id="heatmap-detail-panel">
@@ -1050,14 +1213,25 @@ function projectExportBaseRow(bundle) {
     project_edit_pass_objective: bundle.editing.passObjective || "",
     project_edit_progress_current: number(bundle.editing.progressCurrent),
     project_edit_progress_total: number(bundle.editing.progressTotal),
-    goal_id: "",
-    goal_type: "",
-    goal_title: "",
-    goal_target_value: "",
-    goal_created_at: "",
-    goal_status: "",
-    goal_archived_at: "",
-    issue_id: "",
+      goal_id: "",
+      goal_type: "",
+      goal_title: "",
+      goal_target_value: "",
+      goal_created_at: "",
+      goal_status: "",
+      goal_archived_at: "",
+      goal_tracking_mode: "",
+      goal_start_date: "",
+      goal_end_date: "",
+      goal_schedule_mode: "",
+      goal_monday_target: "",
+      goal_tuesday_target: "",
+      goal_wednesday_target: "",
+      goal_thursday_target: "",
+      goal_friday_target: "",
+      goal_saturday_target: "",
+      goal_sunday_target: "",
+      issue_id: "",
     issue_title: "",
     issue_type: "",
     issue_section_label: "",
@@ -1095,7 +1269,18 @@ function buildProjectExportRows(bundle, mode = "all") {
         goal_target_value: number(goal.targetValue),
         goal_created_at: goal.createdAt || "",
         goal_status: goal.status || "active",
-        goal_archived_at: goal.archivedAt || ""
+        goal_archived_at: goal.archivedAt || "",
+        goal_tracking_mode: goal.trackingMode || "ongoing",
+        goal_start_date: goal.startDate || "",
+        goal_end_date: goal.endDate || "",
+        goal_schedule_mode: goal.scheduleMode || "daily",
+        goal_monday_target: number(goal.dayTargets?.monday),
+        goal_tuesday_target: number(goal.dayTargets?.tuesday),
+        goal_wednesday_target: number(goal.dayTargets?.wednesday),
+        goal_thursday_target: number(goal.dayTargets?.thursday),
+        goal_friday_target: number(goal.dayTargets?.friday),
+        goal_saturday_target: number(goal.dayTargets?.saturday),
+        goal_sunday_target: number(goal.dayTargets?.sunday)
       });
     });
   }
@@ -1232,7 +1417,20 @@ function buildBundleFromImportedRows(rows) {
         targetValue: number(row.goal_target_value),
         createdAt: row.goal_created_at || new Date().toISOString(),
         status: row.goal_status === "archived" ? "archived" : "active",
-        archivedAt: row.goal_archived_at || ""
+        archivedAt: row.goal_archived_at || "",
+        trackingMode: row.goal_tracking_mode === "date_range" ? "date_range" : "ongoing",
+        startDate: row.goal_start_date || toInputDate(row.goal_created_at || new Date().toISOString()),
+        endDate: row.goal_end_date || "",
+        scheduleMode: row.goal_schedule_mode === "custom_days" ? "custom_days" : "daily",
+        dayTargets: {
+          monday: number(row.goal_monday_target || row.goal_target_value),
+          tuesday: number(row.goal_tuesday_target || row.goal_target_value),
+          wednesday: number(row.goal_wednesday_target || row.goal_target_value),
+          thursday: number(row.goal_thursday_target || row.goal_target_value),
+          friday: number(row.goal_friday_target || row.goal_target_value),
+          saturday: number(row.goal_saturday_target || row.goal_target_value),
+          sunday: number(row.goal_sunday_target || row.goal_target_value)
+        }
       })),
     issues: rows
       .filter((row) => row.row_type === "issue")

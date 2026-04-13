@@ -22,16 +22,20 @@ const PLOT_SECTION_CONFIG = {
         placeholder: "Example: Mara Vale"
       },
       summary: {
-        label: "Role in story",
-        placeholder: "POV courier tangled between duty and ambition"
+        label: "Motivation and goals",
+        placeholder: "Win back her family name, protect her brother, and prove she can lead"
       },
       anchor: {
-        label: "Core tension",
-        placeholder: "Protect her brother without exposing the lie holding her life together"
+        label: "Internal and external conflicts",
+        placeholder: "Torn between loyalty and ambition while hunted by the council she betrayed"
+      },
+      detail: {
+        label: "Character arc",
+        placeholder: "Moves from self-protective control toward trust, sacrifice, and honest leadership"
       },
       notes: {
         label: "Notes",
-        placeholder: "Voice, wounds, secrets, relationships, turning points, and arc ideas"
+        placeholder: "Voice, wounds, secrets, relationships, scene ideas, or anything else worth tracking"
       }
     }
   },
@@ -233,23 +237,6 @@ function plotEntriesForSection(bundle, sectionId) {
   return Array.isArray(bundle?.plot?.sections?.[sectionId]) ? bundle.plot.sections[sectionId] : [];
 }
 
-function totalPlotEntryCount(bundle) {
-  return PLOT_SECTION_IDS.reduce((total, sectionId) => total + plotEntriesForSection(bundle, sectionId).length, 0);
-}
-
-function populatedPlotSectionCount(bundle) {
-  return PLOT_SECTION_IDS.filter((sectionId) => plotEntriesForSection(bundle, sectionId).length > 0).length;
-}
-
-function mostPopulatedPlotSection(bundle) {
-  return PLOT_SECTION_IDS
-    .map((sectionId) => ({
-      sectionId,
-      count: plotEntriesForSection(bundle, sectionId).length
-    }))
-    .sort((a, b) => b.count - a.count)[0];
-}
-
 function renderPlotDashboard(bundle) {
   const view = document.getElementById("view-plot");
   if (!bundle) {
@@ -261,79 +248,17 @@ function renderPlotDashboard(bundle) {
   const activeSectionId = currentPlotSectionId(bundle);
   const activeSection = plotSectionConfig(activeSectionId);
   const activeEntries = plotEntriesForSection(bundle, activeSectionId);
-  const totalEntries = totalPlotEntryCount(bundle);
-  const populatedSections = populatedPlotSectionCount(bundle);
-  const busiestSection = mostPopulatedPlotSection(bundle);
-  const coveragePercent = Math.round((populatedSections / PLOT_SECTION_IDS.length) * 100);
 
   view.innerHTML = `
     <section class="stack">
-      <section class="card hero">
-        <div class="hero-panel plot-hero-panel">
-          <div class="section-head">
-            <div>
-              <p class="small-copy">Plot dashboard</p>
-              <h2 class="hero-title">Story Atlas</h2>
-              <p class="plot-hero-copy">Keep your characters, locations, glossary, world rules, history, and mythology in one living reference space so the story stays coherent as it grows.</p>
-            </div>
-            <div class="meta-line">
-              <button class="primary-btn" id="open-plot-entry-modal-btn" type="button">${`Add ${activeSection.singular}`}</button>
-            </div>
-          </div>
-          <div class="hero-meta">
-            <span class="badge">${activeSection.label}</span>
-            <span class="pill">${formatNumber(totalEntries)} total atlas entr${totalEntries === 1 ? "y" : "ies"}</span>
-            <span class="pill">${formatNumber(populatedSections)} section${populatedSections === 1 ? "" : "s"} populated</span>
-            <span class="pill">${busiestSection?.count ? `${plotSectionConfig(busiestSection.sectionId).label} leads with ${formatNumber(busiestSection.count)}` : "Start building your story bible"}</span>
-          </div>
-          <div class="plot-overview-grid">
-            <div class="plot-overview-card">
-              <strong>Current focus</strong>
-              <p>${activeSection.label}</p>
-              <span>${activeSection.description}</span>
-            </div>
-            <div class="plot-overview-card">
-              <strong>Ready now</strong>
-              <p>${formatNumber(activeEntries.length)} ${activeSection.singular}${activeEntries.length === 1 ? "" : "s"}</p>
-              <span>${activeEntries.length ? `Open ${activeSection.label.toLowerCase()} to refine or expand them.` : `No ${activeSection.label.toLowerCase()} yet. Build this section next.`}</span>
-            </div>
-            <div class="plot-overview-card">
-              <strong>Foundation use</strong>
-              <p>${activeSection.kicker}</p>
-              <span>Outline can plug into these references later without rebuilding your world notes.</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h3>Atlas Snapshot</h3>
-            <p>The most useful plot-reference stats, kept close to the story material they describe.</p>
-          </div>
-        </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">Total entries</div><div class="value">${formatNumber(totalEntries)}</div></div>
-          <div class="metric"><div class="label">Sections populated</div><div class="value">${formatNumber(populatedSections)}</div><div class="hint">${coveragePercent}% of atlas filled</div></div>
-          <div class="metric"><div class="label">Current section</div><div class="value">${formatNumber(activeEntries.length)}</div><div class="hint">${activeSection.label}</div></div>
-          <div class="metric"><div class="label">Most documented area</div><div class="value" style="font-size: 1.08rem;">${busiestSection?.count ? plotSectionConfig(busiestSection.sectionId).label : "No entries yet"}</div><div class="hint">${busiestSection?.count ? `${formatNumber(busiestSection.count)} entries` : "Start building the atlas"}</div></div>
-        </div>
-      </section>
-
       <section class="plot-workspace">
-        <section class="card plot-section-rail">
-          <div class="section-head">
-            <div>
-              <h3>Story Areas</h3>
-            </div>
-          </div>
-          <div class="plot-section-nav">
+        <div class="plot-section-nav-wrap">
+          <div class="plot-section-nav" role="tablist" aria-label="Story areas">
             ${PLOT_SECTION_IDS.map((sectionId) => renderPlotSectionTab(bundle, sectionId, activeSectionId)).join("")}
           </div>
-        </section>
+        </div>
 
-        <section class="card plot-section-detail">
+        <section class="card plot-section-detail" id="plot-section-panel" role="tabpanel" aria-labelledby="plot-tab-${activeSectionId}">
           <div class="section-head">
             <div>
               <p class="small-copy">${activeSection.kicker}</p>
@@ -343,14 +268,6 @@ function renderPlotDashboard(bundle) {
             <div class="meta-line">
               <button class="primary-btn" id="add-active-plot-entry-btn" type="button">${`Add ${activeSection.singular}`}</button>
             </div>
-          </div>
-          <div class="plot-guidance-grid">
-            ${activeSection.prompts.map((prompt) => `
-              <div class="plot-guidance-card">
-                <strong>${prompt.label}</strong>
-                <p>${prompt.copy}</p>
-              </div>
-            `).join("")}
           </div>
           <div class="plot-entry-grid">
             ${activeEntries.length ? activeEntries.map((entry) => renderPlotEntryCard(activeSectionId, entry)).join("") : `
@@ -372,9 +289,17 @@ function renderPlotSectionTab(bundle, sectionId, activeSectionId) {
   const config = plotSectionConfig(sectionId);
   const count = plotEntriesForSection(bundle, sectionId).length;
   return `
-    <button class="plot-section-tab ${sectionId === activeSectionId ? "active" : ""}" data-plot-section="${sectionId}" type="button">
+    <button
+      class="plot-section-tab ${sectionId === activeSectionId ? "active" : ""}"
+      id="plot-tab-${sectionId}"
+      data-plot-section="${sectionId}"
+      type="button"
+      role="tab"
+      aria-selected="${sectionId === activeSectionId ? "true" : "false"}"
+      aria-controls="plot-section-panel"
+    >
       <span class="plot-section-count">${formatNumber(count)}</span>
-      <strong>${config.label}</strong>
+      <strong class="plot-section-title">${config.label}</strong>
     </button>
   `;
 }
@@ -385,9 +310,7 @@ function renderPlotEntryCard(sectionId, entry) {
     <article class="item plot-entry-card">
       <div class="item-top">
         <div>
-          <p class="session-kind">${section.singular}</p>
           <h4>${escapeHtml(entry.title || "Untitled entry")}</h4>
-          <p class="small-copy">${escapeHtml(entry.summary || `No ${section.fields.summary.label.toLowerCase()} yet`)}</p>
         </div>
         <div class="goal-actions">
           <button class="icon-btn" type="button" data-action="edit-plot-entry" data-section-id="${sectionId}" data-id="${entry.id}" aria-label="Edit ${section.singular}">
@@ -407,21 +330,25 @@ function renderPlotEntryCard(sectionId, entry) {
           </button>
         </div>
       </div>
-      <div class="plot-entry-meta">
-        <span class="pill">${escapeHtml(entry.anchor || `No ${section.fields.anchor.label.toLowerCase()} yet`)}</span>
-        <span class="pill">Updated ${formatDate(entry.updatedAt)}</span>
+      <div class="plot-entry-copy">
+        ${renderPlotEntryField(section.fields.summary, entry.summary)}
+        ${renderPlotEntryField(section.fields.anchor, entry.anchor)}
+        ${section.fields.detail ? renderPlotEntryField(section.fields.detail, entry.detail) : ""}
+        ${entry.notes ? renderPlotEntryField(section.fields.notes, entry.notes, "plot-entry-note") : ""}
       </div>
-      ${entry.notes ? `<p class="plot-entry-note">${escapeHtml(entry.notes)}</p>` : ""}
     </article>
   `;
 }
 
+function renderPlotEntryField(field, value, className = "") {
+  if (!field) return "";
+  const classes = className ? ` class="${className}"` : "";
+  return `<p${classes}><strong>${escapeHtml(field.label)}</strong> ${escapeHtml(value || "Not added yet")}</p>`;
+}
+
 function bindPlotDashboardEvents(bundle) {
   const activeSectionId = currentPlotSectionId(bundle);
-  const openButtons = [
-    document.getElementById("open-plot-entry-modal-btn"),
-    document.getElementById("add-active-plot-entry-btn")
-  ].filter(Boolean);
+  const openButtons = [document.getElementById("add-active-plot-entry-btn")].filter(Boolean);
 
   openButtons.forEach((button) => {
     button.onclick = () => {
@@ -503,6 +430,7 @@ function bindPlotEntryModal() {
         title: String(formData.get("title") || "").trim(),
         summary: String(formData.get("summary") || "").trim(),
         anchor: String(formData.get("anchor") || "").trim(),
+        detail: String(formData.get("detail") || "").trim(),
         notes: String(formData.get("notes") || "").trim(),
         updatedAt: new Date().toISOString()
       });
@@ -567,6 +495,8 @@ function openPlotEntryModal(sectionId = currentPlotSectionId(currentBundle()), e
   document.getElementById("plot-entry-title-label").textContent = config.fields.title.label;
   document.getElementById("plot-entry-summary-label").textContent = config.fields.summary.label;
   document.getElementById("plot-entry-anchor-label").textContent = config.fields.anchor.label;
+  const detailField = document.getElementById("plot-entry-detail-field");
+  const detailLabel = document.getElementById("plot-entry-detail-label");
   document.getElementById("plot-entry-notes-label").textContent = config.fields.notes.label;
   document.getElementById("plot-entry-submit-btn").textContent = existingEntry ? "Save changes" : `Save ${config.singular}`;
 
@@ -574,6 +504,16 @@ function openPlotEntryModal(sectionId = currentPlotSectionId(currentBundle()), e
   form.elements.title.placeholder = config.fields.title.placeholder;
   form.elements.summary.placeholder = config.fields.summary.placeholder;
   form.elements.anchor.placeholder = config.fields.anchor.placeholder;
+  if (config.fields.detail && detailField && detailLabel) {
+    detailField.classList.remove("hidden");
+    detailLabel.textContent = config.fields.detail.label;
+    form.elements.detail.placeholder = config.fields.detail.placeholder;
+    form.elements.detail.value = existingEntry?.detail || "";
+  } else if (detailField) {
+    detailField.classList.add("hidden");
+    form.elements.detail.value = "";
+    form.elements.detail.placeholder = "";
+  }
   form.elements.notes.placeholder = config.fields.notes.placeholder;
   form.elements.title.value = existingEntry?.title || "";
   form.elements.summary.value = existingEntry?.summary || "";

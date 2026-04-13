@@ -1,0 +1,315 @@
+.theme-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.theme-option {
+  display: block;
+  cursor: pointer;
+}
+
+.theme-option input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.theme-option span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink);
+  font-weight: 600;
+  transition: transform 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.theme-option:hover span {
+  transform: translateY(-1px);
+}
+
+.theme-option input:checked + span {
+  background: var(--ink);
+  color: #fff7ef;
+  box-shadow: 0 12px 28px rgba(31, 26, 23, 0.16);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151311;
+  --panel: rgba(26, 24, 22, 0.9);
+  --panel-strong: #1d1a18;
+  --ink: #f7efe6;
+  --muted: #b5a797;
+  --line: rgba(245, 230, 214, 0.12);
+  --accent: #d28a5e;
+  --accent-soft: rgba(210, 138, 94, 0.18);
+  --accent-strong: #f0b286;
+  --success: #72bf88;
+  --warning: #d9a757;
+  --danger: #ef9b8d;
+  --focus-ring: #e2a06e;
+  --focus-ring-soft: rgba(226, 160, 110, 0.24);
+  --field-border: rgba(245, 230, 214, 0.3);
+  --field-surface: rgba(255, 255, 255, 0.06);
+  --shadow: 0 28px 76px rgba(0, 0, 0, 0.46);
+}
+
+html[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at top left, rgba(210, 138, 94, 0.14), transparent 26%),
+    radial-gradient(circle at top right, rgba(114, 191, 136, 0.08), transparent 22%),
+    linear-gradient(180deg, #191614 0%, #100e0d 100%);
+}
+
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .project-topbar,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .hero-panel,
+html[data-theme="dark"] .modal-card,
+html[data-theme="dark"] .empty-panel,
+html[data-theme="dark"] .settings-section,
+html[data-theme="dark"] .metric,
+html[data-theme="dark"] .signal-card,
+html[data-theme="dark"] .signal-icon,
+html[data-theme="dark"] .item,
+html[data-theme="dark"] .chart-card,
+html[data-theme="dark"] .snapshot-card,
+html[data-theme="dark"] .issue-breakdown-row,
+html[data-theme="dark"] .plot-overview-card,
+html[data-theme="dark"] .plot-empty,
+html[data-theme="dark"] .heatmap-shell,
+html[data-theme="dark"] .heatmap-detail,
+html[data-theme="dark"] .heatmap-detail-goal,
+html[data-theme="dark"] .floating-focus-timer {
+  border-color: rgba(255, 244, 231, 0.08);
+  background:
+    linear-gradient(180deg, rgba(36, 33, 30, 0.96), rgba(26, 24, 22, 0.92)),
+    rgba(26, 24, 22, 0.9);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .writing-session-screen {
+  background:
+    radial-gradient(circle at top, rgba(210, 138, 94, 0.16), transparent 42%),
+    rgba(15, 13, 12, 0.98);
+}
+
+html[data-theme="dark"] .modal-backdrop {
+  background: rgba(4, 4, 4, 0.58);
+}
+
+html[data-theme="dark"] .nav button,
+html[data-theme="dark"] .ghost-btn,
+html[data-theme="dark"] .inline-btn,
+html[data-theme="dark"] .plot-section-tab,
+html[data-theme="dark"] .sidebar-collapse-btn,
+html[data-theme="dark"] .theme-option span {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(245, 230, 214, 0.1);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .nav-icon,
+html[data-theme="dark"] .plot-section-count {
+  background: rgba(210, 138, 94, 0.12);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(240, 178, 134, 0.12);
+}
+
+html[data-theme="dark"] .nav button.active,
+html[data-theme="dark"] .nav button:hover,
+html[data-theme="dark"] .plot-section-tab.active,
+html[data-theme="dark"] .primary-btn,
+html[data-theme="dark"] .theme-option input:checked + span {
+  background: linear-gradient(180deg, #e2a06e, #ca7f51);
+  color: #1c1511;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="dark"] .nav button.active .nav-icon,
+html[data-theme="dark"] .nav button:hover .nav-icon,
+html[data-theme="dark"] .plot-section-tab.active .plot-section-count {
+  background: rgba(28, 21, 17, 0.14);
+  color: #1c1511;
+  box-shadow: inset 0 0 0 1px rgba(28, 21, 17, 0.08);
+}
+
+html[data-theme="dark"] .project-topbar-nav button.active,
+html[data-theme="dark"] .project-topbar-nav button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .sidebar-text-btn:hover,
+html[data-theme="dark"] .icon-btn:hover,
+html[data-theme="dark"] .quiet-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .quiet-btn {
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px rgba(245, 230, 214, 0.12);
+}
+
+html[data-theme="dark"] .quiet-btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: var(--field-surface);
+  border-color: var(--field-border);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: rgba(181, 167, 151, 0.68);
+}
+
+html[data-theme="dark"] .pill,
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] .archived-issue,
+html[data-theme="dark"] .archived-goal-list .item {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(245, 230, 214, 0.1);
+}
+
+html[data-theme="dark"] .progress-rail {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .progress-checkpoint {
+  background: rgba(255, 235, 218, 0.18);
+}
+
+html[data-theme="dark"] .progress-checkpoint-label {
+  color: rgba(236, 221, 206, 0.82);
+  text-shadow: none;
+}
+
+html[data-theme="dark"] .progress-checkpoint.reached {
+  background: rgba(230, 165, 112, 0.86);
+  box-shadow: 0 0 0 1px rgba(230, 165, 112, 0.22);
+}
+
+html[data-theme="dark"] .progress-checkpoint.reached .progress-checkpoint-label {
+  color: rgba(255, 233, 210, 0.96);
+}
+
+html[data-theme="dark"] .progress-info-icon {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--accent-strong);
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 230, 214, 0.18),
+    0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+html[data-theme="dark"] .empty {
+  border-color: rgba(245, 230, 214, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+html[data-theme="dark"] .icon-btn {
+  color: rgba(247, 239, 230, 0.68);
+}
+
+html[data-theme="dark"] .session-dial-rail {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+html[data-theme="dark"] .session-dial-handle {
+  fill: #1d1a18;
+  stroke: rgba(247, 239, 230, 0.82);
+}
+
+html[data-theme="dark"] .heatmap-nav {
+  border-color: rgba(245, 230, 214, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .heatmap-nav:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .heatmap-weekdays {
+  color: rgba(229, 214, 199, 0.82);
+}
+
+html[data-theme="dark"] .heatmap-cell {
+  border-color: rgba(245, 230, 214, 0.16);
+  background: linear-gradient(180deg, rgba(31, 28, 26, 0.98), rgba(21, 19, 18, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+html[data-theme="dark"] .heatmap-cell::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme="dark"] .heatmap-daynum {
+  color: rgba(244, 236, 226, 0.88);
+  text-shadow: none;
+}
+
+html[data-theme="dark"] .heatmap-cell.none {
+  border-color: rgba(245, 230, 214, 0.12);
+  background: linear-gradient(180deg, rgba(28, 25, 23, 0.96), rgba(19, 17, 16, 0.92));
+}
+
+html[data-theme="dark"] .heatmap-cell.fail {
+  background: linear-gradient(180deg, rgba(79, 34, 31, 0.82), rgba(49, 21, 20, 0.88));
+}
+
+html[data-theme="dark"] .heatmap-cell.partial {
+  background: linear-gradient(180deg, rgba(73, 56, 18, 0.72), rgba(39, 31, 11, 0.84));
+}
+
+html[data-theme="dark"] .heatmap-cell.met {
+  background: linear-gradient(180deg, rgba(30, 61, 38, 0.72), rgba(17, 36, 22, 0.86));
+}
+
+html[data-theme="dark"] .heatmap-cell.exceeded {
+  background: linear-gradient(180deg, rgba(58, 34, 93, 0.76), rgba(32, 18, 52, 0.88));
+}
+
+html[data-theme="dark"] .heatmap-cell.fail .heatmap-daynum {
+  color: #ffd8d2;
+}
+
+html[data-theme="dark"] .heatmap-cell.partial .heatmap-daynum {
+  color: #ffe7a8;
+}
+
+html[data-theme="dark"] .heatmap-cell.met .heatmap-daynum {
+  color: #d7f5df;
+}
+
+html[data-theme="dark"] .heatmap-cell.exceeded .heatmap-daynum {
+  color: #eadcff;
+}
+
+html[data-theme="dark"] .heatmap-detail-goal,
+html[data-theme="dark"] .goal-editor-list .item,
+html[data-theme="dark"] .issue-breakdown-row,
+html[data-theme="dark"] .snapshot-card {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 560px) {
+  .theme-toggle {
+    grid-template-columns: 1fr;
+  }
+}

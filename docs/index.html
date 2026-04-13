@@ -4,6 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>The Author Engine</title>
+  <script>
+    try {
+      const storedSnapshot = JSON.parse(localStorage.getItem("author-engine-mvp"));
+      const themePreference = storedSnapshot && storedSnapshot.themePreference === "dark" ? "dark" : "light";
+      document.documentElement.dataset.theme = themePreference;
+    } catch (error) {
+      document.documentElement.dataset.theme = "light";
+    }
+  </script>
   <link rel="stylesheet" href="static/css/app.css" />
 </head>
 <body>
@@ -12,7 +21,6 @@
       <div class="brand" id="brand"></div>
       <nav class="nav" id="nav"></nav>
       <div class="sidebar-footer" id="sidebar-footer"></div>
-      <p class="footer-note">Everything stays editable. On the hosted app your account syncs to the backend, and on the Pages demo it falls back to browser storage.</p>
     </aside>
 
     <section class="content-shell">
@@ -127,12 +135,56 @@
             <option value="write_minutes">Spend time writing or editing</option>
           </select>
         </label>
-        <label><span id="goal-target-label">Daily target (words)</span>
+        <label>Timeframe
+          <select name="trackingMode" id="goal-tracking-mode">
+            <option value="ongoing">Ongoing</option>
+            <option value="date_range">Date range</option>
+          </select>
+        </label>
+        <label id="goal-start-date-field">Start date
+          <input type="date" name="startDate" required />
+        </label>
+        <label class="hidden" id="goal-end-date-field">End date
+          <input type="date" name="endDate" />
+        </label>
+        <label>Schedule
+          <select name="scheduleMode" id="goal-schedule-mode">
+            <option value="daily">Same target every day</option>
+            <option value="custom_days">Custom by day</option>
+          </select>
+        </label>
+        <label id="goal-target-field"><span id="goal-target-label">Daily target (words)</span>
           <input type="number" min="1" name="targetValue" value="1000" required />
         </label>
         <label class="full">Goal label
           <input name="title" placeholder="Example: Write 1,000 words today" required />
         </label>
+        <div class="full hidden" id="goal-custom-schedule-fields">
+          <div class="goal-day-grid">
+            <label>Mon
+              <input type="number" min="0" name="target_monday" value="1000" />
+            </label>
+            <label>Tue
+              <input type="number" min="0" name="target_tuesday" value="1000" />
+            </label>
+            <label>Wed
+              <input type="number" min="0" name="target_wednesday" value="1000" />
+            </label>
+            <label>Thu
+              <input type="number" min="0" name="target_thursday" value="1000" />
+            </label>
+            <label>Fri
+              <input type="number" min="0" name="target_friday" value="1000" />
+            </label>
+            <label>Sat
+              <input type="number" min="0" name="target_saturday" value="1000" />
+            </label>
+            <label>Sun
+              <input type="number" min="0" name="target_sunday" value="1000" />
+            </label>
+          </div>
+          <p class="small-copy">Set any day to 0 to make it an off day. This lets you do patterns like lower weekday targets or bigger weekend pushes.</p>
+        </div>
         <div class="full">
           <button class="primary-btn" id="goal-submit-btn" type="submit">Add goal</button>
         </div>
@@ -149,6 +201,20 @@
         <button class="ghost-btn" id="close-settings-modal-btn" type="button">Close</button>
       </div>
       <div class="settings-grid">
+        <section class="settings-section">
+          <h4>Appearance</h4>
+          <p class="muted">Choose the theme for the full app workspace.</p>
+          <div class="theme-toggle" role="radiogroup" aria-label="Theme preference">
+            <label class="theme-option">
+              <input type="radio" name="themePreference" value="light" />
+              <span>Light</span>
+            </label>
+            <label class="theme-option">
+              <input type="radio" name="themePreference" value="dark" />
+              <span>Dark</span>
+            </label>
+          </div>
+        </section>
         <section class="settings-section">
           <h4>Import</h4>
           <p class="muted">Bring an existing project into The Author Engine from a CSV file.</p>
@@ -167,7 +233,7 @@
         </section>
         <section class="settings-section">
           <h4>More Settings</h4>
-          <p class="muted">This area is reserved for future settings like preferences, backup options, and project-level controls.</p>
+          <p class="muted">This area is reserved for future settings like backup options and project-level controls.</p>
         </section>
       </div>
     </div>
@@ -378,6 +444,9 @@
         </label>
         <label><span id="plot-entry-anchor-label">Anchor</span>
           <input id="plot-entry-anchor-input" name="anchor" />
+        </label>
+        <label class="full hidden" id="plot-entry-detail-field"><span id="plot-entry-detail-label">Detail</span>
+          <textarea id="plot-entry-detail-input" name="detail"></textarea>
         </label>
         <label class="full"><span id="plot-entry-notes-label">Notes</span>
           <textarea id="plot-entry-notes-input" name="notes"></textarea>

@@ -8,8 +8,13 @@
   --accent: #b85c38;
   --accent-soft: rgba(184, 92, 56, 0.14);
   --accent-strong: #914323;
-  --success: #2f7d4a;
-  --warning: #a26617;
+  --success: #2b6b40;
+  --warning: #7a4f00;
+  --danger: #8a3d34;
+  --focus-ring: #914323;
+  --focus-ring-soft: rgba(145, 67, 35, 0.22);
+  --field-border: #8f7d70;
+  --field-surface: rgba(255, 255, 255, 0.94);
   --shadow: 0 20px 60px rgba(66, 43, 26, 0.12);
   --radius: 24px;
   --radius-sm: 16px;
@@ -39,4 +44,3 @@ select,
 textarea {
   font: inherit;
 }
-
