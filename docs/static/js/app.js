@@ -896,14 +896,16 @@ function renderArchivedGoalCard(goal) {
   `;
 }
 
-function renderIssueCard(issue) {
+function renderIssueCard(issue, options = {}) {
+  const { archived = false } = options;
   const priorityClass = `priority-${String(issue.priority || "Medium").toLowerCase()}`;
   const statusClass = `status-${String(issue.status || "Open").toLowerCase()}`;
+  const issueLabel = issue.status === "Resolved" ? "Resolved issue" : "Open issue";
   return `
-    <div class="item">
+    <div class="item ${archived ? "archived-issue" : ""}">
       <div class="item-top">
         <div>
-          <p class="session-kind">Open issue</p>
+          <p class="session-kind">${issueLabel}</p>
           <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
           <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
         </div>

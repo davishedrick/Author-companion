@@ -1039,7 +1039,10 @@ textarea:focus-visible {
   }
 
   .dashboard-grid,
-  .dashboard-top,
+  .dashboard-top {
+    grid-template-columns: 1fr;
+  }
+
   .edit-columns,
   .snapshot-grid,
   .projects-grid,

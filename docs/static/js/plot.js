@@ -253,6 +253,9 @@ function renderPlotDashboard(bundle) {
     <section class="stack">
       <section class="plot-workspace">
         <div class="plot-section-nav-wrap">
+          <div hidden>
+            <h3>Story Areas</h3>
+          </div>
           <div class="plot-section-nav" role="tablist" aria-label="Story areas">
             ${PLOT_SECTION_IDS.map((sectionId) => renderPlotSectionTab(bundle, sectionId, activeSectionId)).join("")}
           </div>

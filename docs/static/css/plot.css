@@ -51,23 +51,22 @@
 
 .plot-section-nav-wrap {
   position: relative;
-  z-index: 2;
-  margin: 0 18px -1px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  z-index: 1;
+  margin: 0 18px -4px;
+  overflow: visible;
 }
 
 .plot-section-nav {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: end;
-  min-width: max-content;
+  min-width: 0;
   padding-top: 6px;
 }
 
 .plot-section-tab {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   padding: 12px 16px 13px;
   border: 1px solid rgba(96, 70, 54, 0.16);
   border-bottom: 0;
@@ -148,7 +147,8 @@
 
 .plot-section-detail {
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  padding-top: 30px;
 }
 
 .plot-entry-grid {
@@ -292,6 +292,10 @@
 
 @media (max-width: 620px) {
   .plot-section-nav {
-    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .plot-section-tab {
+    width: 100%;
   }
 }

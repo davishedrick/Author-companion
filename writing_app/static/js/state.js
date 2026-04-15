@@ -89,6 +89,7 @@ const exportColumns = [
   "issue_status",
   "issue_notes",
   "issue_created_at",
+  "issue_resolved_at",
   "issue_pass_name",
   "session_id",
   "session_type",
@@ -411,15 +412,17 @@ function normalizeSession(session) {
 }
 
 function normalizeIssue(issue) {
+  const status = String(issue?.status || "Open");
   return {
     id: issue?.id || createId(),
     title: String(issue?.title || ""),
     type: String(issue?.type || "General"),
     sectionLabel: String(issue?.sectionLabel || issue?.section || ""),
     priority: String(issue?.priority || "Medium"),
-    status: String(issue?.status || "Open"),
+    status,
     notes: String(issue?.notes || ""),
     createdAt: issue?.createdAt || new Date().toISOString(),
+    resolvedAt: status === "Resolved" ? (issue?.resolvedAt || issue?.createdAt || new Date().toISOString()) : "",
     passName: String(issue?.passName || "")
   };
 }
@@ -1239,6 +1242,7 @@ function projectExportBaseRow(bundle) {
     issue_status: "",
     issue_notes: "",
     issue_created_at: "",
+    issue_resolved_at: "",
     issue_pass_name: "",
     session_id: "",
     session_type: "",
@@ -1298,6 +1302,7 @@ function buildProjectExportRows(bundle, mode = "all") {
         issue_status: issue.status || "",
         issue_notes: issue.notes || "",
         issue_created_at: issue.createdAt || "",
+        issue_resolved_at: issue.resolvedAt || "",
         issue_pass_name: issue.passName || ""
       });
     });
@@ -1443,6 +1448,7 @@ function buildBundleFromImportedRows(rows) {
         status: row.issue_status || "Open",
         notes: row.issue_notes || "",
         createdAt: row.issue_created_at || new Date().toISOString(),
+        resolvedAt: row.issue_resolved_at || "",
         passName: row.issue_pass_name || ""
       })),
     sessions: rows

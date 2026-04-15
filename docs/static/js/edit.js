@@ -3,6 +3,438 @@ let activeEditingSession = null;
 let editingSessionInFocusMode = true;
 let pendingCompletedEditSession = null;
 let editSessionTimerHandle = null;
+let editIssueFilters = createDefaultEditIssueFilters();
+let editIssueBoardView = "current";
+
+function createDefaultEditIssueFilters() {
+  return {
+    passScope: "current",
+    priority: "all",
+    type: "all",
+    section: "all",
+    sort: "priority"
+  };
+}
+
+function normalizeEditIssueFilters(filters, options = {}) {
+  const defaults = createDefaultEditIssueFilters();
+  const types = Array.isArray(options.types) ? options.types : [];
+  const sections = Array.isArray(options.sections) ? options.sections : [];
+  const allowedScopes = ["current", "all"];
+  const allowedPriorities = ["all", "High", "Medium", "Low"];
+  const allowedSorts = ["priority", "newest", "oldest", "section", "type"];
+
+  return {
+    passScope: allowedScopes.includes(filters?.passScope) ? filters.passScope : defaults.passScope,
+    priority: allowedPriorities.includes(filters?.priority) ? filters.priority : defaults.priority,
+    type: types.includes(filters?.type) ? filters.type : defaults.type,
+    section: sections.includes(filters?.section) ? filters.section : defaults.section,
+    sort: allowedSorts.includes(filters?.sort) ? filters.sort : defaults.sort
+  };
+}
+
+function getEditIssueFilterOptions(issues) {
+  return {
+    types: [...new Set(issues.map((issue) => String(issue.type || "General")).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b)),
+    sections: [...new Set(issues.map((issue) => String(issue.sectionLabel || "").trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b))
+  };
+}
+
+function scopeMatchesEditPass(itemPassName, currentPassName, scope = "current") {
+  if (scope === "all") return true;
+  return !itemPassName || itemPassName === currentPassName;
+}
+
+function compareEditIssuesByPriority(a, b) {
+  const priorityRank = { High: 0, Medium: 1, Low: 2 };
+  const statusRank = { Open: 0, Deferred: 1 };
+  const statusDelta = (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99);
+  if (statusDelta !== 0) return statusDelta;
+  const priorityDelta = (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99);
+  if (priorityDelta !== 0) return priorityDelta;
+  return new Date(b.createdAt) - new Date(a.createdAt);
+}
+
+function getFilteredEditIssues(bundle, issues, filters) {
+  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  const normalizedFilters = normalizeEditIssueFilters(filters, getEditIssueFilterOptions(issues));
+
+  return [...issues]
+    .filter((issue) => issue.status !== "Resolved")
+    .filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, normalizedFilters.passScope))
+    .filter((issue) => normalizedFilters.priority === "all" || issue.priority === normalizedFilters.priority)
+    .filter((issue) => normalizedFilters.type === "all" || issue.type === normalizedFilters.type)
+    .filter((issue) => normalizedFilters.section === "all" || issue.sectionLabel === normalizedFilters.section)
+    .sort((a, b) => {
+      if (normalizedFilters.sort === "newest") return new Date(b.createdAt) - new Date(a.createdAt);
+      if (normalizedFilters.sort === "oldest") return new Date(a.createdAt) - new Date(b.createdAt);
+      if (normalizedFilters.sort === "section") {
+        const labelDelta = String(a.sectionLabel || "~").localeCompare(String(b.sectionLabel || "~"));
+        return labelDelta || compareEditIssuesByPriority(a, b);
+      }
+      if (normalizedFilters.sort === "type") {
+        const typeDelta = String(a.type || "").localeCompare(String(b.type || ""));
+        return typeDelta || compareEditIssuesByPriority(a, b);
+      }
+      return compareEditIssuesByPriority(a, b);
+    });
+}
+
+function buildEditSectionHotspots(bundle, scope = "current") {
+  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  const hotspots = new Map();
+
+  function getSectionEntry(sectionLabel) {
+    const label = String(sectionLabel || "").trim();
+    if (!label) return null;
+    const key = label.toLowerCase();
+    if (!hotspots.has(key)) {
+      hotspots.set(key, {
+        key,
+        label,
+        sessionCount: 0,
+        totalMinutes: 0,
+        wordsEdited: 0,
+        openIssueCount: 0,
+        deferredIssueCount: 0,
+        resolvedIssueCount: 0,
+        lastTouchedAt: ""
+      });
+    }
+    return hotspots.get(key);
+  }
+
+  function markTouched(entry, dateValue) {
+    if (!entry || !dateValue) return;
+    if (!entry.lastTouchedAt || new Date(dateValue) > new Date(entry.lastTouchedAt)) {
+      entry.lastTouchedAt = dateValue;
+    }
+  }
+
+  bundle.issues
+    .filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, scope))
+    .forEach((issue) => {
+      const entry = getSectionEntry(issue.sectionLabel);
+      if (!entry) return;
+      if (issue.status === "Resolved") entry.resolvedIssueCount += 1;
+      else if (issue.status === "Deferred") entry.deferredIssueCount += 1;
+      else entry.openIssueCount += 1;
+      markTouched(entry, issue.createdAt);
+    });
+
+  getEditSessions(bundle)
+    .filter((session) => scopeMatchesEditPass(session.passName, currentPassName, scope))
+    .forEach((session) => {
+      const entry = getSectionEntry(session.sectionLabel);
+      if (!entry) return;
+      entry.sessionCount += 1;
+      entry.totalMinutes += number(session.durationMinutes);
+      entry.wordsEdited += number(session.wordsEdited);
+      markTouched(entry, session.date);
+    });
+
+  return [...hotspots.values()]
+    .map((entry) => ({
+      ...entry,
+      pressureScore:
+        (entry.openIssueCount * 4)
+        + (entry.deferredIssueCount * 3)
+        + entry.sessionCount
+        + Math.min(4, Math.round(entry.totalMinutes / 30))
+    }))
+    .sort((a, b) => {
+      const scoreDelta = b.pressureScore - a.pressureScore;
+      if (scoreDelta !== 0) return scoreDelta;
+      const dateDelta = new Date(b.lastTouchedAt || 0) - new Date(a.lastTouchedAt || 0);
+      if (dateDelta !== 0) return dateDelta;
+      return a.label.localeCompare(b.label);
+    });
+}
+
+function getEditIssueRecommendationSignals(issue, hotspots, editStats) {
+  const sectionKey = String(issue.sectionLabel || "").trim().toLowerCase();
+  const sectionHotspot = hotspots.find((entry) => entry.key === sectionKey) || null;
+  const priorityRank = { High: 3, Medium: 2, Low: 1 };
+  const createdAt = issue.createdAt ? new Date(issue.createdAt) : null;
+  const ageDays = createdAt ? Math.max(0, Math.round((Date.now() - createdAt.getTime()) / 86400000)) : 0;
+  const lastTouchedDate = sectionHotspot?.lastTouchedAt || "";
+  const lastTouchedLabel = lastTouchedDate ? formatDate(lastTouchedDate) : "";
+  const sameAsLastSession = Boolean(editStats.lastSession?.sectionLabel && issue.sectionLabel && editStats.lastSession.sectionLabel === issue.sectionLabel);
+  const unresolvedInSection = (sectionHotspot?.openIssueCount || 0) + (sectionHotspot?.deferredIssueCount || 0);
+
+  return {
+    priorityRank: priorityRank[issue.priority] || 0,
+    unresolvedInSection,
+    sessionCount: sectionHotspot?.sessionCount || 0,
+    lastTouchedAt: lastTouchedDate,
+    lastTouchedLabel,
+    sameAsLastSession,
+    ageDays
+  };
+}
+
+function scoreEditIssueRecommendation(issue, signals, lens = "urgent") {
+  const basePriorityScore = signals.priorityRank * 100;
+  const sectionClusterScore = signals.unresolvedInSection * 12;
+  const recentSectionScore = signals.sameAsLastSession ? 24 : Math.min(18, signals.sessionCount * 6);
+  const ageScore = Math.min(30, signals.ageDays * 2);
+
+  if (lens === "momentum") {
+    return basePriorityScore + recentSectionScore + (sectionClusterScore * 0.7) + ageScore;
+  }
+
+  if (lens === "cleanup") {
+    const isolatedSectionBonus = signals.unresolvedInSection <= 1 ? 18 : 0;
+    return basePriorityScore + ageScore + isolatedSectionBonus + (signals.unresolvedInSection * 4);
+  }
+
+  return basePriorityScore + sectionClusterScore + ageScore + (signals.sameAsLastSession ? 8 : 0);
+}
+
+function describeEditRecommendationReason(issue, signals, lens = "urgent") {
+  const reasonParts = [`${issue.priority} priority in the current pass`];
+
+  if (signals.unresolvedInSection >= 2) {
+    reasonParts.push(`${formatNumber(signals.unresolvedInSection)} unresolved issues sit in ${issue.sectionLabel || "this section"}`);
+  } else if (signals.unresolvedInSection === 1 && issue.sectionLabel) {
+    reasonParts.push(`${issue.sectionLabel} is down to a single unresolved issue`);
+  }
+
+  if (lens === "momentum") {
+    if (signals.sameAsLastSession && issue.sectionLabel) {
+      reasonParts.push(`you edited ${issue.sectionLabel} most recently, so context should still be warm`);
+    } else if (signals.lastTouchedLabel) {
+      reasonParts.push(`this section was touched recently on ${signals.lastTouchedLabel}`);
+    }
+  } else if (lens === "cleanup") {
+    if (signals.ageDays >= 1) {
+      reasonParts.push(`it has been waiting since ${formatDate(issue.createdAt)}`);
+    }
+  } else if (signals.ageDays >= 1) {
+    reasonParts.push(`it has been open since ${formatDate(issue.createdAt)}`);
+  }
+
+  return `${reasonParts.join(". ")}.`;
+}
+
+function buildEditIssueRecommendation(issue, signals, lens = "urgent") {
+  const labels = {
+    urgent: "Most urgent",
+    momentum: "Best momentum move",
+    cleanup: "Best cleanup win",
+    primary: "Best next move"
+  };
+  const descriptions = {
+    urgent: issue.sectionLabel
+      ? `Tackle ${issue.sectionLabel} by addressing "${issue.title}" first.`
+      : `Address "${issue.title}" before lower-pressure edits start competing for attention.`,
+    momentum: issue.sectionLabel
+      ? `Stay in motion by continuing work in ${issue.sectionLabel}.`
+      : `Use this issue as the easiest way to keep revision momentum going.`,
+    cleanup: issue.sectionLabel
+      ? `Use ${issue.sectionLabel} as a contained cleanup target.`
+      : `This issue is a strong candidate for clearing something old off the board.`,
+    primary: issue.sectionLabel
+      ? `Start with ${issue.sectionLabel} so the highest-value issue in the current pass is handled first.`
+      : `Start here because it is the strongest unresolved issue in the current pass.`
+  };
+
+  return {
+    label: labels[lens] || labels.primary,
+    title: issue.title,
+    description: descriptions[lens] || descriptions.primary,
+    reason: describeEditRecommendationReason(issue, signals, lens),
+    badges: [
+      issue.priority,
+      issue.type,
+      issue.sectionLabel || "No section tagged"
+    ],
+    primaryAction: "review-issue",
+    primaryLabel: "Review issue",
+    secondaryAction: issue.sectionLabel ? "filter-section" : "start-session",
+    secondaryLabel: issue.sectionLabel ? "Show section issues" : "Start editing session",
+    issueId: issue.id,
+    filterSection: issue.sectionLabel || ""
+  };
+}
+
+function buildFallbackEditRecommendation(bundle, editStats) {
+  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  const sectionsRemaining = Math.max(number(bundle.editing.progressTotal) - number(bundle.editing.progressCurrent), 0);
+
+  if (sectionsRemaining > 0) {
+    return {
+      label: "Keep the pass moving",
+      title: "Start a fresh pass session",
+      description: `${formatNumber(sectionsRemaining)} section${sectionsRemaining === 1 ? "" : "s"} remain in this pass. A fresh timed session is the fastest way to keep momentum from drifting.`,
+      reason: `${formatNumber(bundle.editing.progressCurrent)} of ${formatNumber(bundle.editing.progressTotal)} sections are marked complete, and there are no current issues steering the next move right now.`,
+      badges: [
+        `${formatNumber(bundle.editing.progressCurrent)} / ${formatNumber(bundle.editing.progressTotal)} sections reviewed`,
+        `${formatHours(editStats.currentPassMinutes)} in this pass`,
+        bundle.editing.passStatus || "In progress"
+      ],
+      primaryAction: "start-session",
+      primaryLabel: "Start editing session",
+      secondaryAction: "change-pass",
+      secondaryLabel: "Adjust pass"
+    };
+  }
+
+  if (editStats.lastSession?.sectionLabel) {
+    return {
+      label: "Best next move",
+      title: `Pick up from ${editStats.lastSession.sectionLabel}`,
+      description: `That was the most recently edited section. Use it as the handoff point for your next cleanup or polish pass.`,
+      reason: `There are no open issues in the current pass, so the recommendation falls back to your most recent editing context from ${formatDate(editStats.lastSession.date)}.`,
+      badges: [
+        formatDate(editStats.lastSession.date),
+        `${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} logged`,
+        `${formatNumber(editStats.resolvedIssueCount)} resolved issue${editStats.resolvedIssueCount === 1 ? "" : "s"}`
+      ],
+      primaryAction: "start-session",
+      primaryLabel: "Start editing session",
+      secondaryAction: "add-issue",
+      secondaryLabel: "Log issue"
+    };
+  }
+
+  return {
+    label: "Best next move",
+    title: "Create the first revision anchor",
+    description: "Start by logging an issue or a timed editing session so the dashboard can begin steering what needs attention next.",
+    reason: `Priority-led recommendations need at least one current-pass issue. Until then, the safest suggestion is to start logging what you find.`,
+    badges: [
+      currentPassName,
+      bundle.editing.passStatus || "Not started",
+      "No edit history yet"
+    ],
+    primaryAction: "add-issue",
+    primaryLabel: "Add issue",
+    secondaryAction: "start-session",
+    secondaryLabel: "Start editing session"
+  };
+}
+
+function deriveEditFocusRecommendations(bundle, unresolvedIssues, hotspots, editStats) {
+  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  const currentPassIssues = unresolvedIssues.filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, "current"));
+
+  if (!currentPassIssues.length) {
+    return [buildFallbackEditRecommendation(bundle, editStats)];
+  }
+
+  const signalsById = new Map(currentPassIssues.map((issue) => [issue.id, getEditIssueRecommendationSignals(issue, hotspots, editStats)]));
+  const rankIssues = (lens) => [...currentPassIssues].sort((a, b) => {
+    const scoreDelta = scoreEditIssueRecommendation(b, signalsById.get(b.id), lens) - scoreEditIssueRecommendation(a, signalsById.get(a.id), lens);
+    if (scoreDelta !== 0) return scoreDelta;
+    return compareEditIssuesByPriority(a, b);
+  });
+
+  const orderedCandidates = currentPassIssues.length <= 2
+    ? [{ lens: "primary", issues: rankIssues("urgent") }]
+    : [
+        { lens: "urgent", issues: rankIssues("urgent") },
+        { lens: "momentum", issues: rankIssues("momentum") },
+        { lens: "cleanup", issues: rankIssues("cleanup") }
+      ];
+
+  const usedIssueIds = new Set();
+  const recommendations = [];
+
+  orderedCandidates.forEach(({ lens, issues }) => {
+    const nextIssue = issues.find((issue) => !usedIssueIds.has(issue.id));
+    if (!nextIssue) return;
+    usedIssueIds.add(nextIssue.id);
+    recommendations.push(buildEditIssueRecommendation(nextIssue, signalsById.get(nextIssue.id), lens));
+  });
+
+  if (currentPassIssues.length > 2 && recommendations.length < 3) {
+    rankIssues("urgent").forEach((issue) => {
+      if (recommendations.length >= 3 || usedIssueIds.has(issue.id)) return;
+      usedIssueIds.add(issue.id);
+      recommendations.push(buildEditIssueRecommendation(issue, signalsById.get(issue.id), "urgent"));
+    });
+  }
+
+  return recommendations;
+}
+
+function describeEditIssueFilterSummary(issues, filters) {
+  if (!issues.length) return "No unresolved issues match these filters right now.";
+  const scopeLabel = filters.passScope === "all" ? "across all passes" : "in the current pass";
+  const extraFilters = [filters.priority, filters.type, filters.section].filter((value) => value && value !== "all");
+  return `${formatNumber(issues.length)} unresolved issue${issues.length === 1 ? "" : "s"} ${scopeLabel}${extraFilters.length ? ` filtered by ${extraFilters.join(", ")}` : ""}.`;
+}
+
+function getCurrentPassUnresolvedIssueCount(bundle) {
+  if (!bundle) return 0;
+  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  return bundle.issues.filter((issue) => issue.status !== "Resolved" && scopeMatchesEditPass(issue.passName, currentPassName, "current")).length;
+}
+
+function compareResolvedEditIssues(a, b) {
+  const dateDelta = new Date(b.resolvedAt || b.createdAt || 0) - new Date(a.resolvedAt || a.createdAt || 0);
+  if (dateDelta !== 0) return dateDelta;
+  return String(a.title || "").localeCompare(String(b.title || ""));
+}
+
+function getEditPassNameOptions(bundle) {
+  const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
+  return [...new Set([
+    currentPassName,
+    ...(bundle?.issues || []).map((issue) => String(issue.passName || "").trim()),
+    ...(bundle?.sessions || []).map((session) => String(session.passName || "").trim())
+  ].filter(Boolean))].sort((a, b) => {
+    if (a === currentPassName) return -1;
+    if (b === currentPassName) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function getEditStageRoadmap(passStage, passStatus) {
+  const stages = [
+    {
+      name: "Developmental",
+      cue: "Big picture",
+      description: "Story, structure, and major revision choices."
+    },
+    {
+      name: "Structural",
+      cue: "Scene flow",
+      description: "Chapter order, pacing, and transitions."
+    },
+    {
+      name: "Line Edit",
+      cue: "Sentence craft",
+      description: "Voice, clarity, rhythm, and prose texture."
+    },
+    {
+      name: "Copyedit",
+      cue: "Mechanics",
+      description: "Consistency, grammar, and technical cleanup."
+    },
+    {
+      name: "Proofread",
+      cue: "Final polish",
+      description: "Last-pass typo checks before calling it done."
+    }
+  ];
+  const activeStage = stages.find((stage) => stage.name === passStage)?.name || stages[0].name;
+  const activeIndex = stages.findIndex((stage) => stage.name === activeStage);
+  const isComplete = String(passStatus || "").toLowerCase() === "complete";
+
+  return stages.map((stage, index) => ({
+    ...stage,
+    state:
+      index < activeIndex
+        ? "complete"
+        : index === activeIndex
+          ? (isComplete ? "current-complete" : "current")
+          : "upcoming"
+  }));
+}
 
 function renderEditDashboard(bundle) {
   const view = document.getElementById("view-edit");
@@ -20,29 +452,28 @@ function renderEditDashboard(bundle) {
   const todayEditSessions = [...getEditSessions(bundle)]
     .filter((session) => dateKey(session.date) === todayKey)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
-  const issuePriorityRank = { High: 0, Medium: 1, Low: 2 };
-  const issueStatusRank = { Open: 0, Deferred: 1, Resolved: 2 };
   const issues = [...bundle.issues]
-    .sort((a, b) => {
-      const statusDelta = (issueStatusRank[a.status] ?? 99) - (issueStatusRank[b.status] ?? 99);
-      if (statusDelta !== 0) return statusDelta;
-      const priorityDelta = (issuePriorityRank[a.priority] ?? 99) - (issuePriorityRank[b.priority] ?? 99);
-      if (priorityDelta !== 0) return priorityDelta;
-      return new Date(b.createdAt) - new Date(a.createdAt);
-    });
+    .sort(compareEditIssuesByPriority);
   const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
   const resolvedIssues = issues.filter((issue) => issue.status === "Resolved");
-  const currentPassIssues = visibleIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
-  const issueList = (currentPassIssues.length ? currentPassIssues : visibleIssues).slice(0, 6);
-  const resolvedIssueArchive = resolvedIssues.slice(0, 8);
-  const issueCounts = issueList.reduce((summary, issue) => {
-    summary[issue.type] = (summary[issue.type] || 0) + 1;
-    return summary;
-  }, {});
-  const topIssueTypes = Object.entries(issueCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 4);
+  const issueFilterOptions = getEditIssueFilterOptions(visibleIssues);
+  editIssueFilters = normalizeEditIssueFilters(editIssueFilters, issueFilterOptions);
+  const filteredIssues = getFilteredEditIssues(bundle, visibleIssues, editIssueFilters);
+  const issueList = filteredIssues;
+  const resolvedIssueArchive = [...resolvedIssues].sort(compareResolvedEditIssues);
+  const currentPassHotspots = buildEditSectionHotspots(bundle, "current");
+  const nextFocusRecommendations = deriveEditFocusRecommendations(bundle, visibleIssues, currentPassHotspots, editStats);
   const lastSession = editStats.lastSession;
+  const issueFilterSummary = describeEditIssueFilterSummary(filteredIssues, editIssueFilters);
+  const resolvedIssueSummary = resolvedIssueArchive.length
+    ? `${formatNumber(resolvedIssueArchive.length)} resolved issue${resolvedIssueArchive.length === 1 ? "" : "s"} are tucked here for reference. Reopen anything that needs another pass.`
+    : "Resolved issues will collect here once you start closing them out.";
+  const stageRoadmap = getEditStageRoadmap(bundle.editing.passStage, bundle.editing.passStatus);
+  const activeStageRoadmapEntry = stageRoadmap.find((stage) => stage.state === "current" || stage.state === "current-complete") || stageRoadmap[0];
+  const activeStageRoadmapIndex = Math.max(stageRoadmap.findIndex((stage) => stage === activeStageRoadmapEntry), 0);
+  const stageRoadmapFillEnd = stageRoadmap.length > 1
+    ? 10 + ((activeStageRoadmapIndex / (stageRoadmap.length - 1)) * 80)
+    : 10;
 
   view.innerHTML = `
     <section class="stack">
@@ -65,20 +496,27 @@ function renderEditDashboard(bundle) {
       <section class="card hero">
         <div class="hero-panel pass-focus">
           <div class="section-head">
-            <div>
-              <p class="small-copy">Edit dashboard</p>
-              <h2 class="hero-title">${escapeHtml(bundle.editing.passName || defaultPassName(bundle.editing.passStage))}</h2>
-              <p class="pass-copy">${escapeHtml(bundle.editing.passObjective || "Define what this pass is trying to improve so the dashboard can support the work.")}</p>
-            </div>
             <div class="meta-line">
               <button class="ghost-btn" id="open-edit-pass-btn" type="button">Change pass</button>
             </div>
           </div>
-          <div class="hero-meta">
-            <span class="badge">${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
-            <span class="pill">${escapeHtml(bundle.editing.passStatus || "Not started")}</span>
-            <span class="pill">${formatNumber(editStats.currentPassIssueCount)} open issue${editStats.currentPassIssueCount === 1 ? "" : "s"} in this pass</span>
-          </div>
+          <section class="edit-stage-roadmap" aria-label="Editing process stages">
+            <div class="edit-stage-roadmap-head">
+              <div>
+                <strong>Editing roadmap</strong>
+                <p>${escapeHtml(activeStageRoadmapEntry.description)}</p>
+              </div>
+            </div>
+            <div class="edit-stage-track" role="list" style="--edit-stage-fill-end:${stageRoadmapFillEnd}%;">
+              ${stageRoadmap.map((stage) => `
+                <article class="edit-stage-node is-${escapeAttr(stage.state)}" role="listitem" ${stage.state === "current" || stage.state === "current-complete" ? 'aria-current="step"' : ""}>
+                  <span class="edit-stage-dot" aria-hidden="true"></span>
+                  <strong class="edit-stage-title">${escapeHtml(stage.name)}</strong>
+                  <span class="edit-stage-cue">${escapeHtml(stage.cue)}</span>
+                </article>
+              `).join("")}
+            </div>
+          </section>
           <div class="progress-block">
             <div class="progress-label-row">
               <strong>Pass progress</strong>
@@ -103,6 +541,50 @@ function renderEditDashboard(bundle) {
         </div>
       </section>
 
+      <section class="card next-focus-card">
+        <div class="section-head">
+          <div>
+            <h3>Next Focus</h3>
+            <p>Priority leads the ranking. Section clustering, recent editing activity, and issue age only help break ties so the reasoning stays readable and honest.</p>
+          </div>
+        </div>
+        <div class="next-focus-list next-focus-list-${nextFocusRecommendations.length}">
+          ${nextFocusRecommendations.map((recommendation) => `
+            <article class="next-focus-option">
+              <div class="next-focus-copy">
+                <p class="next-focus-kicker">${escapeHtml(recommendation.label)}</p>
+                <h4>${escapeHtml(recommendation.title)}</h4>
+                <p>${escapeHtml(recommendation.description)}</p>
+              </div>
+              <p class="next-focus-reason"><strong>Why this surfaced:</strong> ${escapeHtml(recommendation.reason)}</p>
+              <div class="next-focus-badges">
+                ${recommendation.badges.map((badge) => `<span class="pill">${escapeHtml(badge)}</span>`).join("")}
+              </div>
+              <div class="next-focus-actions">
+                ${recommendation.primaryAction ? `
+                  <button
+                    class="primary-btn"
+                    type="button"
+                    data-next-focus-action="${escapeAttr(recommendation.primaryAction)}"
+                    ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
+                    ${recommendation.filterSection ? `data-section="${escapeAttr(recommendation.filterSection)}"` : ""}
+                  >${escapeHtml(recommendation.primaryLabel)}</button>
+                ` : ""}
+                ${recommendation.secondaryAction ? `
+                  <button
+                    class="ghost-btn"
+                    type="button"
+                    data-next-focus-action="${escapeAttr(recommendation.secondaryAction)}"
+                    ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
+                    ${recommendation.filterSection ? `data-section="${escapeAttr(recommendation.filterSection)}"` : ""}
+                  >${escapeHtml(recommendation.secondaryLabel)}</button>
+                ` : ""}
+              </div>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+
       <section class="card">
         <div class="section-head">
           <div>
@@ -121,60 +603,105 @@ function renderEditDashboard(bundle) {
       <section class="card open-issues-focus">
         <div class="section-head">
           <div>
-            <h3>Open Issues</h3>
-            <p>Capture problems now so you can refer back to them while editing.</p>
+            <h3>Issue Board</h3>
+            <p>${editIssueBoardView === "current" ? "Focus the active revision backlog without letting the archive take over the page." : "Browse resolved issues without cluttering the work-in-progress board."}</p>
           </div>
-          <button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>
+          <div class="issue-board-head-actions">
+            <div class="issue-board-state-toggle" role="tablist" aria-label="Issue board states">
+              <button
+                class="issue-board-state-btn ${editIssueBoardView === "current" ? "active" : ""}"
+                id="edit-issue-view-current"
+                type="button"
+                role="tab"
+                aria-selected="${editIssueBoardView === "current" ? "true" : "false"}"
+                data-edit-issue-view="current"
+              >
+                <span>Current</span>
+                <strong>${formatNumber(visibleIssues.length)}</strong>
+              </button>
+              <button
+                class="issue-board-state-btn ${editIssueBoardView === "resolved" ? "active" : ""}"
+                id="edit-issue-view-resolved"
+                type="button"
+                role="tab"
+                aria-selected="${editIssueBoardView === "resolved" ? "true" : "false"}"
+                data-edit-issue-view="resolved"
+              >
+                <span>Resolved</span>
+                <strong>${formatNumber(resolvedIssueArchive.length)}</strong>
+              </button>
+            </div>
+            ${editIssueBoardView === "current" ? `<button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>` : ""}
+          </div>
         </div>
-        <div class="list">
-          ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No open issues yet. Add one when something needs a second pass.</div>`}
+        <div class="issue-board-state-shell">
+          <p class="small-copy issue-board-state-copy">${escapeHtml(editIssueBoardView === "current" ? "Current issues stay action-oriented here. Resolved items move out of the way until you need the archive." : resolvedIssueSummary)}</p>
         </div>
+        ${editIssueBoardView === "current" ? `
+          <form class="issue-filter-form" id="edit-issue-filters-form">
+            <label>Pass
+              <select name="passScope">
+                <option value="current" ${editIssueFilters.passScope === "current" ? "selected" : ""}>Current pass</option>
+                <option value="all" ${editIssueFilters.passScope === "all" ? "selected" : ""}>All passes</option>
+              </select>
+            </label>
+            <label>Priority
+              <select name="priority">
+                <option value="all" ${editIssueFilters.priority === "all" ? "selected" : ""}>All priorities</option>
+                <option value="High" ${editIssueFilters.priority === "High" ? "selected" : ""}>High</option>
+                <option value="Medium" ${editIssueFilters.priority === "Medium" ? "selected" : ""}>Medium</option>
+                <option value="Low" ${editIssueFilters.priority === "Low" ? "selected" : ""}>Low</option>
+              </select>
+            </label>
+            <label>Type
+              <select name="type">
+                <option value="all" ${editIssueFilters.type === "all" ? "selected" : ""}>All types</option>
+                ${issueFilterOptions.types.map((type) => `<option value="${escapeAttr(type)}" ${editIssueFilters.type === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Section
+              <select name="section">
+                <option value="all" ${editIssueFilters.section === "all" ? "selected" : ""}>All sections</option>
+                ${issueFilterOptions.sections.map((section) => `<option value="${escapeAttr(section)}" ${editIssueFilters.section === section ? "selected" : ""}>${escapeHtml(section)}</option>`).join("")}
+              </select>
+            </label>
+            <label>Sort
+              <select name="sort" id="edit-issue-sort">
+                <option value="priority" ${editIssueFilters.sort === "priority" ? "selected" : ""}>Priority first</option>
+                <option value="newest" ${editIssueFilters.sort === "newest" ? "selected" : ""}>Newest first</option>
+                <option value="oldest" ${editIssueFilters.sort === "oldest" ? "selected" : ""}>Oldest first</option>
+                <option value="section" ${editIssueFilters.sort === "section" ? "selected" : ""}>By section</option>
+                <option value="type" ${editIssueFilters.sort === "type" ? "selected" : ""}>By type</option>
+              </select>
+            </label>
+            <button class="ghost-btn issue-filter-reset" id="reset-edit-issue-filters-btn" type="button">Reset filters</button>
+          </form>
+          <p class="small-copy issue-filter-summary">${escapeHtml(issueFilterSummary)}</p>
+          <div class="list">
+            ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No unresolved issues match these filters right now.</div>`}
+          </div>
+        ` : `
+          <div class="issue-board-archive">
+            <div class="list issue-archive-list">
+              ${resolvedIssueArchive.length ? resolvedIssueArchive.map((issue) => renderIssueCard(issue, { archived: true })).join("") : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
+            </div>
+          </div>
+        `}
       </section>
 
-      <section class="card issue-archive">
+      <section class="card">
         <div class="section-head">
           <div>
-            <h3>Resolved Archive</h3>
-            <p>Keep a lightweight record of the issues you already closed during this project.</p>
+            <h3>Session History</h3>
+            <p>All editing sessions logged today.</p>
+          </div>
+          <div class="meta-line">
+            <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
           </div>
         </div>
         <div class="list">
-          ${resolvedIssueArchive.length ? resolvedIssueArchive.map((issue) => renderIssueCard(issue, { archived: true })).join("") : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
+          ${todayEditSessions.length ? todayEditSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged today.</div>`}
         </div>
-      </section>
-
-      <section class="edit-columns">
-        <section class="card">
-          <div class="section-head">
-            <div>
-              <h3>Session History</h3>
-              <p>All editing sessions logged today.</p>
-            </div>
-            <div class="meta-line">
-              <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
-            </div>
-          </div>
-          <div class="list">
-            ${todayEditSessions.length ? todayEditSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged today.</div>`}
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="section-head">
-            <div>
-              <h3>Issue Breakdown</h3>
-              <p>See which kinds of problems are stacking up in this pass.</p>
-            </div>
-          </div>
-          <div class="issue-breakdown">
-            ${topIssueTypes.length ? topIssueTypes.map(([label, count]) => `
-              <div class="issue-breakdown-row">
-                <strong>${escapeHtml(label)}</strong>
-                <span>${formatNumber(count)} issue${count === 1 ? "" : "s"}</span>
-              </div>
-            `).join("") : `<div class="empty">Issue types will appear here once you start filing problems.</div>`}
-          </div>
-        </section>
       </section>
 
       <section class="card">
@@ -222,6 +749,8 @@ function bindEditDashboardEvents(bundle) {
   const passForm = document.getElementById("edit-pass-form");
   const editSessionForm = document.getElementById("edit-session-form");
   const issueForm = document.getElementById("issue-form");
+  const issueFilterForm = document.getElementById("edit-issue-filters-form");
+  const issueViewButtons = document.querySelectorAll("[data-edit-issue-view]");
   const openPassButton = document.getElementById("open-edit-pass-btn");
   const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
   const closeEditSessionStartButton = document.getElementById("close-edit-session-start-btn");
@@ -231,25 +760,38 @@ function bindEditDashboardEvents(bundle) {
   const cancelEndEditSessionButton = document.getElementById("cancel-end-edit-session-btn");
   const confirmEndEditSessionButton = document.getElementById("confirm-end-edit-session-btn");
   const openIssueButton = document.getElementById("open-issue-modal-btn");
+  const resetIssueFiltersButton = document.getElementById("reset-edit-issue-filters-btn");
   const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
   const closePassButton = document.getElementById("close-edit-pass-btn");
   const closeEditSessionButton = document.getElementById("close-edit-session-btn");
   const closeIssueButton = document.getElementById("close-issue-modal-btn");
 
+  function openEditPassFlow() {
+    const unresolvedCount = getCurrentPassUnresolvedIssueCount(currentBundle());
+    if (unresolvedCount > 0) {
+      showToast(
+        "Resolve this pass first",
+        `${formatNumber(unresolvedCount)} unresolved issue${unresolvedCount === 1 ? "" : "s"} still belong to the current pass. Clear them before changing passes.`
+      );
+      return;
+    }
+    openEditPassModal();
+  }
+
+  function openEditSessionFlow() {
+    if (getActiveFocusSession()) {
+      showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
+      return;
+    }
+    openEditSessionStartModal();
+  }
+
   if (openPassButton) {
-    openPassButton.onclick = () => {
-      openEditPassModal();
-    };
+    openPassButton.onclick = openEditPassFlow;
   }
 
   if (openEditSessionButton) {
-    openEditSessionButton.onclick = () => {
-      if (getActiveFocusSession()) {
-        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
-        return;
-      }
-      openEditSessionStartModal();
-    };
+    openEditSessionButton.onclick = openEditSessionFlow;
   }
 
   if (startEditSessionButton) {
@@ -286,6 +828,33 @@ function bindEditDashboardEvents(bundle) {
   if (openIssueButton) {
     openIssueButton.onclick = () => {
       openIssueModal();
+    };
+  }
+
+  if (issueFilterForm) {
+    issueFilterForm.onchange = () => {
+      editIssueFilters = {
+        passScope: String(issueFilterForm.elements.passScope?.value || "current"),
+        priority: String(issueFilterForm.elements.priority?.value || "all"),
+        type: String(issueFilterForm.elements.type?.value || "all"),
+        section: String(issueFilterForm.elements.section?.value || "all"),
+        sort: String(issueFilterForm.elements.sort?.value || "priority")
+      };
+      render();
+    };
+  }
+
+  issueViewButtons.forEach((button) => {
+    button.onclick = () => {
+      editIssueBoardView = button.dataset.editIssueView === "resolved" ? "resolved" : "current";
+      render();
+    };
+  });
+
+  if (resetIssueFiltersButton) {
+    resetIssueFiltersButton.onclick = () => {
+      editIssueFilters = createDefaultEditIssueFilters();
+      render();
     };
   }
 
@@ -421,7 +990,10 @@ function bindEditDashboardEvents(bundle) {
         createdAt: isEditingExisting
           ? bundle.issues.find((item) => item.id === editingIssueId)?.createdAt || new Date().toISOString()
           : new Date().toISOString(),
-        passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage)
+        resolvedAt: String(formData.get("status") || "Open") === "Resolved"
+          ? bundle.issues.find((item) => item.id === editingIssueId)?.resolvedAt || new Date().toISOString()
+          : "",
+        passName: String(formData.get("issuePassName") || "").trim() || bundle.editing.passName || defaultPassName(bundle.editing.passStage)
       });
 
       updateCurrentBundle((projectBundle) => ({
@@ -431,6 +1003,7 @@ function bindEditDashboardEvents(bundle) {
           : [issue, ...projectBundle.issues]
       }));
 
+      editIssueBoardView = issue.status === "Resolved" ? "resolved" : "current";
       closeIssueModal();
       persistAndRender();
       showToast(isEditingExisting ? "Issue updated" : "Issue added", "That editing problem has been filed away for the current pass.");
@@ -446,16 +1019,22 @@ function bindEditDashboardEvents(bundle) {
   document.querySelectorAll("[data-action='toggle-issue-status']").forEach((button) => {
     button.onclick = () => {
       const issueId = button.dataset.id;
+      const existingIssue = bundle.issues.find((issue) => issue.id === issueId);
       updateCurrentBundle((projectBundle) => ({
         ...projectBundle,
         issues: projectBundle.issues.map((issue) => {
           if (issue.id !== issueId) return issue;
+          const nextStatus = issue.status === "Resolved" ? "Open" : "Resolved";
           return {
             ...issue,
-            status: issue.status === "Resolved" ? "Open" : "Resolved"
+            status: nextStatus,
+            resolvedAt: nextStatus === "Resolved" ? (issue.resolvedAt || new Date().toISOString()) : ""
           };
         })
       }));
+      if (existingIssue?.status === "Resolved") {
+        editIssueBoardView = "current";
+      }
       persistAndRender();
       showToast("Issue updated", "The issue status was updated.");
     };
@@ -470,6 +1049,37 @@ function bindEditDashboardEvents(bundle) {
       }));
       persistAndRender();
       showToast("Issue deleted", "That issue was removed from your editing backlog.");
+    };
+  });
+
+  document.querySelectorAll("[data-next-focus-action]").forEach((button) => {
+    button.onclick = () => {
+      const action = button.dataset.nextFocusAction;
+      if (action === "review-issue" && button.dataset.issueId) {
+        openIssueModal(button.dataset.issueId);
+        return;
+      }
+      if (action === "start-session") {
+        openEditSessionFlow();
+        return;
+      }
+      if (action === "filter-section") {
+        editIssueBoardView = "current";
+        editIssueFilters = {
+          ...editIssueFilters,
+          passScope: "current",
+          section: String(button.dataset.section || "all")
+        };
+        render();
+        return;
+      }
+      if (action === "change-pass") {
+        openEditPassFlow();
+        return;
+      }
+      if (action === "add-issue") {
+        openIssueModal();
+      }
     };
   });
 
@@ -744,14 +1354,22 @@ function openIssueModal(issueId = null) {
   const modal = document.getElementById("issue-modal");
   const form = document.getElementById("issue-form");
   const passCopy = document.getElementById("issue-pass-copy");
+  const passOptions = document.getElementById("issue-pass-name-options");
   const title = document.getElementById("issue-modal-title");
   const copy = document.getElementById("issue-modal-copy");
   const submit = document.getElementById("issue-submit-btn");
-  const issue = issueId ? currentBundle()?.issues.find((item) => item.id === issueId) : null;
+  const bundle = currentBundle();
+  const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
+  const issue = issueId ? bundle?.issues.find((item) => item.id === issueId) : null;
 
   editingIssueId = issueId;
   form.reset();
-  passCopy.textContent = `Filed under: ${currentBundle()?.editing?.passName || defaultPassName(currentBundle()?.editing?.passStage)}`;
+  passCopy.textContent = `Defaults to ${currentPassName}. Change the pass below if this issue belongs to a different revision pass.`;
+  if (passOptions) {
+    passOptions.innerHTML = getEditPassNameOptions(bundle)
+      .map((passName) => `<option value="${escapeAttr(passName)}"></option>`)
+      .join("");
+  }
 
   if (issue) {
     title.textContent = "Edit Open Issue";
@@ -761,6 +1379,7 @@ function openIssueModal(issueId = null) {
     form.elements.priority.value = issue.priority || "Medium";
     form.elements.sectionLabel.value = issue.sectionLabel || "";
     form.elements.status.value = issue.status || "Open";
+    form.elements.issuePassName.value = issue.passName || currentPassName;
     form.elements.notes.value = issue.notes || "";
     submit.textContent = "Save changes";
   } else {
@@ -769,6 +1388,7 @@ function openIssueModal(issueId = null) {
     form.elements.type.value = "Pacing";
     form.elements.priority.value = "Medium";
     form.elements.status.value = "Open";
+    form.elements.issuePassName.value = currentPassName;
     submit.textContent = "Save issue";
   }
 
@@ -822,6 +1442,7 @@ function renderIssueCard(issue, options = {}) {
         <span class="pill">${escapeHtml(issue.type)}</span>
         <span class="pill issue-priority ${priorityClass}">${escapeHtml(issue.priority)}</span>
         <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
+        ${archived && issue.resolvedAt ? `<span class="pill">Resolved ${escapeHtml(formatDate(issue.resolvedAt))}</span>` : ""}
         ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
       </div>
       ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
