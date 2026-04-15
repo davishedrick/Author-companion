@@ -4,7 +4,20 @@ function renderDashboard(bundle) {
     bindWorkspaceEmptyActions();
     return;
   }
+  if (isProjectPublished(bundle)) {
+    document.getElementById("view-dashboard").innerHTML = `
+      <section class="grid dashboard-grid">
+        <div class="stack">
+          ${renderPublishedProjectDashboard(bundle)}
+        </div>
+      </section>
+    `;
+    bindDashboardEvents(bundle);
+    return;
+  }
   const stats = getStats(bundle);
+  const completion = bundle.completion || createDefaultCompletionState();
+  const isManuscriptComplete = Boolean(completion.isManuscriptComplete);
   const deadlineLabel = bundle.project.deadline ? formatDate(bundle.project.deadline) : "Flexible timeline";
   const completionLabel = stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Build pace to predict";
   const momentumState = stats.momentum === "Increasing"
@@ -23,98 +36,394 @@ function renderDashboard(bundle) {
   document.getElementById("view-dashboard").innerHTML = `
     <section class="grid dashboard-grid">
       <div class="stack">
-        <section class="card">
-          <div class="writing-launch">
-            <div class="writing-launch-copy">
-              <div>
-                <h3>Get writing</h3>
-                <p>Start a focused session, let the timer run, then record your words when you finish.</p>
-              </div>
-              <div class="writing-launch-meta">
-                <span class="pill">${formatNumber(todaySessions.length)} session${todaySessions.length === 1 ? "" : "s"} today</span>
-                <span class="pill">${formatNumber(stats.wordsToday)} words written today</span>
-              </div>
-            </div>
-            <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
-          </div>
-        </section>
-
-        <section class="card hero">
-          <div class="hero-panel">
-          <div class="section-head" style="margin-bottom: 10px;">
-            <div>
-              <p class="small-copy">Current manuscript</p>
-              <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
-            </div>
-          </div>
-          <div class="hero-meta">
-            <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
-            <span class="pill">${deadlineLabel}</span>
-          </div>
-
-            <div class="progress-block">
-              <div class="progress-label-row">
-                <span
-                  class="progress-info-icon"
-                  aria-label="manuscript word count"
-                  data-tooltip="manuscript word count"
-                  tabindex="0"
-                >?</span>
-                <span>${stats.totalProgress.toFixed(1)}%</span>
-              </div>
-              <div class="progress-rail progress-rail-checkpoints" aria-label="Book completion progress">
-                <div class="progress-fill" style="width: ${stats.totalProgress}%"></div>
-                ${completionCheckpoints.map((checkpoint, index) => `
-                  <span
-                    class="progress-checkpoint ${currentWordCount >= checkpoint ? "reached" : ""} ${index === 0 ? "edge-start" : ""} ${index === completionCheckpoints.length - 1 ? "edge-end" : ""}"
-                    style="left: ${((checkpoint / targetWordCount) * 100).toFixed(3)}%;"
-                    title="${formatNumber(checkpoint)} words"
-                    aria-hidden="true"
-                  >
-                    <span class="progress-checkpoint-label">${formatCompactCheckpoint(checkpoint)}</span>
-                  </span>
-                `).join("")}
-              </div>
-            </div>
-
-          <div class="signal-band">
-            <div class="signal-card">
-              <div class="signal-icon">${momentumState.icon}</div>
-                <div class="signal-copy">
-                  <strong>Momentum</strong>
-                  <div class="momentum-status ${momentumState.className}">${momentumState.label}</div>
-                  <p>${momentumState.detail}</p>
-                </div>
-              </div>
-              <div class="signal-card">
-                <div class="signal-icon">🔥</div>
-                <div class="signal-copy">
-                  <strong>Streak</strong>
-                  <span>${formatNumber(stats.currentStreak)} days</span>
-                  <p>Longest streak ${formatNumber(stats.longestStreak)} days</p>
-              </div>
-            </div>
-          </div>
-        </div>
-        </section>
-
-        <section class="card">
-          <div class="section-head">
-            <div>
-              <h3>Session History</h3>
-              <p>All writing sessions logged today.</p>
-            </div>
-            <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
-          </div>
-          <div class="list">
-            ${todaySessions.length ? todaySessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged today.</div>`}
-          </div>
-        </section>
+        ${isManuscriptComplete
+          ? renderCompletedManuscriptDashboard(bundle, stats)
+          : renderActiveManuscriptDashboard(
+            bundle,
+            stats,
+            todaySessions,
+            momentumState,
+            deadlineLabel,
+            completionCheckpoints,
+            currentWordCount,
+            targetWordCount
+          )}
       </div>
     </section>
   `;
 
   bindDashboardEvents(bundle);
+}
+
+function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumState, deadlineLabel, completionCheckpoints, currentWordCount, targetWordCount) {
+  return `
+    <section class="card">
+      <div class="writing-launch">
+        <div class="writing-launch-copy">
+          <div>
+            <h3>Get writing</h3>
+            <p>Start a focused session, let the timer run, then record your words when you finish.</p>
+          </div>
+          <div class="writing-launch-meta">
+            <span class="pill">${formatNumber(todaySessions.length)} session${todaySessions.length === 1 ? "" : "s"} today</span>
+            <span class="pill">${formatNumber(stats.wordsToday)} words written today</span>
+          </div>
+        </div>
+        <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
+      </div>
+    </section>
+
+    <section class="card hero">
+      <div class="hero-panel">
+        <div class="section-head" style="margin-bottom: 10px;">
+          <div>
+            <p class="small-copy">Current manuscript</p>
+            <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
+          </div>
+          <button class="ghost-btn manuscript-complete-btn" id="open-manuscript-complete-modal-btn" type="button">Manuscript complete</button>
+        </div>
+        <div class="hero-meta">
+          <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
+          <span class="pill">${deadlineLabel}</span>
+          <span class="pill">Reversible</span>
+          <span class="pill">Confirmation required</span>
+        </div>
+
+        <div class="progress-block">
+          <div class="progress-label-row">
+            <span
+              class="progress-info-icon"
+              aria-label="manuscript word count"
+              data-tooltip="manuscript word count"
+              tabindex="0"
+            >?</span>
+            <span>${stats.totalProgress.toFixed(1)}%</span>
+          </div>
+          <div class="progress-rail progress-rail-checkpoints" aria-label="Book completion progress">
+            <div class="progress-fill" style="width: ${stats.totalProgress}%"></div>
+            ${completionCheckpoints.map((checkpoint, index) => `
+              <span
+                class="progress-checkpoint ${currentWordCount >= checkpoint ? "reached" : ""} ${index === 0 ? "edge-start" : ""} ${index === completionCheckpoints.length - 1 ? "edge-end" : ""}"
+                style="left: ${((checkpoint / targetWordCount) * 100).toFixed(3)}%;"
+                title="${formatNumber(checkpoint)} words"
+                aria-hidden="true"
+              >
+                <span class="progress-checkpoint-label">${formatCompactCheckpoint(checkpoint)}</span>
+              </span>
+            `).join("")}
+          </div>
+        </div>
+
+        <div class="signal-band">
+          <div class="signal-card">
+            <div class="signal-icon">${momentumState.icon}</div>
+            <div class="signal-copy">
+              <strong>Momentum</strong>
+              <div class="momentum-status ${momentumState.className}">${momentumState.label}</div>
+              <p>${momentumState.detail}</p>
+            </div>
+          </div>
+          <div class="signal-card">
+            <div class="signal-icon">🔥</div>
+            <div class="signal-copy">
+              <strong>Streak</strong>
+              <span>${formatNumber(stats.currentStreak)} days</span>
+              <p>Longest streak ${formatNumber(stats.longestStreak)} days</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>Session History</h3>
+          <p>All writing sessions logged today.</p>
+        </div>
+        <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
+      </div>
+      <div class="list">
+        ${todaySessions.length ? todaySessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged today.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function renderCompletedManuscriptDashboard(bundle, stats) {
+  const completion = bundle.completion || createDefaultCompletionState();
+  const completedAt = completion.completedAt || new Date().toISOString();
+  const writingSessions = [...getWriteSessions(bundle)].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const finalWordCount = Math.max(number(bundle.project.currentWordCount), number(completion.completionWordCount));
+  const targetWordCount = Math.max(1, number(bundle.project.targetWordCount));
+  const firstWritingDate = writingSessions.length
+    ? [...writingSessions].sort((a, b) => new Date(a.date) - new Date(b.date))[0].date
+    : (bundle.project.projectStartDate || completedAt);
+  const draftDays = Math.max(1, daysBetween(firstWritingDate, completedAt) + 1);
+  const completionDifference = finalWordCount - targetWordCount;
+  const completionStatus = completionDifference >= 0
+    ? `Finished ${formatNumber(completionDifference)} words over the original target.`
+    : `Finished ${formatNumber(Math.abs(completionDifference))} words under the original target.`;
+  const recentSessions = writingSessions.slice(0, 5);
+  const bestDayLabel = stats.bestDay.key
+    ? `${formatNumber(stats.bestDay.words)} words on ${formatDate(stats.bestDay.key)}`
+    : "No writing day has been logged yet.";
+
+  return `
+    <section class="card manuscript-complete-hero">
+      <div class="section-head">
+        <div>
+          <p class="small-copy">Completed manuscript</p>
+          <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
+          <p class="muted">Marked complete on ${formatDate(completedAt)}. The write dashboard is now showing the manuscript's final drafting snapshot until you choose to reopen it.</p>
+        </div>
+        <div class="manuscript-complete-actions">
+          <span class="pill">Final word count ${formatNumber(finalWordCount)}</span>
+          <button class="ghost-btn" id="reopen-manuscript-btn" type="button">Reopen manuscript</button>
+        </div>
+      </div>
+      <div class="manuscript-complete-banner">
+        <div>
+          <strong>Draft finished</strong>
+          <p>${completionStatus}</p>
+        </div>
+        <div class="manuscript-complete-banner-meta">
+          <span class="pill">${formatNumber(writingSessions.length)} writing sessions</span>
+          <span class="pill">${formatHours(stats.totalDuration)} tracked drafting time</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card manuscript-complete-summary">
+      <div class="section-head">
+        <div>
+          <h3>Final Stats</h3>
+          <p>Your drafting dashboard has been condensed into the clearest completion snapshot we have right now.</p>
+        </div>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="label">Final word count</div><div class="value">${formatNumber(finalWordCount)}</div></div>
+        <div class="metric"><div class="label">Draft span</div><div class="value">${formatNumber(draftDays)} days</div></div>
+        <div class="metric"><div class="label">Average session</div><div class="value">${formatNumber(stats.avgSession)} words</div></div>
+        <div class="metric"><div class="label">Longest streak</div><div class="value">${formatNumber(stats.longestStreak)} days</div></div>
+      </div>
+    </section>
+
+    <section class="card manuscript-complete-highlights">
+      <div class="section-head">
+        <div>
+          <h3>Writing Highlights</h3>
+          <p>The details that feel most useful at the end of a manuscript are collected here without the drafting controls getting in the way.</p>
+        </div>
+      </div>
+      <div class="manuscript-complete-highlight-grid">
+        <article class="manuscript-complete-highlight">
+          <p class="small-copy">Best day</p>
+          <strong>${escapeHtml(bestDayLabel)}</strong>
+        </article>
+        <article class="manuscript-complete-highlight">
+          <p class="small-copy">Daily average</p>
+          <strong>${formatNumber(stats.dailyAverage)} words per day</strong>
+        </article>
+        <article class="manuscript-complete-highlight">
+          <p class="small-copy">Most productive weekday</p>
+          <strong>${escapeHtml(getWeekdayName(stats.mostProductiveDayIndex))}</strong>
+        </article>
+        <article class="manuscript-complete-highlight">
+          <p class="small-copy">Total written</p>
+          <strong>${formatNumber(stats.totalWritten)} words logged</strong>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>Writing Log</h3>
+          <p>Your recent sessions stay visible here in case you want a quick look back at the finish.</p>
+        </div>
+        <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
+      </div>
+      <div class="list">
+        ${recentSessions.length ? recentSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No writing sessions logged yet.</div>`}
+      </div>
+    </section>
+  `;
+}
+
+function getPublishedProjectSnapshot(bundle, stats = getStats(bundle), editStats = getEditStats(bundle)) {
+  const completion = bundle.completion || createDefaultCompletionState();
+  const publication = bundle.publication || createDefaultPublicationState();
+  const writingSessions = [...getWriteSessions(bundle)].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const editingSessions = [...getEditSessions(bundle)].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const targetWordCount = Math.max(1, number(bundle.project.targetWordCount));
+  const finalWordCount = Math.max(
+    number(bundle.project.currentWordCount),
+    number(completion.completionWordCount),
+    number(publication.publishedWordCount)
+  );
+  const projectStartDate = bundle.project.projectStartDate
+    || writingSessions.at(-1)?.date
+    || completion.completedAt
+    || publication.publishedAt
+    || new Date().toISOString();
+  const completionDate = completion.completedAt || publication.publishedAt || new Date().toISOString();
+  const publishedAt = publication.publishedAt || new Date().toISOString();
+  const draftSpanDays = Math.max(1, daysBetween(projectStartDate, publishedAt) + 1);
+  const completionDifference = finalWordCount - targetWordCount;
+  const targetSummary = completionDifference > 0
+    ? `${formatNumber(completionDifference)} words over the original target`
+    : completionDifference < 0
+      ? `${formatNumber(Math.abs(completionDifference))} words under the original target`
+      : "Exactly on the original target";
+  const progressCurrent = number(bundle.editing.progressCurrent);
+  const progressTotal = number(bundle.editing.progressTotal);
+  const bestDayLabel = stats.bestDay.key
+    ? `${formatNumber(stats.bestDay.words)} words on ${formatDate(stats.bestDay.key)}`
+    : "No writing day was logged.";
+  const outstandingIssueCount = getOutstandingIssueCount(bundle);
+
+  return {
+    completion,
+    publication,
+    writingSessions,
+    editingSessions,
+    targetWordCount,
+    finalWordCount,
+    projectStartDate,
+    completionDate,
+    publishedAt,
+    draftSpanDays,
+    completionDifference,
+    targetSummary,
+    progressCurrent,
+    progressTotal,
+    bestDayLabel,
+    outstandingIssueCount,
+    issueSummary: `${formatNumber(editStats.resolvedIssueCount)} resolved / ${formatNumber(outstandingIssueCount)} open`,
+    currentPassLabel: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
+    sectionsSummary: progressTotal > 0
+      ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} sections logged in the final pass`
+      : "No section target was logged in the editing pass",
+    finalProgressPercent: targetWordCount > 0 ? Math.min(999, (finalWordCount / targetWordCount) * 100) : 0
+  };
+}
+
+function renderPublishedProjectDashboard(bundle) {
+  const stats = getStats(bundle);
+  const editStats = getEditStats(bundle);
+  const summary = getPublishedProjectSnapshot(bundle, stats, editStats);
+  const title = bundle.project.bookTitle || "Untitled Manuscript";
+  const writingNarrative = `You wrote ${formatNumber(stats.totalWritten)} words across ${formatNumber(summary.writingSessions.length)} writing session${summary.writingSessions.length === 1 ? "" : "s"} over ${formatNumber(summary.draftSpanDays)} days.`;
+  const editingNarrative = `You tracked ${formatHours(editStats.totalMinutes)} of revision time, logged ${formatNumber(summary.editingSessions.length)} editing session${summary.editingSessions.length === 1 ? "" : "s"}, and closed ${formatNumber(editStats.resolvedIssueCount)} issue${editStats.resolvedIssueCount === 1 ? "" : "s"} before publishing.`;
+
+  return `
+    <section class="card published-hero">
+      <div class="section-head">
+        <div>
+          <p class="published-kicker">Published project</p>
+          <h2 class="hero-title">${escapeHtml(title)}</h2>
+          <p class="muted">Published on ${formatDate(summary.publishedAt)}. This project now opens to a locked, scrollable final-stats view until you choose to re-open it.</p>
+        </div>
+        <div class="published-actions">
+          <span class="pill">Published</span>
+          <span class="pill">${escapeHtml(summary.targetSummary)}</span>
+          <span class="pill">${formatNumber(editStats.resolvedIssueCount)} resolved issues</span>
+          <button class="ghost-btn" id="open-reopen-project-modal-btn" type="button">Re-open project</button>
+          <button class="primary-btn" id="download-published-report-btn" type="button">Download final stats PDF</button>
+        </div>
+      </div>
+      <div class="published-highlight-grid">
+        <article class="published-highlight">
+          <p class="small-copy">Final word count</p>
+          <strong>${formatNumber(summary.finalWordCount)}</strong>
+          <span>${summary.finalProgressPercent.toFixed(1)}% of the original target</span>
+        </article>
+        <article class="published-highlight">
+          <p class="small-copy">Draft completed</p>
+          <strong>${formatDate(summary.completionDate)}</strong>
+          <span>${formatNumber(summary.draftSpanDays)} tracked days from project start to publication</span>
+        </article>
+        <article class="published-highlight">
+          <p class="small-copy">Editing closed out</p>
+          <strong>${escapeHtml(bundle.editing.passStage)}</strong>
+          <span>${escapeHtml(summary.sectionsSummary)}</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h3>Overall Stats</h3>
+          <p>The project is locked now, so this page holds the clearest top-line snapshot of the manuscript as published.</p>
+        </div>
+      </div>
+      <div class="metrics published-metrics">
+        <div class="metric"><div class="label">Writing sessions</div><div class="value">${formatNumber(summary.writingSessions.length)}</div></div>
+        <div class="metric"><div class="label">Editing sessions</div><div class="value">${formatNumber(summary.editingSessions.length)}</div></div>
+        <div class="metric"><div class="label">Writing time</div><div class="value">${formatHours(stats.totalDuration)}</div></div>
+        <div class="metric"><div class="label">Editing time</div><div class="value">${formatHours(editStats.totalMinutes)}</div></div>
+        <div class="metric"><div class="label">Longest streak</div><div class="value">${formatNumber(stats.longestStreak)} days</div></div>
+        <div class="metric"><div class="label">Outstanding issues</div><div class="value">${formatNumber(summary.outstandingIssueCount)}</div></div>
+      </div>
+    </section>
+
+    <section class="published-summary-grid">
+      <article class="card published-summary-card">
+        <div class="section-head">
+          <div>
+            <h3>Writing Summary</h3>
+            <p>${escapeHtml(writingNarrative)}</p>
+          </div>
+        </div>
+        <div class="published-stat-list">
+          <div class="published-stat-row"><strong>Total written</strong><span>${formatNumber(stats.totalWritten)} words</span></div>
+          <div class="published-stat-row"><strong>Daily average</strong><span>${formatNumber(stats.dailyAverage)} words/day</span></div>
+          <div class="published-stat-row"><strong>Average session</strong><span>${formatNumber(stats.avgSession)} words</span></div>
+          <div class="published-stat-row"><strong>Best day</strong><span>${escapeHtml(summary.bestDayLabel)}</span></div>
+          <div class="published-stat-row"><strong>Most productive weekday</strong><span>${escapeHtml(getWeekdayName(stats.mostProductiveDayIndex))}</span></div>
+        </div>
+      </article>
+
+      <article class="card published-summary-card">
+        <div class="section-head">
+          <div>
+            <h3>Editing Summary</h3>
+            <p>${escapeHtml(editingNarrative)}</p>
+          </div>
+        </div>
+        <div class="published-stat-list">
+          <div class="published-stat-row"><strong>Final pass</strong><span>${escapeHtml(summary.currentPassLabel)}</span></div>
+          <div class="published-stat-row"><strong>Stage</strong><span>${escapeHtml(bundle.editing.passStage)} (${escapeHtml(bundle.editing.passStatus)})</span></div>
+          <div class="published-stat-row"><strong>Sections logged</strong><span>${escapeHtml(summary.sectionsSummary)}</span></div>
+          <div class="published-stat-row"><strong>Words edited</strong><span>${formatNumber(editStats.totalWordsEdited)} words</span></div>
+          <div class="published-stat-row"><strong>Issue board</strong><span>${escapeHtml(summary.issueSummary)}</span></div>
+        </div>
+      </article>
+
+      <article class="card published-summary-card">
+        <div class="section-head">
+          <div>
+            <h3>Timeline</h3>
+            <p>The big milestone dates that mark how the manuscript moved from draft to published archive.</p>
+          </div>
+        </div>
+        <div class="published-stat-list">
+          <div class="published-stat-row"><strong>Project start</strong><span>${formatDate(summary.projectStartDate)}</span></div>
+          <div class="published-stat-row"><strong>Manuscript completed</strong><span>${formatDate(summary.completionDate)}</span></div>
+          <div class="published-stat-row"><strong>Project published</strong><span>${formatDate(summary.publishedAt)}</span></div>
+          <div class="published-stat-row"><strong>Target result</strong><span>${escapeHtml(summary.targetSummary)}</span></div>
+          <div class="published-stat-row"><strong>Final word count captured</strong><span>${formatNumber(summary.finalWordCount)} words</span></div>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function getWeekdayName(index) {
+  const safeIndex = Number.isInteger(index) && index >= 0 && index <= 6 ? index : 0;
+  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][safeIndex];
 }
 
 function getProjectCompletionCheckpoints(targetWordCount) {
@@ -155,6 +464,12 @@ function bindDashboardEvents(bundle) {
   const leaveFocusModeButton = document.getElementById("leave-writing-focus-mode-btn");
   const cancelEndSessionButton = document.getElementById("cancel-end-session-btn");
   const confirmEndSessionButton = document.getElementById("confirm-end-session-btn");
+  const manuscriptCompleteModal = document.getElementById("manuscript-complete-modal");
+  const openManuscriptCompleteButton = document.getElementById("open-manuscript-complete-modal-btn");
+  const closeManuscriptCompleteButton = document.getElementById("close-manuscript-complete-modal-btn");
+  const cancelManuscriptCompleteButton = document.getElementById("cancel-manuscript-complete-btn");
+  const reopenManuscriptButton = document.getElementById("reopen-manuscript-btn");
+  const downloadPublishedReportButton = document.getElementById("download-published-report-btn");
   const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
   const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
   const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
@@ -207,6 +522,45 @@ function bindDashboardEvents(bundle) {
     };
   }
 
+  if (openManuscriptCompleteButton) {
+    openManuscriptCompleteButton.onclick = () => {
+      if (getActiveFocusSession()) {
+        showToast("Session already running", "Finish or end the active session before marking the manuscript complete.");
+        return;
+      }
+      openManuscriptCompleteModal(bundle);
+    };
+  }
+
+  if (closeManuscriptCompleteButton) {
+    closeManuscriptCompleteButton.onclick = () => {
+      closeManuscriptCompleteModal();
+    };
+  }
+
+  if (cancelManuscriptCompleteButton) {
+    cancelManuscriptCompleteButton.onclick = () => {
+      closeManuscriptCompleteModal();
+    };
+  }
+
+  if (reopenManuscriptButton) {
+    reopenManuscriptButton.onclick = () => {
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        completion: createDefaultCompletionState()
+      }));
+      persistAndRender();
+      showToast("Manuscript reopened", "The writing dashboard is live again in case you want to add more words.");
+    };
+  }
+
+  if (downloadPublishedReportButton) {
+    downloadPublishedReportButton.onclick = () => {
+      downloadPublishedProjectPdf(bundle);
+    };
+  }
+
   if (closeSessionButton) {
     closeSessionButton.onclick = () => {
       closeSessionModal();
@@ -236,6 +590,14 @@ function bindDashboardEvents(bundle) {
       closeEndSessionConfirmModal();
     }
   };
+
+  if (manuscriptCompleteModal) {
+    manuscriptCompleteModal.onclick = (event) => {
+      if (event.target === manuscriptCompleteModal) {
+        closeManuscriptCompleteModal();
+      }
+    };
+  }
 
   if (viewAllSessionsButton) {
     viewAllSessionsButton.onclick = () => {
@@ -325,6 +687,36 @@ function bindDashboardEvents(bundle) {
     closeSessionCompleteModal();
     persistAndRender();
   };
+
+  const manuscriptCompleteForm = document.getElementById("manuscript-complete-form");
+  if (manuscriptCompleteForm) {
+    manuscriptCompleteForm.onsubmit = (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+      const confirmationValue = String(formData.get("completionConfirmation") || "").trim().toUpperCase();
+
+      if (confirmationValue !== "COMPLETE") {
+        showToast("Type COMPLETE to confirm", "This extra step helps prevent an accidental manuscript completion.");
+        form.elements.completionConfirmation?.focus();
+        return;
+      }
+
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        completion: {
+          isManuscriptComplete: true,
+          completedAt: new Date().toISOString(),
+          completionWordCount: number(projectBundle.project.currentWordCount)
+        }
+      }));
+
+      closeManuscriptCompleteModal();
+      persistAndRender();
+      launchManuscriptCompleteConfetti();
+      showToast("Manuscript marked complete", "The write dashboard is now showing final manuscript stats. Reopen it anytime if more drafting is needed.");
+    };
+  }
 
   bindSessionDial();
   bindSessionActions();
@@ -680,6 +1072,251 @@ function closeSessionCompleteModal() {
   pendingCompletedSession = null;
   editingSessionId = null;
   modal.classList.add("hidden");
+}
+
+function openManuscriptCompleteModal(bundle = currentBundle()) {
+  const modal = document.getElementById("manuscript-complete-modal");
+  const form = document.getElementById("manuscript-complete-form");
+  const title = document.getElementById("manuscript-complete-modal-title");
+  const copy = document.getElementById("manuscript-complete-modal-copy");
+  const summary = document.getElementById("manuscript-complete-summary-copy");
+  if (!modal || !form || !bundle) return;
+
+  const currentWords = number(bundle.project.currentWordCount);
+  const targetWords = Math.max(1, number(bundle.project.targetWordCount));
+  const difference = currentWords - targetWords;
+
+  form.reset();
+  title.textContent = "Mark manuscript complete";
+  copy.textContent = "This changes the write dashboard into a final stats view. It will not delete sessions or project data, and you can reopen the manuscript later if you need more drafting time.";
+  summary.textContent = difference >= 0
+    ? `You are currently at ${formatNumber(currentWords)} words, which is ${formatNumber(difference)} words over target. Type COMPLETE to confirm.`
+    : `You are currently at ${formatNumber(currentWords)} of ${formatNumber(targetWords)} words. If this draft is finished anyway, you can still mark it complete and reopen later if needed.`;
+  modal.classList.remove("hidden");
+  window.requestAnimationFrame(() => form.elements.completionConfirmation?.focus());
+}
+
+function closeManuscriptCompleteModal() {
+  const modal = document.getElementById("manuscript-complete-modal");
+  const form = document.getElementById("manuscript-complete-form");
+  form?.reset();
+  modal?.classList.add("hidden");
+}
+
+function launchManuscriptCompleteConfetti() {
+  document.querySelector(".manuscript-confetti-burst")?.remove();
+  const burst = document.createElement("div");
+  burst.className = "manuscript-confetti-burst";
+  burst.setAttribute("aria-hidden", "true");
+
+  const colors = ["#b85c38", "#efb262", "#7a9e7e", "#5c7c91", "#f6e8d5", "#2a211d"];
+  for (let index = 0; index < 64; index += 1) {
+    const piece = document.createElement("span");
+    piece.className = "manuscript-confetti-piece";
+    piece.style.setProperty("--confetti-left", `${Math.round(Math.random() * 100)}%`);
+    piece.style.setProperty("--confetti-drift", `${Math.round((Math.random() - 0.5) * 220)}px`);
+    piece.style.setProperty("--confetti-delay", `${(Math.random() * 0.35).toFixed(2)}s`);
+    piece.style.setProperty("--confetti-duration", `${(2.3 + (Math.random() * 1.8)).toFixed(2)}s`);
+    piece.style.setProperty("--confetti-size", `${6 + Math.round(Math.random() * 8)}px`);
+    piece.style.setProperty("--confetti-height", `${10 + Math.round(Math.random() * 12)}px`);
+    piece.style.setProperty("--confetti-color", colors[index % colors.length]);
+    piece.style.setProperty("--confetti-rotate", `${Math.round(Math.random() * 360)}deg`);
+
+    const core = document.createElement("span");
+    core.className = "manuscript-confetti-piece-core";
+    piece.append(core);
+    burst.append(piece);
+  }
+
+  document.body.append(burst);
+  window.setTimeout(() => burst.remove(), 5000);
+}
+
+function sanitizePdfText(value) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]/g, "");
+}
+
+function escapePdfText(value) {
+  return sanitizePdfText(value)
+    .replaceAll("\\", "\\\\")
+    .replaceAll("(", "\\(")
+    .replaceAll(")", "\\)");
+}
+
+function wrapPdfText(text, maxChars = 88) {
+  const source = sanitizePdfText(text).replace(/\s+/g, " ").trim();
+  if (!source) return [""];
+
+  const words = source.split(" ");
+  const lines = [];
+  let currentLine = "";
+
+  words.forEach((word) => {
+    if (!currentLine) {
+      currentLine = word;
+      return;
+    }
+    if (`${currentLine} ${word}`.length <= maxChars) {
+      currentLine = `${currentLine} ${word}`;
+      return;
+    }
+    lines.push(currentLine);
+    currentLine = word;
+  });
+
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+function buildPublishedProjectPdf(bundle) {
+  const stats = getStats(bundle);
+  const editStats = getEditStats(bundle);
+  const summary = getPublishedProjectSnapshot(bundle, stats, editStats);
+  const title = bundle.project.bookTitle || "Untitled Manuscript";
+  const pageCommands = [[]];
+  let pageIndex = 0;
+  let cursorY = 752;
+
+  const startNewPage = () => {
+    pageIndex += 1;
+    pageCommands[pageIndex] = [];
+    cursorY = 752;
+  };
+
+  const ensureSpace = (requiredHeight = 18) => {
+    if (cursorY - requiredHeight < 58) {
+      startNewPage();
+    }
+  };
+
+  const addLine = (text, options = {}) => {
+    const font = options.font || "F1";
+    const size = options.size || 12;
+    const x = options.x ?? 56;
+    const leading = options.leading || Math.round(size * 1.45);
+    ensureSpace(leading);
+    pageCommands[pageIndex].push(`BT /${font} ${size} Tf 1 0 0 1 ${x} ${cursorY} Tm (${escapePdfText(text)}) Tj ET`);
+    cursorY -= leading;
+  };
+
+  const addGap = (amount = 10) => {
+    ensureSpace(amount);
+    cursorY -= amount;
+  };
+
+  const addParagraph = (text, options = {}) => {
+    const {
+      font = "F1",
+      size = 12,
+      x = 56,
+      leading = Math.round(size * 1.45),
+      gapBefore = 0,
+      gapAfter = 10,
+      maxChars = 88
+    } = options;
+    if (gapBefore) addGap(gapBefore);
+    wrapPdfText(text, maxChars).forEach((line) => addLine(line, { font, size, x, leading }));
+    if (gapAfter) addGap(gapAfter);
+  };
+
+  addParagraph("Final Stats Report", { font: "F2", size: 24, gapAfter: 6, maxChars: 42 });
+  addParagraph(title, { font: "F2", size: 18, gapAfter: 4, maxChars: 50 });
+  addParagraph(`Published ${formatDate(summary.publishedAt)}`, { size: 12, gapAfter: 16, maxChars: 72 });
+
+  addParagraph("Overview", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
+  addParagraph(`${title} finished at ${formatNumber(summary.finalWordCount)} words, ${summary.targetSummary}. The project remains locked into final stats mode until it is explicitly re-opened.`, { gapAfter: 10 });
+  addParagraph(`Writing time tracked: ${formatHours(stats.totalDuration)}. Editing time tracked: ${formatHours(editStats.totalMinutes)}. Outstanding issues at publication: ${formatNumber(summary.outstandingIssueCount)}.`, { gapAfter: 16 });
+
+  addParagraph("Writing Summary", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
+  [
+    `Total written: ${formatNumber(stats.totalWritten)} words`,
+    `Writing sessions: ${formatNumber(summary.writingSessions.length)}`,
+    `Daily average: ${formatNumber(stats.dailyAverage)} words per day`,
+    `Average session: ${formatNumber(stats.avgSession)} words`,
+    `Best day: ${summary.bestDayLabel}`,
+    `Most productive weekday: ${getWeekdayName(stats.mostProductiveDayIndex)}`,
+    `Longest streak: ${formatNumber(stats.longestStreak)} days`
+  ].forEach((line) => addParagraph(line, { gapAfter: 4 }));
+  addGap(10);
+
+  addParagraph("Editing Summary", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
+  [
+    `Final pass: ${summary.currentPassLabel}`,
+    `Stage and status: ${bundle.editing.passStage} (${bundle.editing.passStatus})`,
+    `Sections logged in final pass: ${summary.sectionsSummary}`,
+    `Editing sessions: ${formatNumber(summary.editingSessions.length)}`,
+    `Words edited: ${formatNumber(editStats.totalWordsEdited)} words`,
+    `Resolved issues: ${formatNumber(editStats.resolvedIssueCount)}`
+  ].forEach((line) => addParagraph(line, { gapAfter: 4 }));
+  addGap(10);
+
+  addParagraph("Timeline", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
+  [
+    `Project start: ${formatDate(summary.projectStartDate)}`,
+    `Manuscript completed: ${formatDate(summary.completionDate)}`,
+    `Project published: ${formatDate(summary.publishedAt)}`,
+    `Tracked span from start to publish: ${formatNumber(summary.draftSpanDays)} days`
+  ].forEach((line) => addParagraph(line, { gapAfter: 4 }));
+  addGap(10);
+
+  addParagraph("Re-open Note", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
+  addParagraph("Re-opening the project restores the normal workspace tabs. It does not delete any writing or editing history, and the project can be published again later.", { gapAfter: 0 });
+
+  const totalPages = pageCommands.length;
+  const pageIds = pageCommands.map((_, index) => 5 + (index * 2));
+  const contentIds = pageCommands.map((_, index) => 6 + (index * 2));
+  const objectMap = new Map([
+    [1, "<< /Type /Catalog /Pages 2 0 R >>"],
+    [2, `<< /Type /Pages /Count ${totalPages} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`],
+    [3, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"],
+    [4, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"]
+  ]);
+
+  pageCommands.forEach((commands, index) => {
+    const footer = `BT /F1 10 Tf 1 0 0 1 56 32 Tm (${escapePdfText(`Page ${index + 1} of ${totalPages}`)}) Tj ET`;
+    const stream = [...commands, footer].join("\n");
+    objectMap.set(contentIds[index], `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    objectMap.set(
+      pageIds[index],
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentIds[index]} 0 R >>`
+    );
+  });
+
+  const highestObjectId = 4 + (totalPages * 2);
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (let objectId = 1; objectId <= highestObjectId; objectId += 1) {
+    offsets[objectId] = pdf.length;
+    pdf += `${objectId} 0 obj\n${objectMap.get(objectId)}\nendobj\n`;
+  }
+
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${highestObjectId + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let objectId = 1; objectId <= highestObjectId; objectId += 1) {
+    pdf += `${String(offsets[objectId]).padStart(10, "0")} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${highestObjectId + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+  return pdf;
+}
+
+function downloadPublishedProjectPdf(bundle = currentBundle()) {
+  if (!bundle) return;
+  const pdf = buildPublishedProjectPdf(bundle);
+  const blob = new Blob([pdf], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `${slugifyFilePart(bundle.project.bookTitle)}-final-stats-${stamp}.pdf`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  showToast("PDF downloaded", "Your final stats report was saved as a PDF.");
 }
 
 function syncSessionDial(minutes = sessionDraftMinutes) {

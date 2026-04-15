@@ -119,6 +119,100 @@
       </div>
     </div>
   </div>
+  <div class="modal-backdrop hidden" id="manuscript-complete-modal">
+    <div class="modal-card">
+      <div class="section-head manuscript-complete-modal-head">
+        <div>
+          <h3 id="manuscript-complete-modal-title">Mark manuscript complete</h3>
+          <p id="manuscript-complete-modal-copy">Switch the write dashboard into a final stats view once this manuscript is genuinely done.</p>
+        </div>
+        <button class="ghost-btn" id="close-manuscript-complete-modal-btn" type="button">Close</button>
+      </div>
+      <form id="manuscript-complete-form" class="session-complete-form">
+        <p class="small-copy" id="manuscript-complete-summary-copy"></p>
+        <label>Type COMPLETE to confirm
+          <input
+            type="text"
+            id="manuscript-complete-confirmation"
+            name="completionConfirmation"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            required
+          />
+        </label>
+        <div class="meta-line">
+          <button class="ghost-btn" id="cancel-manuscript-complete-btn" type="button">Not yet</button>
+          <button class="primary-btn" id="confirm-manuscript-complete-btn" type="submit">Complete manuscript</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="publish-project-modal">
+    <div class="modal-card">
+      <div class="section-head project-publication-modal-head">
+        <div>
+          <h3 id="publish-project-title">Publish project</h3>
+          <p id="publish-project-copy">Lock the workspace into a final stats page once the manuscript and editing process are fully complete.</p>
+        </div>
+        <button class="ghost-btn" id="close-publish-project-modal-btn" type="button">Close</button>
+      </div>
+      <form id="publish-project-form" class="session-complete-form">
+        <p class="small-copy" id="publish-project-summary-copy"></p>
+        <label>Type PUBLISH to confirm
+          <input
+            type="text"
+            id="publish-project-confirmation"
+            name="publishConfirmation"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            required
+          />
+        </label>
+        <div class="meta-line">
+          <button class="ghost-btn" id="cancel-publish-project-btn" type="button">Not yet</button>
+          <button class="primary-btn" id="confirm-publish-project-btn" type="submit">Publish project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="reopen-project-modal">
+    <div class="modal-card">
+      <div class="section-head project-publication-modal-head">
+        <div>
+          <h3 id="reopen-project-title">Re-open project</h3>
+          <p id="reopen-project-copy">Bring this project back out of published mode so the full workspace tabs return.</p>
+        </div>
+        <button class="ghost-btn" id="close-reopen-project-modal-btn" type="button">Close</button>
+      </div>
+      <form id="reopen-project-form" class="session-complete-form">
+        <p class="small-copy" id="reopen-project-summary-copy"></p>
+        <label>Type REOPEN to confirm
+          <input
+            type="text"
+            id="reopen-project-confirmation"
+            name="reopenConfirmation"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            required
+          />
+        </label>
+        <div class="meta-line">
+          <button class="ghost-btn" id="cancel-reopen-project-btn" type="button">Keep published</button>
+          <button class="primary-btn" id="confirm-reopen-project-btn" type="submit">Re-open project</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="published-celebration-screen hidden" id="published-celebration-screen" aria-live="polite">
+    <div class="published-celebration-shell">
+      <p class="published-celebration-kicker">Congratulations</p>
+      <h2 id="published-celebration-title">Project published</h2>
+      <p id="published-celebration-copy">Your manuscript is now locked into its final stats view.</p>
+    </div>
+  </div>
   <div class="modal-backdrop hidden" id="goal-modal">
     <div class="modal-card">
       <div class="section-head">

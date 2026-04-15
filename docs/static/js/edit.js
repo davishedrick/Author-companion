@@ -495,17 +495,13 @@ function renderEditDashboard(bundle) {
 
       <section class="card hero">
         <div class="hero-panel pass-focus">
-          <div class="section-head">
-            <div class="meta-line">
-              <button class="ghost-btn" id="open-edit-pass-btn" type="button">Change pass</button>
-            </div>
-          </div>
           <section class="edit-stage-roadmap" aria-label="Editing process stages">
             <div class="edit-stage-roadmap-head">
               <div>
                 <strong>Editing roadmap</strong>
                 <p>${escapeHtml(activeStageRoadmapEntry.description)}</p>
               </div>
+              <button class="ghost-btn edit-pass-btn" id="open-edit-pass-btn" type="button">Change pass</button>
             </div>
             <div class="edit-stage-track" role="list" style="--edit-stage-fill-end:${stageRoadmapFillEnd}%;">
               ${stageRoadmap.map((stage) => `

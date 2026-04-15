@@ -15,6 +15,8 @@ let floatingFocusTimerDock = "top-right";
 let floatingFocusTimerResizeBound = false;
 let floatingFocusTimerPosition = null;
 let sidebarCollapseResizeBound = false;
+let publishCelebrationTimer = null;
+let pendingReopenProjectId = null;
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -255,6 +257,15 @@ function canCollapseSidebar() {
   return window.innerWidth > 1080 && isProjectWorkspaceView(activeView);
 }
 
+function getBundleById(projectId) {
+  return state.projects.find((project) => project.id === projectId) || null;
+}
+
+function getWorkspaceLandingView(bundle = currentBundle()) {
+  if (isProjectPublished(bundle)) return "dashboard";
+  return preferredWorkspaceView();
+}
+
 function getSidebarCollapseIcon() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -312,6 +323,9 @@ function render() {
   if (!bundle && activeView === "projects") {
     activeView = "dashboard";
   }
+  if (bundle && isProjectPublished(bundle) && !["dashboard", "projects", "create-project"].includes(activeView)) {
+    activeView = "dashboard";
+  }
   applyThemePreference();
   const appShell = document.querySelector(".app-shell");
   appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
@@ -334,6 +348,7 @@ function render() {
     document.getElementById(`view-${view}`).classList.toggle("hidden", activeView !== view);
   });
   bindImportExportModals();
+  bindProjectPublicationModals();
   bindSidebarCollapseToggle();
   applySidebarCollapseState();
   bindFloatingFocusTimer();
@@ -392,36 +407,270 @@ function getNavIcon(view) {
         <circle cx="12" cy="12" r="1.5" />
       </svg>
     `,
+    publish: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 4h9l3 3v13H6z" />
+        <path d="M15 4v4h4" />
+        <path d="m9 14 2 2 4-4" />
+      </svg>
+    `,
   };
   return icons[view] || "";
 }
 
 function renderNav(bundle) {
   const nav = document.getElementById("nav");
-  const availableViews = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView))
-    ? ["plot", "dashboard", "edit", "goals"]
+  const isWorkspaceContext = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView));
+  const isPublishedBundle = isProjectPublished(bundle);
+  const availableViews = isWorkspaceContext
+    ? (isPublishedBundle ? ["dashboard"] : ["plot", "dashboard", "edit", "goals"])
     : [];
   const highlightedView = availableViews.includes(activeView) ? activeView : "";
+  const publishEligibility = bundle ? getPublishEligibility(bundle) : null;
   const navLabels = {
     plot: "Plot",
-    dashboard: "Write",
+    dashboard: isPublishedBundle ? "Final Stats" : "Write",
     edit: "Edit",
     goals: "Goals",
+    publish: "Publish",
   };
-  nav.innerHTML = availableViews.map((view) => `
-    <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}" title="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
-      <span class="nav-icon">${getNavIcon(view)}</span>
-      <span class="nav-label">${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}</span>
-    </button>
-  `).join("");
+  const publishCopy = !bundle || isPublishedBundle
+    ? ""
+    : publishEligibility?.canPublish
+      ? "Lock this project into its final stats view."
+      : publishEligibility?.reasons[0] || "Finish the manuscript and editing flow before publishing.";
+  nav.innerHTML = `
+    <div class="nav-main">
+      ${availableViews.map((view) => `
+        <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}" title="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
+          <span class="nav-icon">${getNavIcon(view)}</span>
+          <span class="nav-label">${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}</span>
+        </button>
+      `).join("")}
+    </div>
+    ${bundle && !isPublishedBundle ? `
+      <div class="nav-publish-shell">
+        <button class="nav-publish-btn ${publishEligibility?.canPublish ? "" : "is-locked"}" id="open-publish-project-btn" type="button" aria-label="Publish project" title="Publish project">
+          <span class="nav-icon">${getNavIcon("publish")}</span>
+          <span class="nav-label">Publish</span>
+        </button>
+        <p class="nav-publish-copy">${escapeHtml(publishCopy)}</p>
+      </div>
+    ` : ""}
+  `;
 
   [...nav.querySelectorAll("button")].forEach((button) => {
+    if (button.id === "open-publish-project-btn") return;
     button.addEventListener("click", () => {
       activeView = button.dataset.view;
       saveState();
       render();
     });
   });
+
+  const publishButton = document.getElementById("open-publish-project-btn");
+  if (publishButton && bundle) {
+    publishButton.addEventListener("click", () => {
+      if (getActiveFocusSession()) {
+        showToast("Finish the active session first", "End the current writing or editing session before publishing the project.");
+        return;
+      }
+      const eligibility = getPublishEligibility(bundle);
+      if (!eligibility.canPublish) {
+        showToast("Publish is locked", eligibility.reasons.join(" "));
+        return;
+      }
+      openPublishProjectModal(bundle);
+    });
+  }
+}
+
+function showProjectPublishedCelebration(bundle = currentBundle()) {
+  const screen = document.getElementById("published-celebration-screen");
+  const title = document.getElementById("published-celebration-title");
+  const copy = document.getElementById("published-celebration-copy");
+  if (!screen || !title || !copy || !bundle) return;
+
+  const projectTitle = bundle.project.bookTitle || "This project";
+  title.textContent = `${projectTitle} published`;
+  copy.textContent = "The workspace is now locked into a final stats view, and you can still re-open it later if more work is needed.";
+  screen.classList.remove("hidden");
+  screen.classList.add("is-visible");
+  clearTimeout(publishCelebrationTimer);
+  publishCelebrationTimer = setTimeout(() => {
+    screen.classList.remove("is-visible");
+    screen.classList.add("hidden");
+  }, 2600);
+}
+
+function openPublishProjectModal(bundle = currentBundle()) {
+  const modal = document.getElementById("publish-project-modal");
+  const title = document.getElementById("publish-project-title");
+  const copy = document.getElementById("publish-project-copy");
+  const summary = document.getElementById("publish-project-summary-copy");
+  const input = document.getElementById("publish-project-confirmation");
+  if (!modal || !title || !copy || !summary || !input || !bundle) return;
+
+  const eligibility = getPublishEligibility(bundle);
+  const progressCurrent = number(bundle.editing?.progressCurrent);
+  const progressTotal = number(bundle.editing?.progressTotal);
+  const projectTitle = bundle.project.bookTitle || "Untitled project";
+  const progressSummary = progressTotal > 0
+    ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} sections logged in the final pass`
+    : "the final pass marked complete";
+
+  title.textContent = `Publish ${projectTitle}`;
+  copy.textContent = "This removes the normal workspace tabs and turns the project into a locked, scrollable final-stats page. It stays reversible from the stats page or the projects dashboard.";
+  summary.textContent = eligibility.canPublish
+    ? `${projectTitle} is ready to publish with ${formatNumber(number(bundle.project.currentWordCount))} words, ${progressSummary}, and no remaining open issues.`
+    : eligibility.reasons.join(" ");
+  input.value = "";
+  modal.classList.remove("hidden");
+  requestAnimationFrame(() => input.focus());
+}
+
+function closePublishProjectModal() {
+  const modal = document.getElementById("publish-project-modal");
+  const input = document.getElementById("publish-project-confirmation");
+  if (!modal || !input) return;
+  modal.classList.add("hidden");
+  input.value = "";
+}
+
+function openReopenProjectModal(projectId = state.activeProjectId) {
+  const modal = document.getElementById("reopen-project-modal");
+  const title = document.getElementById("reopen-project-title");
+  const copy = document.getElementById("reopen-project-copy");
+  const summary = document.getElementById("reopen-project-summary-copy");
+  const input = document.getElementById("reopen-project-confirmation");
+  const bundle = getBundleById(projectId);
+  if (!modal || !title || !copy || !summary || !input || !bundle) return;
+
+  pendingReopenProjectId = projectId;
+  title.textContent = `Re-open ${bundle.project.bookTitle || "project"}`;
+  copy.textContent = "This restores the normal workspace tabs so you can move through writing, plot, editing, and goals again. The published badge will disappear until you publish it another time.";
+  summary.textContent = "Re-opening does not delete any writing or editing history. If you also want to draft again, you can reopen the manuscript separately once the workspace returns.";
+  input.value = "";
+  modal.classList.remove("hidden");
+  requestAnimationFrame(() => input.focus());
+}
+
+function closeReopenProjectModal() {
+  const modal = document.getElementById("reopen-project-modal");
+  const input = document.getElementById("reopen-project-confirmation");
+  if (!modal || !input) return;
+  modal.classList.add("hidden");
+  input.value = "";
+  pendingReopenProjectId = null;
+}
+
+function bindProjectPublicationModals() {
+  const publishModal = document.getElementById("publish-project-modal");
+  const publishForm = document.getElementById("publish-project-form");
+  const closePublishButton = document.getElementById("close-publish-project-modal-btn");
+  const cancelPublishButton = document.getElementById("cancel-publish-project-btn");
+  const reopenModal = document.getElementById("reopen-project-modal");
+  const reopenForm = document.getElementById("reopen-project-form");
+  const closeReopenButton = document.getElementById("close-reopen-project-modal-btn");
+  const cancelReopenButton = document.getElementById("cancel-reopen-project-btn");
+  const publishedReopenButton = document.getElementById("open-reopen-project-modal-btn");
+
+  if (closePublishButton) closePublishButton.onclick = () => closePublishProjectModal();
+  if (cancelPublishButton) cancelPublishButton.onclick = () => closePublishProjectModal();
+  if (closeReopenButton) closeReopenButton.onclick = () => closeReopenProjectModal();
+  if (cancelReopenButton) cancelReopenButton.onclick = () => closeReopenProjectModal();
+
+  if (publishModal) {
+    publishModal.onclick = (event) => {
+      if (event.target === publishModal) closePublishProjectModal();
+    };
+  }
+
+  if (reopenModal) {
+    reopenModal.onclick = (event) => {
+      if (event.target === reopenModal) closeReopenProjectModal();
+    };
+  }
+
+  if (publishedReopenButton) {
+    publishedReopenButton.onclick = () => {
+      if (!state.activeProjectId) return;
+      openReopenProjectModal(state.activeProjectId);
+    };
+  }
+
+  if (publishForm) {
+    publishForm.onsubmit = (event) => {
+      event.preventDefault();
+      const bundle = currentBundle();
+      if (!bundle) return;
+
+      const confirmationValue = String(new FormData(publishForm).get("publishConfirmation") || "").trim().toUpperCase();
+      if (confirmationValue !== "PUBLISH") {
+        showToast("Type PUBLISH to confirm", "This extra step helps prevent an accidental project publication.");
+        publishForm.elements.publishConfirmation?.focus();
+        return;
+      }
+
+      const eligibility = getPublishEligibility(bundle);
+      if (!eligibility.canPublish) {
+        closePublishProjectModal();
+        showToast("Publish is locked", eligibility.reasons.join(" "));
+        return;
+      }
+
+      updateCurrentBundle((projectBundle) => ({
+        ...projectBundle,
+        publication: {
+          isPublished: true,
+          publishedAt: new Date().toISOString(),
+          publishedWordCount: Math.max(
+            number(projectBundle.project.currentWordCount),
+            number(projectBundle.completion?.completionWordCount)
+          )
+        }
+      }));
+
+      closePublishProjectModal();
+      activeView = "dashboard";
+      persistAndRender();
+      showProjectPublishedCelebration(currentBundle());
+      showToast("Project published", "The workspace is now a final stats archive. You can re-open it anytime if more work is needed.");
+    };
+  }
+
+  if (reopenForm) {
+    reopenForm.onsubmit = (event) => {
+      event.preventDefault();
+      const projectId = pendingReopenProjectId || state.activeProjectId;
+      const bundle = getBundleById(projectId);
+      if (!projectId || !bundle) return;
+
+      const confirmationValue = String(new FormData(reopenForm).get("reopenConfirmation") || "").trim().toUpperCase();
+      if (confirmationValue !== "REOPEN") {
+        showToast("Type REOPEN to confirm", "This extra step helps prevent accidentally unlocking a published project.");
+        reopenForm.elements.reopenConfirmation?.focus();
+        return;
+      }
+
+      const shouldReturnToWorkspace = state.activeProjectId === projectId && isProjectWorkspaceView(activeView);
+
+      state.projects = state.projects.map((projectBundle) => projectBundle.id === projectId
+        ? {
+          ...projectBundle,
+          publication: createDefaultPublicationState()
+        }
+        : projectBundle);
+
+      if (shouldReturnToWorkspace) {
+        activeView = preferredWorkspaceView();
+      }
+
+      closeReopenProjectModal();
+      persistAndRender();
+      showToast("Project re-opened", `${bundle.project.bookTitle || "This project"} is back in workspace mode.`);
+    };
+  }
 }
 
 function getSidebarFooterIcon(action) {
@@ -637,11 +886,16 @@ function renderCreateProjectForm() {
 
 function renderProjectCard(bundle) {
   const stats = getStats(bundle);
+  const published = isProjectPublished(bundle);
   return `
-    <div class="card project-card">
+    <div class="card project-card ${published ? "project-card-published" : ""}">
       <div>
-        <p class="small-copy">Project</p>
+        <div class="project-card-head">
+          <p class="small-copy">Project</p>
+          ${published ? `<span class="project-card-status">Published</span>` : ""}
+        </div>
         <h3 class="hero-title">${escapeHtml(bundle.project.bookTitle)}</h3>
+        ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
         <div class="meta-line">
           <span class="pill">${formatNumber(bundle.project.currentWordCount)} / ${formatNumber(bundle.project.targetWordCount)} words</span>
           <span class="pill">${bundle.project.deadline ? `Due ${formatDate(bundle.project.deadline)}` : "No deadline"}</span>
@@ -667,8 +921,10 @@ function renderProjectCard(bundle) {
         </div>
       </div>
       <div class="meta-line">
-        <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">Open project</button>
-        <button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>
+        <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">${published ? "View final stats" : "Open project"}</button>
+        ${published
+          ? `<button class="ghost-btn" data-action="reopen-project" data-id="${bundle.id}">Re-open</button>`
+          : `<button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>`}
         <button class="inline-btn" data-action="delete-project" data-id="${bundle.id}">Delete</button>
       </div>
     </div>
@@ -769,7 +1025,7 @@ function bindCreateProjectEvents() {
     );
     state.projects.unshift(bundle);
     state.activeProjectId = bundle.id;
-    activeView = preferredWorkspaceView();
+    activeView = getWorkspaceLandingView(bundle);
     persistAndRender();
     showToast("Project created", `${bundle.project.bookTitle} is ready for tracking.`);
   });
@@ -795,7 +1051,7 @@ function bindProjectEvents() {
   document.querySelectorAll("[data-action='open-project']").forEach((button) => {
     button.addEventListener("click", () => {
       state.activeProjectId = button.dataset.id;
-      activeView = preferredWorkspaceView();
+      activeView = getWorkspaceLandingView(getBundleById(button.dataset.id));
       saveState();
       render();
     });
@@ -810,13 +1066,19 @@ function bindProjectEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='reopen-project']").forEach((button) => {
+    button.addEventListener("click", () => {
+      openReopenProjectModal(button.dataset.id);
+    });
+  });
+
   document.querySelectorAll("[data-action='delete-project']").forEach((button) => {
     button.addEventListener("click", () => {
       const projectId = button.dataset.id;
       state.projects = state.projects.filter((project) => project.id !== projectId);
       if (state.activeProjectId === projectId) {
         state.activeProjectId = state.projects[0]?.id || null;
-        activeView = state.activeProjectId ? preferredWorkspaceView() : DEFAULT_VIEW;
+        activeView = state.activeProjectId ? getWorkspaceLandingView(currentBundle()) : DEFAULT_VIEW;
       }
       persistAndRender();
     });

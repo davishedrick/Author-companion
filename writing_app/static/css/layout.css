@@ -253,6 +253,48 @@
   gap: 8px;
 }
 
+.nav-main {
+  display: grid;
+  gap: 8px;
+}
+
+.nav-publish-shell {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(77, 61, 48, 0.12);
+}
+
+.nav-publish-btn {
+  width: 100%;
+}
+
+.nav-publish-btn.is-locked {
+  background: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.09);
+}
+
+.nav-publish-btn.is-locked:hover {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.14);
+}
+
+.nav-publish-btn.is-locked .nav-icon {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.09);
+}
+
+.nav-publish-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 .nav button,
 .ghost-btn,
 .primary-btn,
@@ -390,6 +432,10 @@
     gap: 0;
     padding-left: 0;
     padding-right: 0;
+  }
+
+  .app-shell.sidebar-collapsed .nav-publish-copy {
+    display: none;
   }
 
   .app-shell.sidebar-collapsed .sidebar-text-btn {
@@ -967,6 +1013,69 @@ textarea:focus-visible {
   padding: 24px;
 }
 
+.project-publication-modal-head {
+  align-items: start;
+}
+
+.project-publication-modal-head > div {
+  min-width: 0;
+}
+
+.project-publication-modal-head .ghost-btn {
+  align-self: start;
+  margin-top: 2px;
+  width: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.published-celebration-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top, rgba(226, 255, 220, 0.32), transparent 34%),
+    linear-gradient(155deg, rgba(94, 159, 103, 0.96), rgba(58, 117, 79, 0.94));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.published-celebration-screen.is-visible {
+  opacity: 1;
+}
+
+.published-celebration-shell {
+  width: min(620px, 100%);
+  display: grid;
+  gap: 10px;
+  padding: 34px;
+  border-radius: 32px;
+  text-align: center;
+  color: #f8fff6;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 24px 70px rgba(19, 48, 28, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.published-celebration-shell h2,
+.published-celebration-shell p {
+  margin: 0;
+}
+
+.published-celebration-kicker {
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.84rem;
+  color: rgba(248, 255, 246, 0.8);
+}
+
 .toast strong {
   display: block;
   margin-bottom: 6px;
@@ -1116,6 +1225,11 @@ textarea:focus-visible {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .nav-publish-shell {
+    margin-top: 8px;
+    padding-top: 10px;
+  }
+
   .project-topbar-nav {
     justify-content: stretch;
   }
@@ -1133,6 +1247,17 @@ textarea:focus-visible {
 
   .nav-label {
     display: none;
+  }
+
+  .nav-publish-shell .nav-label {
+    display: inline;
+  }
+
+  .nav-publish-btn {
+    justify-content: flex-start;
+    text-align: left;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .card,
@@ -1256,6 +1381,11 @@ textarea:focus-visible {
     max-height: calc(100vh - 20px);
     border-radius: 20px;
     padding: 14px;
+  }
+
+  .published-celebration-shell {
+    padding: 24px 20px;
+    border-radius: 24px;
   }
 
   .chart-shell {

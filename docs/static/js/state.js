@@ -57,6 +57,12 @@ const exportColumns = [
   "project_deadline",
   "project_daily_target",
   "project_start_date",
+  "project_manuscript_is_complete",
+  "project_manuscript_completed_at",
+  "project_manuscript_completion_word_count",
+  "project_is_published",
+  "project_published_at",
+  "project_published_word_count",
   "project_edit_pass_name",
   "project_edit_pass_stage",
   "project_edit_pass_status",
@@ -131,6 +137,22 @@ function createDefaultPlotState() {
   };
 }
 
+function createDefaultCompletionState() {
+  return {
+    isManuscriptComplete: false,
+    completedAt: "",
+    completionWordCount: 0
+  };
+}
+
+function createDefaultPublicationState() {
+  return {
+    isPublished: false,
+    publishedAt: "",
+    publishedWordCount: 0
+  };
+}
+
 function cloneValue(value) {
   if (typeof structuredClone === "function") return structuredClone(value);
   return JSON.parse(JSON.stringify(value));
@@ -152,6 +174,8 @@ const defaultProjectTemplate = {
     dailyTarget: 1000,
     projectStartDate: new Date().toISOString().slice(0, 10)
   },
+  completion: createDefaultCompletionState(),
+  publication: createDefaultPublicationState(),
   editing: createDefaultEditingState(),
   plot: createDefaultPlotState(),
   goals: [],
@@ -208,6 +232,8 @@ function createProjectBundle(title, targetWordCount, currentWordCount, deadline)
       dailyTarget: 1000,
       projectStartDate: new Date().toISOString().slice(0, 10)
     },
+    completion: createDefaultCompletionState(),
+    publication: createDefaultPublicationState(),
     editing: createDefaultEditingState(),
     plot: createDefaultPlotState(),
     goals: [],
@@ -247,6 +273,8 @@ function normalizeLoadedState(snapshot) {
     const migrated = normalizeProjectBundle({
       id: createId(),
       project: snapshot.project,
+      completion: snapshot.completion || createDefaultCompletionState(),
+      publication: snapshot.publication || createDefaultPublicationState(),
       editing: snapshot.editing || createDefaultEditingState(),
       goals: snapshot.goals || [],
       sessions: snapshot.sessions || [],
@@ -310,12 +338,34 @@ function normalizeProjectBundle(bundle) {
   return {
     id: bundle.id || createId(),
     project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
+    completion: normalizeCompletionState(bundle.completion),
+    publication: normalizePublicationState(bundle.publication),
     editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
     plot: normalizePlotState(bundle.plot),
     goals: Array.isArray(bundle.goals) ? bundle.goals.map(normalizeGoal) : [],
     sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
     issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+  };
+}
+
+function normalizeCompletionState(completion) {
+  return {
+    ...createDefaultCompletionState(),
+    ...(completion || {}),
+    isManuscriptComplete: Boolean(completion?.isManuscriptComplete),
+    completedAt: String(completion?.completedAt || ""),
+    completionWordCount: Math.max(0, number(completion?.completionWordCount))
+  };
+}
+
+function normalizePublicationState(publication) {
+  return {
+    ...createDefaultPublicationState(),
+    ...(publication || {}),
+    isPublished: Boolean(publication?.isPublished),
+    publishedAt: String(publication?.publishedAt || ""),
+    publishedWordCount: Math.max(0, number(publication?.publishedWordCount))
   };
 }
 
@@ -747,6 +797,59 @@ function getEditStats(bundle) {
     currentPassIssueCount: currentPassIssues.length,
     resolvedIssueCount: resolvedIssues.length,
     lastSession: sessions[0] || null
+  };
+}
+
+function isProjectPublished(bundle) {
+  return Boolean(bundle?.publication?.isPublished);
+}
+
+function getOutstandingIssueCount(bundle) {
+  if (!bundle) return 0;
+  return bundle.issues.filter((issue) => issue.status !== "Resolved").length;
+}
+
+function getPublishEligibility(bundle) {
+  if (!bundle) {
+    return {
+      canPublish: false,
+      manuscriptComplete: false,
+      editingComplete: false,
+      outstandingIssueCount: 0,
+      remainingSections: 0,
+      reasons: ["Select a project first."]
+    };
+  }
+
+  const manuscriptComplete = Boolean(bundle.completion?.isManuscriptComplete);
+  const editingComplete = String(bundle.editing?.passStage || "").toLowerCase() === "proofread"
+    && String(bundle.editing?.passStatus || "").toLowerCase() === "complete";
+  const outstandingIssueCount = getOutstandingIssueCount(bundle);
+  const progressTotal = number(bundle.editing?.progressTotal);
+  const progressCurrent = number(bundle.editing?.progressCurrent);
+  const remainingSections = progressTotal > 0 ? Math.max(progressTotal - progressCurrent, 0) : 0;
+  const reasons = [];
+
+  if (!manuscriptComplete) {
+    reasons.push("Mark the manuscript complete on the write dashboard first.");
+  }
+  if (!editingComplete) {
+    reasons.push("Finish the editing workflow by setting the Proofread pass to Complete.");
+  }
+  if (remainingSections > 0) {
+    reasons.push(`Complete the remaining ${formatNumber(remainingSections)} proofread section${remainingSections === 1 ? "" : "s"}.`);
+  }
+  if (outstandingIssueCount > 0) {
+    reasons.push(`Resolve the remaining ${formatNumber(outstandingIssueCount)} open or deferred issue${outstandingIssueCount === 1 ? "" : "s"} first.`);
+  }
+
+  return {
+    canPublish: reasons.length === 0,
+    manuscriptComplete,
+    editingComplete,
+    outstandingIssueCount,
+    remainingSections,
+    reasons
   };
 }
 
@@ -1210,6 +1313,12 @@ function projectExportBaseRow(bundle) {
     project_deadline: bundle.project.deadline || "",
     project_daily_target: number(bundle.project.dailyTarget),
     project_start_date: bundle.project.projectStartDate || "",
+    project_manuscript_is_complete: bundle.completion?.isManuscriptComplete ? "true" : "false",
+    project_manuscript_completed_at: bundle.completion?.completedAt || "",
+    project_manuscript_completion_word_count: number(bundle.completion?.completionWordCount),
+    project_is_published: bundle.publication?.isPublished ? "true" : "false",
+    project_published_at: bundle.publication?.publishedAt || "",
+    project_published_word_count: number(bundle.publication?.publishedWordCount),
     project_edit_pass_name: bundle.editing.passName || "",
     project_edit_pass_stage: bundle.editing.passStage || "",
     project_edit_pass_status: bundle.editing.passStatus || "",
@@ -1405,6 +1514,16 @@ function buildBundleFromImportedRows(rows) {
       dailyTarget: number(projectRow.project_daily_target) || defaultProjectTemplate.project.dailyTarget,
       projectStartDate: projectRow.project_start_date || new Date().toISOString().slice(0, 10)
     },
+    completion: {
+      isManuscriptComplete: ["true", "1", "yes"].includes(String(projectRow.project_manuscript_is_complete || "").toLowerCase()),
+      completedAt: projectRow.project_manuscript_completed_at || "",
+      completionWordCount: number(projectRow.project_manuscript_completion_word_count)
+    },
+    publication: {
+      isPublished: ["true", "1", "yes"].includes(String(projectRow.project_is_published || "").toLowerCase()),
+      publishedAt: projectRow.project_published_at || "",
+      publishedWordCount: number(projectRow.project_published_word_count)
+    },
     editing: {
       passName: projectRow.project_edit_pass_name || defaultPassName(projectRow.project_edit_pass_stage || "Developmental"),
       passStage: projectRow.project_edit_pass_stage || "Developmental",
@@ -1487,7 +1606,7 @@ function importProjectFromCsv(text) {
   }
 
   state.activeProjectId = importedBundle.id;
-  activeView = preferredWorkspaceView();
+  activeView = isProjectPublished(importedBundle) ? "dashboard" : preferredWorkspaceView();
   persistAndRender();
   showToast("CSV imported", `${importedBundle.project.bookTitle} is now available in your workspace.`);
 }
