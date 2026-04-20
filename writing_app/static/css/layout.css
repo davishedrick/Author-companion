@@ -298,7 +298,8 @@
 .nav button,
 .ghost-btn,
 .primary-btn,
-.inline-btn {
+.inline-btn,
+.route-chip {
   border: 0;
   cursor: pointer;
   transition: transform 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
@@ -852,6 +853,86 @@ textarea:focus-visible {
   font-size: 0.92rem;
 }
 
+.route-chip {
+  min-height: 44px;
+  border-radius: 16px;
+  padding: 7px 14px 7px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(249, 241, 231, 0.94)),
+    rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  box-shadow:
+    inset 0 0 0 1px rgba(77, 61, 48, 0.12),
+    0 12px 28px rgba(58, 43, 32, 0.08);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.route-chip-icon-only {
+  width: 44px;
+  padding: 0;
+  gap: 0;
+  background: rgba(58, 43, 32, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.1);
+}
+
+.route-chip-icon-only:hover,
+.route-chip-icon-only:focus-visible {
+  background: rgba(58, 43, 32, 0.13);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.14);
+}
+
+.route-chip-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(58, 43, 32, 0.08);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.05);
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.route-chip svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.route-chip:hover,
+.route-chip:focus-visible {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(135deg, rgba(255, 250, 243, 0.96), rgba(245, 232, 218, 0.98)),
+    rgba(255, 250, 243, 0.94);
+  color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px rgba(149, 82, 52, 0.22),
+    0 16px 36px rgba(58, 43, 32, 0.12);
+}
+
+.route-chip:hover .route-chip-icon,
+.route-chip:focus-visible .route-chip-icon {
+  background: rgba(149, 82, 52, 0.13);
+  color: var(--accent-strong);
+}
+
+.route-chip:focus-visible {
+  outline: 3px solid rgba(149, 82, 52, 0.18);
+  outline-offset: 3px;
+}
+
 .list {
   display: grid;
   gap: 12px;
@@ -998,7 +1079,8 @@ textarea:focus-visible {
   z-index: 90;
 }
 
-#end-session-confirm-modal {
+#end-session-confirm-modal,
+#end-edit-session-confirm-modal {
   z-index: 110;
 }
 
@@ -1273,6 +1355,7 @@ textarea:focus-visible {
   .section-head .ghost-btn,
   .section-head .primary-btn,
   .section-head .inline-btn,
+  .section-head .route-chip,
   .section-head .meta-line {
     width: 100%;
   }
@@ -1413,7 +1496,8 @@ textarea:focus-visible {
   .nav button,
   .primary-btn,
   .ghost-btn,
-  .inline-btn {
+  .inline-btn,
+  .route-chip {
     width: 100%;
   }
 
@@ -1434,7 +1518,8 @@ textarea:focus-visible {
   .nav button,
   .primary-btn,
   .ghost-btn,
-  .inline-btn {
+  .inline-btn,
+  .route-chip {
     padding-left: 12px;
     padding-right: 12px;
   }

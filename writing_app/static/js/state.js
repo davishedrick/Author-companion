@@ -69,6 +69,10 @@ const exportColumns = [
   "project_edit_pass_objective",
   "project_edit_progress_current",
   "project_edit_progress_total",
+  "chapter_id",
+  "chapter_label",
+  "chapter_summary",
+  "chapter_sort_order",
   "goal_id",
   "goal_type",
   "goal_title",
@@ -111,12 +115,106 @@ const exportColumns = [
 function defaultPassName(stage = "Developmental") {
   const labels = {
     Developmental: "Developmental Edit",
-    Structural: "Structural Pass",
     "Line Edit": "Line Edit",
     Copyedit: "Copyedit",
     Proofread: "Proofread"
   };
   return labels[stage] || `${stage} Pass`;
+}
+
+function normalizeEditPassStage(stage = "Developmental") {
+  const normalizedStage = String(stage || "").trim();
+  if (normalizedStage === "Structural") return "Developmental";
+  const allowedStages = ["Developmental", "Line Edit", "Copyedit", "Proofread"];
+  return allowedStages.includes(normalizedStage) ? normalizedStage : "Developmental";
+}
+
+function normalizeLegacyEditPassName(passName = "", activeStage = "Developmental") {
+  const normalizedPassName = String(passName || "").trim();
+  if (!normalizedPassName || normalizedPassName === "Structural Pass") {
+    return defaultPassName(activeStage);
+  }
+  return normalizedPassName;
+}
+
+function normalizeChapterLabel(label = "") {
+  const normalizedLabel = String(label || "").trim();
+  return normalizedLabel || "Unassigned";
+}
+
+function compareEditingChapterLabels(a, b) {
+  return String(a || "").localeCompare(String(b || ""), undefined, {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
+function createEditingChapter(label = "", overrides = {}) {
+  return {
+    id: overrides.id || createId(),
+    label: normalizeChapterLabel(label),
+    summary: String(overrides.summary || "").trim(),
+    sortOrder: Math.max(0, number(overrides.sortOrder))
+  };
+}
+
+function normalizeEditingChapters(chapters = [], issues = [], sessions = []) {
+  const chapterMap = new Map();
+  let nextSortOrder = 0;
+  const fallbackLabel = "Unassigned";
+  const hasAssignedFallbackContent = [...issues, ...sessions].some((entry) => normalizeChapterLabel(entry?.sectionLabel) === fallbackLabel);
+
+  function upsertChapter(label, overrides = {}) {
+    const normalizedLabel = normalizeChapterLabel(label);
+    if (!chapterMap.has(normalizedLabel)) {
+      chapterMap.set(normalizedLabel, createEditingChapter(normalizedLabel, {
+        ...overrides,
+        sortOrder: overrides.sortOrder ?? nextSortOrder
+      }));
+      nextSortOrder += 1;
+      return;
+    }
+    const existing = chapterMap.get(normalizedLabel);
+    chapterMap.set(normalizedLabel, {
+      ...existing,
+      id: overrides.id || existing.id,
+      label: normalizedLabel,
+      summary: String(
+        overrides.summary !== undefined ? overrides.summary : existing.summary
+      ).trim(),
+      sortOrder: Math.max(0, number(
+        overrides.sortOrder !== undefined ? overrides.sortOrder : existing.sortOrder
+      ))
+    });
+  }
+
+  (Array.isArray(chapters) ? chapters : []).forEach((chapter, index) => {
+    if (normalizeChapterLabel(chapter?.label) === fallbackLabel && !hasAssignedFallbackContent) {
+      return;
+    }
+    upsertChapter(chapter?.label, {
+      id: chapter?.id,
+      summary: chapter?.summary,
+      sortOrder: chapter?.sortOrder ?? index
+    });
+  });
+
+  [...issues, ...sessions].forEach((entry) => {
+    const label = String(entry?.sectionLabel || "").trim();
+    if (!label) return;
+    upsertChapter(label);
+  });
+
+  return [...chapterMap.values()]
+    .sort((a, b) => {
+      const sortDelta = number(a.sortOrder) - number(b.sortOrder);
+      if (sortDelta !== 0) return sortDelta;
+      return compareEditingChapterLabels(a.label, b.label);
+    })
+    .map((chapter, index) => ({
+      ...chapter,
+      sortOrder: index
+    }));
 }
 
 function createDefaultEditingState() {
@@ -126,7 +224,8 @@ function createDefaultEditingState() {
     passStatus: "Not started",
     passObjective: "",
     progressCurrent: 0,
-    progressTotal: 0
+    progressTotal: 0,
+    chapters: []
   };
 }
 
@@ -293,15 +392,18 @@ function normalizeLoadedState(snapshot) {
 }
 
 function normalizeStoredActiveView(snapshot, normalizedState = normalizeLoadedState(snapshot)) {
-  const storedView = views.includes(snapshot?.activeView) ? snapshot.activeView : DEFAULT_VIEW;
+  const rawView = snapshot?.activeView === "edit2" ? "edit" : snapshot?.activeView;
+  const storedView = views.includes(rawView) ? rawView : DEFAULT_VIEW;
   const hasProjects = normalizedState.projects.length > 0;
   if (!hasProjects) return DEFAULT_VIEW;
   return isProjectWorkspaceView(storedView) ? storedView : DEFAULT_VIEW;
 }
 
 function normalizeStoredLastWorkspaceView(snapshot) {
-  if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.lastWorkspaceView)) return snapshot.lastWorkspaceView;
-  if (PRIMARY_WORKSPACE_VIEWS.includes(snapshot?.activeView)) return snapshot.activeView;
+  const lastWorkspace = snapshot?.lastWorkspaceView === "edit2" ? "edit" : snapshot?.lastWorkspaceView;
+  const activeWorkspace = snapshot?.activeView === "edit2" ? "edit" : snapshot?.activeView;
+  if (PRIMARY_WORKSPACE_VIEWS.includes(lastWorkspace)) return lastWorkspace;
+  if (PRIMARY_WORKSPACE_VIEWS.includes(activeWorkspace)) return activeWorkspace;
   return DEFAULT_VIEW;
 }
 
@@ -335,17 +437,31 @@ function loadLastWorkspaceView() {
 }
 
 function normalizeProjectBundle(bundle) {
+  const normalizedSessions = Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [];
+  const normalizedIssues = Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [];
+  const normalizedEditing = normalizeEditingState(bundle.editing, normalizedIssues, normalizedSessions);
   return {
     id: bundle.id || createId(),
     project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
     completion: normalizeCompletionState(bundle.completion),
     publication: normalizePublicationState(bundle.publication),
-    editing: { ...createDefaultEditingState(), ...(bundle.editing || {}) },
+    editing: normalizedEditing,
     plot: normalizePlotState(bundle.plot),
     goals: Array.isArray(bundle.goals) ? bundle.goals.map(normalizeGoal) : [],
-    sessions: Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [],
-    issues: Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [],
+    sessions: normalizedSessions,
+    issues: normalizedIssues,
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
+  };
+}
+
+function normalizeEditingState(editing, issues = [], sessions = []) {
+  const mergedEditing = { ...createDefaultEditingState(), ...(editing || {}) };
+  const passStage = normalizeEditPassStage(mergedEditing.passStage);
+  return {
+    ...mergedEditing,
+    passStage,
+    passName: normalizeLegacyEditPassName(mergedEditing.passName, passStage),
+    chapters: normalizeEditingChapters(mergedEditing.chapters, issues, sessions)
   };
 }
 
@@ -456,13 +572,18 @@ function normalizeSession(session) {
     wordsWritten: number(session?.wordsWritten),
     wordsEdited: number(session?.wordsEdited),
     notes: String(session?.notes || ""),
-    passName: String(session?.passName || ""),
+    passName: normalizeLegacyEditPassName(session?.passName, "Developmental"),
     sectionLabel: String(session?.sectionLabel || "")
   };
 }
 
 function normalizeIssue(issue) {
   const status = String(issue?.status || "Open");
+  const workflowStatus = status === "Resolved"
+    ? "resolved"
+    : issue?.workflowStatus === "in_progress"
+      ? "in_progress"
+      : "open";
   return {
     id: issue?.id || createId(),
     title: String(issue?.title || ""),
@@ -473,7 +594,9 @@ function normalizeIssue(issue) {
     notes: String(issue?.notes || ""),
     createdAt: issue?.createdAt || new Date().toISOString(),
     resolvedAt: status === "Resolved" ? (issue?.resolvedAt || issue?.createdAt || new Date().toISOString()) : "",
-    passName: String(issue?.passName || "")
+    passName: normalizeLegacyEditPassName(issue?.passName, "Developmental"),
+    workflowStatus,
+    textLocation: String(issue?.textLocation || "")
   };
 }
 
@@ -1325,6 +1448,10 @@ function projectExportBaseRow(bundle) {
     project_edit_pass_objective: bundle.editing.passObjective || "",
     project_edit_progress_current: number(bundle.editing.progressCurrent),
     project_edit_progress_total: number(bundle.editing.progressTotal),
+      chapter_id: "",
+      chapter_label: "",
+      chapter_summary: "",
+      chapter_sort_order: "",
       goal_id: "",
       goal_type: "",
       goal_title: "",
@@ -1399,6 +1526,17 @@ function buildProjectExportRows(bundle, mode = "all") {
   }
 
   if (includeEdit) {
+    bundle.editing.chapters.forEach((chapter) => {
+      rows.push({
+        ...base,
+        row_type: "chapter",
+        chapter_id: chapter.id || "",
+        chapter_label: chapter.label || "",
+        chapter_summary: chapter.summary || "",
+        chapter_sort_order: number(chapter.sortOrder)
+      });
+    });
+
     bundle.issues.forEach((issue) => {
       rows.push({
         ...base,
@@ -1530,7 +1668,15 @@ function buildBundleFromImportedRows(rows) {
       passStatus: projectRow.project_edit_pass_status || "Not started",
       passObjective: projectRow.project_edit_pass_objective || "",
       progressCurrent: number(projectRow.project_edit_progress_current),
-      progressTotal: number(projectRow.project_edit_progress_total)
+      progressTotal: number(projectRow.project_edit_progress_total),
+      chapters: rows
+        .filter((row) => row.row_type === "chapter")
+        .map((row, index) => ({
+          id: row.chapter_id || createId(),
+          label: row.chapter_label || "",
+          summary: row.chapter_summary || "",
+          sortOrder: number(row.chapter_sort_order || index)
+        }))
     },
     goals: rows
       .filter((row) => row.row_type === "goal")

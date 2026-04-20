@@ -345,7 +345,6 @@
         <label>Stage of process
           <select name="passStage">
             <option value="Developmental">Developmental</option>
-            <option value="Structural">Structural</option>
             <option value="Line Edit">Line Edit</option>
             <option value="Copyedit">Copyedit</option>
             <option value="Proofread">Proofread</option>
@@ -482,12 +481,25 @@
         <label class="full">Problem title
           <input name="title" placeholder="Example: Chapter 8 pacing stalls after the reveal" required />
         </label>
+        <label>Pass
+          <select name="issuePassKey">
+            <option value="developmental">Developmental</option>
+            <option value="clarity">Clarity</option>
+            <option value="polish">Polish</option>
+          </select>
+        </label>
+        <label>Chapter
+          <select name="sectionLabel" id="issue-section-select" required></select>
+        </label>
         <label>Issue type
           <select name="type">
             <option value="Pacing">Pacing</option>
+            <option value="Dialogue">Dialogue</option>
             <option value="Continuity">Continuity</option>
             <option value="Character">Character</option>
             <option value="Scene logic">Scene logic</option>
+            <option value="Clarity">Clarity</option>
+            <option value="Grammar">Grammar</option>
             <option value="Prose">Prose</option>
             <option value="Research">Research</option>
             <option value="General">General</option>
@@ -495,30 +507,48 @@
         </label>
         <label>Priority
           <select name="priority">
-            <option value="Medium">Medium</option>
             <option value="High">High</option>
+            <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
         </label>
-        <label>Section
-          <input name="sectionLabel" placeholder="Example: Chapter 8" />
-        </label>
         <label>Status
-          <select name="status">
-            <option value="Open">Open</option>
-            <option value="Deferred">Deferred</option>
-            <option value="Resolved">Resolved</option>
+          <select name="issueStatus">
+            <option value="open">Open</option>
+            <option value="in_progress">In progress</option>
+            <option value="resolved">Resolved</option>
           </select>
         </label>
-        <label>Pass
-          <input name="issuePassName" list="issue-pass-name-options" placeholder="Defaults to the current pass" />
+        <label>Location in text
+          <input name="textLocation" placeholder="Optional: opening scene, midpoint, final page" />
         </label>
-        <datalist id="issue-pass-name-options"></datalist>
-        <label class="full">Notes
+        <label class="full">Context
           <textarea name="notes" placeholder="Optional context for when you return to this issue"></textarea>
         </label>
         <div class="full">
           <button class="primary-btn" id="issue-submit-btn" type="submit">Save issue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="edit2-chapter-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3 id="edit2-chapter-modal-title">Add Chapter</h3>
+          <p id="edit2-chapter-modal-copy">Create a chapter anchor so issues and editing sessions have a place to live in the manuscript structure.</p>
+        </div>
+        <button class="ghost-btn" id="close-edit2-chapter-modal-btn" type="button">Close</button>
+      </div>
+      <form id="edit2-chapter-form" class="form-grid">
+        <label>Chapter label
+          <input id="edit2-chapter-label-input" name="label" placeholder="Example: Chapter 9" required />
+        </label>
+        <label class="full">Chapter summary
+          <textarea name="summary" maxlength="280" placeholder="Optional one-line purpose for why this chapter belongs in the manuscript"></textarea>
+        </label>
+        <div class="full">
+          <button class="primary-btn" id="edit2-chapter-submit-btn" type="submit">Add chapter</button>
         </div>
       </form>
     </div>
@@ -560,6 +590,7 @@
   <script src="static/js/dashboard.js"></script>
   <script src="static/js/plot.js"></script>
   <script src="static/js/edit.js"></script>
+  <script src="static/js/edit2.js"></script>
   <script src="static/js/app.js"></script>
 </body>
 </html>

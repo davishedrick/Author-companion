@@ -317,6 +317,9 @@ function syncThemePreferenceControls() {
 
 function render() {
   const bundle = currentBundle();
+  if (activeView === "edit2") {
+    activeView = "edit";
+  }
   if (!bundle && !["dashboard", "plot", "edit", "goals", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
@@ -337,6 +340,7 @@ function render() {
   renderDashboard(bundle);
   renderPlotDashboard(bundle);
   renderEditDashboard(bundle);
+  renderEdit2Dashboard(bundle);
   renderGoalsDashboard(bundle);
   renderSessions(bundle);
   renderEditProject(bundle);
@@ -396,8 +400,10 @@ function getNavIcon(view) {
     `,
     edit: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 20h5l9.5-9.5a2.1 2.1 0 0 0-5-5L4 15v5Z" />
-        <path d="m13 6 5 5" />
+        <rect x="4" y="5" width="7" height="6" rx="1.6" />
+        <rect x="13" y="5" width="7" height="6" rx="1.6" />
+        <rect x="4" y="13" width="16" height="6" rx="1.8" />
+        <path d="m16.5 3 .5 1.4 1.5.5-1.5.5-.5 1.4-.5-1.4-1.5-.5 1.5-.5Z" />
       </svg>
     `,
     goals: `
@@ -948,7 +954,14 @@ function renderSessions(bundle) {
             <h2>All Sessions</h2>
             <p>View and delete every session logged for this project.</p>
           </div>
-          <button class="ghost-btn" id="back-to-dashboard-btn" type="button">Back to dashboard</button>
+          <button class="route-chip" id="back-to-dashboard-btn" type="button" aria-label="Back to dashboard">
+            <span class="route-chip-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="m14.5 6-6 6 6 6" />
+              </svg>
+            </span>
+            <span>Back</span>
+          </button>
         </div>
         <div class="list">
           ${sessions.length ? sessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged yet.</div>`}
@@ -980,7 +993,14 @@ function renderEditProject(bundle) {
             <h2>Edit Project</h2>
             <p>Update the manuscript setup from its own dedicated page.</p>
           </div>
-          <button class="ghost-btn" id="back-to-projects-btn" type="button">Back to projects</button>
+          <button class="route-chip" id="back-to-projects-btn" type="button" aria-label="Back to projects">
+            <span class="route-chip-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="m14.5 6-6 6 6 6" />
+              </svg>
+            </span>
+            <span>Back</span>
+          </button>
         </div>
         <form id="project-form" class="form-grid triple">
           <label class="full">Book title

@@ -393,17 +393,44 @@ function getEditPassNameOptions(bundle) {
   });
 }
 
+function getEditIssueSectionOptions(bundle) {
+  const chapterLabels = Array.isArray(bundle?.editing?.chapters)
+    ? bundle.editing.chapters.map((chapter) => normalizeChapterLabel(chapter.label))
+    : [];
+  const fallbackLabels = [
+    ...(bundle?.issues || []).map((issue) => String(issue.sectionLabel || "").trim()),
+    ...(bundle?.sessions || []).map((session) => String(session.sectionLabel || "").trim())
+  ].filter(Boolean);
+  const orderedLabels = [...new Set([...chapterLabels, ...fallbackLabels])];
+  return orderedLabels.sort((a, b) => {
+    const chapterIndexA = chapterLabels.indexOf(a);
+    const chapterIndexB = chapterLabels.indexOf(b);
+    if (chapterIndexA !== -1 && chapterIndexB !== -1) return chapterIndexA - chapterIndexB;
+    if (chapterIndexA !== -1) return -1;
+    if (chapterIndexB !== -1) return 1;
+    return compareEditingChapterLabels(a, b);
+  });
+}
+
+function getEditIssuePassLabel(passKey = "developmental") {
+  return EDIT2_PASS_CONFIG[passKey]?.label || EDIT2_PASS_CONFIG.developmental.label;
+}
+
+function getEditIssueDefaultPriority(passKey = "developmental") {
+  return EDIT2_PASS_CONFIG[passKey]?.defaultPriority || "Medium";
+}
+
+function getCurrentEdit2ChapterLabel(bundle) {
+  if (activeView !== "edit" || !edit2SelectedChapterKey) return "";
+  return buildEdit2Chapters(bundle).chapters.find((chapter) => chapter.key === edit2SelectedChapterKey)?.label || "";
+}
+
 function getEditStageRoadmap(passStage, passStatus) {
   const stages = [
     {
       name: "Developmental",
       cue: "Big picture",
       description: "Story, structure, and major revision choices."
-    },
-    {
-      name: "Structural",
-      cue: "Scene flow",
-      description: "Chapter order, pacing, and transitions."
     },
     {
       name: "Line Edit",
@@ -437,302 +464,6 @@ function getEditStageRoadmap(passStage, passStatus) {
 }
 
 function renderEditDashboard(bundle) {
-  const view = document.getElementById("view-edit");
-  if (!bundle) {
-    view.innerHTML = renderWorkspaceEmptyState("Edit");
-    bindWorkspaceEmptyActions();
-    return;
-  }
-
-  const editStats = getEditStats(bundle);
-  const progressCurrent = number(bundle.editing.progressCurrent);
-  const progressTotal = number(bundle.editing.progressTotal);
-  const progressPercent = progressTotal > 0 ? Math.min(100, (progressCurrent / progressTotal) * 100) : 0;
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const todayEditSessions = [...getEditSessions(bundle)]
-    .filter((session) => dateKey(session.date) === todayKey)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  const issues = [...bundle.issues]
-    .sort(compareEditIssuesByPriority);
-  const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
-  const resolvedIssues = issues.filter((issue) => issue.status === "Resolved");
-  const issueFilterOptions = getEditIssueFilterOptions(visibleIssues);
-  editIssueFilters = normalizeEditIssueFilters(editIssueFilters, issueFilterOptions);
-  const filteredIssues = getFilteredEditIssues(bundle, visibleIssues, editIssueFilters);
-  const issueList = filteredIssues;
-  const resolvedIssueArchive = [...resolvedIssues].sort(compareResolvedEditIssues);
-  const currentPassHotspots = buildEditSectionHotspots(bundle, "current");
-  const nextFocusRecommendations = deriveEditFocusRecommendations(bundle, visibleIssues, currentPassHotspots, editStats);
-  const lastSession = editStats.lastSession;
-  const issueFilterSummary = describeEditIssueFilterSummary(filteredIssues, editIssueFilters);
-  const resolvedIssueSummary = resolvedIssueArchive.length
-    ? `${formatNumber(resolvedIssueArchive.length)} resolved issue${resolvedIssueArchive.length === 1 ? "" : "s"} are tucked here for reference. Reopen anything that needs another pass.`
-    : "Resolved issues will collect here once you start closing them out.";
-  const stageRoadmap = getEditStageRoadmap(bundle.editing.passStage, bundle.editing.passStatus);
-  const activeStageRoadmapEntry = stageRoadmap.find((stage) => stage.state === "current" || stage.state === "current-complete") || stageRoadmap[0];
-  const activeStageRoadmapIndex = Math.max(stageRoadmap.findIndex((stage) => stage === activeStageRoadmapEntry), 0);
-  const stageRoadmapFillEnd = stageRoadmap.length > 1
-    ? 10 + ((activeStageRoadmapIndex / (stageRoadmap.length - 1)) * 80)
-    : 10;
-
-  view.innerHTML = `
-    <section class="stack">
-      <section class="card">
-        <div class="writing-launch">
-          <div class="writing-launch-copy">
-            <div>
-              <h3>Get editing</h3>
-              <p>Jump into a revision pass, log the section you touched, and capture what changed before you move on.</p>
-            </div>
-            <div class="writing-launch-meta">
-              <span class="pill">${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today</span>
-              <span class="pill">${formatHours(editStats.minutesToday)} edited today</span>
-            </div>
-          </div>
-          <button class="primary-btn writing-launch-cta" id="open-edit-session-modal-btn" type="button">Start editing session</button>
-        </div>
-      </section>
-
-      <section class="card hero">
-        <div class="hero-panel pass-focus">
-          <section class="edit-stage-roadmap" aria-label="Editing process stages">
-            <div class="edit-stage-roadmap-head">
-              <div>
-                <strong>Editing roadmap</strong>
-                <p>${escapeHtml(activeStageRoadmapEntry.description)}</p>
-              </div>
-              <button class="ghost-btn edit-pass-btn" id="open-edit-pass-btn" type="button">Change pass</button>
-            </div>
-            <div class="edit-stage-track" role="list" style="--edit-stage-fill-end:${stageRoadmapFillEnd}%;">
-              ${stageRoadmap.map((stage) => `
-                <article class="edit-stage-node is-${escapeAttr(stage.state)}" role="listitem" ${stage.state === "current" || stage.state === "current-complete" ? 'aria-current="step"' : ""}>
-                  <span class="edit-stage-dot" aria-hidden="true"></span>
-                  <strong class="edit-stage-title">${escapeHtml(stage.name)}</strong>
-                  <span class="edit-stage-cue">${escapeHtml(stage.cue)}</span>
-                </article>
-              `).join("")}
-            </div>
-          </section>
-          <div class="progress-block">
-            <div class="progress-label-row">
-              <strong>Pass progress</strong>
-              <span>${progressTotal > 0 ? `${formatNumber(progressCurrent)} / ${formatNumber(progressTotal)} sections` : "No section target yet"}</span>
-            </div>
-            <div class="progress-rail">
-              <div class="progress-fill" style="width:${progressPercent}%"></div>
-            </div>
-          </div>
-          <div class="snapshot-grid">
-            <div class="snapshot-card">
-              <strong>Last worked on</strong>
-              <p>${lastSession?.sectionLabel ? escapeHtml(lastSession.sectionLabel) : "Nothing logged yet"}</p>
-              <span>${lastSession ? formatDate(lastSession.date) : "Log an editing session to start building history."}</span>
-            </div>
-            <div class="snapshot-card">
-              <strong>Current pass hours</strong>
-              <p>${formatHours(editStats.currentPassMinutes)}</p>
-              <span>${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} recorded overall</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card next-focus-card">
-        <div class="section-head">
-          <div>
-            <h3>Next Focus</h3>
-            <p>Priority leads the ranking. Section clustering, recent editing activity, and issue age only help break ties so the reasoning stays readable and honest.</p>
-          </div>
-        </div>
-        <div class="next-focus-list next-focus-list-${nextFocusRecommendations.length}">
-          ${nextFocusRecommendations.map((recommendation) => `
-            <article class="next-focus-option">
-              <div class="next-focus-copy">
-                <p class="next-focus-kicker">${escapeHtml(recommendation.label)}</p>
-                <h4>${escapeHtml(recommendation.title)}</h4>
-                <p>${escapeHtml(recommendation.description)}</p>
-              </div>
-              <p class="next-focus-reason"><strong>Why this surfaced:</strong> ${escapeHtml(recommendation.reason)}</p>
-              <div class="next-focus-badges">
-                ${recommendation.badges.map((badge) => `<span class="pill">${escapeHtml(badge)}</span>`).join("")}
-              </div>
-              <div class="next-focus-actions">
-                ${recommendation.primaryAction ? `
-                  <button
-                    class="primary-btn"
-                    type="button"
-                    data-next-focus-action="${escapeAttr(recommendation.primaryAction)}"
-                    ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
-                    ${recommendation.filterSection ? `data-section="${escapeAttr(recommendation.filterSection)}"` : ""}
-                  >${escapeHtml(recommendation.primaryLabel)}</button>
-                ` : ""}
-                ${recommendation.secondaryAction ? `
-                  <button
-                    class="ghost-btn"
-                    type="button"
-                    data-next-focus-action="${escapeAttr(recommendation.secondaryAction)}"
-                    ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
-                    ${recommendation.filterSection ? `data-section="${escapeAttr(recommendation.filterSection)}"` : ""}
-                  >${escapeHtml(recommendation.secondaryLabel)}</button>
-                ` : ""}
-              </div>
-            </article>
-          `).join("")}
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h3>Hours Edited</h3>
-            <p>Track how much revision time is actually going into the manuscript.</p>
-          </div>
-        </div>
-        <div class="metrics">
-          <div class="metric"><div class="label">Today</div><div class="value">${formatHours(editStats.minutesToday)}</div></div>
-          <div class="metric"><div class="label">This week</div><div class="value">${formatHours(editStats.minutesWeek)}</div></div>
-          <div class="metric"><div class="label">Current pass</div><div class="value">${formatHours(editStats.currentPassMinutes)}</div></div>
-          <div class="metric"><div class="label">Average session</div><div class="value">${formatNumber(editStats.averageSessionMinutes)} min</div></div>
-        </div>
-      </section>
-
-      <section class="card open-issues-focus">
-        <div class="section-head">
-          <div>
-            <h3>Issue Board</h3>
-            <p>${editIssueBoardView === "current" ? "Focus the active revision backlog without letting the archive take over the page." : "Browse resolved issues without cluttering the work-in-progress board."}</p>
-          </div>
-          <div class="issue-board-head-actions">
-            <div class="issue-board-state-toggle" role="tablist" aria-label="Issue board states">
-              <button
-                class="issue-board-state-btn ${editIssueBoardView === "current" ? "active" : ""}"
-                id="edit-issue-view-current"
-                type="button"
-                role="tab"
-                aria-selected="${editIssueBoardView === "current" ? "true" : "false"}"
-                data-edit-issue-view="current"
-              >
-                <span>Current</span>
-                <strong>${formatNumber(visibleIssues.length)}</strong>
-              </button>
-              <button
-                class="issue-board-state-btn ${editIssueBoardView === "resolved" ? "active" : ""}"
-                id="edit-issue-view-resolved"
-                type="button"
-                role="tab"
-                aria-selected="${editIssueBoardView === "resolved" ? "true" : "false"}"
-                data-edit-issue-view="resolved"
-              >
-                <span>Resolved</span>
-                <strong>${formatNumber(resolvedIssueArchive.length)}</strong>
-              </button>
-            </div>
-            ${editIssueBoardView === "current" ? `<button class="ghost-btn" id="open-issue-modal-btn" type="button">Add issue</button>` : ""}
-          </div>
-        </div>
-        <div class="issue-board-state-shell">
-          <p class="small-copy issue-board-state-copy">${escapeHtml(editIssueBoardView === "current" ? "Current issues stay action-oriented here. Resolved items move out of the way until you need the archive." : resolvedIssueSummary)}</p>
-        </div>
-        ${editIssueBoardView === "current" ? `
-          <form class="issue-filter-form" id="edit-issue-filters-form">
-            <label>Pass
-              <select name="passScope">
-                <option value="current" ${editIssueFilters.passScope === "current" ? "selected" : ""}>Current pass</option>
-                <option value="all" ${editIssueFilters.passScope === "all" ? "selected" : ""}>All passes</option>
-              </select>
-            </label>
-            <label>Priority
-              <select name="priority">
-                <option value="all" ${editIssueFilters.priority === "all" ? "selected" : ""}>All priorities</option>
-                <option value="High" ${editIssueFilters.priority === "High" ? "selected" : ""}>High</option>
-                <option value="Medium" ${editIssueFilters.priority === "Medium" ? "selected" : ""}>Medium</option>
-                <option value="Low" ${editIssueFilters.priority === "Low" ? "selected" : ""}>Low</option>
-              </select>
-            </label>
-            <label>Type
-              <select name="type">
-                <option value="all" ${editIssueFilters.type === "all" ? "selected" : ""}>All types</option>
-                ${issueFilterOptions.types.map((type) => `<option value="${escapeAttr(type)}" ${editIssueFilters.type === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Section
-              <select name="section">
-                <option value="all" ${editIssueFilters.section === "all" ? "selected" : ""}>All sections</option>
-                ${issueFilterOptions.sections.map((section) => `<option value="${escapeAttr(section)}" ${editIssueFilters.section === section ? "selected" : ""}>${escapeHtml(section)}</option>`).join("")}
-              </select>
-            </label>
-            <label>Sort
-              <select name="sort" id="edit-issue-sort">
-                <option value="priority" ${editIssueFilters.sort === "priority" ? "selected" : ""}>Priority first</option>
-                <option value="newest" ${editIssueFilters.sort === "newest" ? "selected" : ""}>Newest first</option>
-                <option value="oldest" ${editIssueFilters.sort === "oldest" ? "selected" : ""}>Oldest first</option>
-                <option value="section" ${editIssueFilters.sort === "section" ? "selected" : ""}>By section</option>
-                <option value="type" ${editIssueFilters.sort === "type" ? "selected" : ""}>By type</option>
-              </select>
-            </label>
-            <button class="ghost-btn issue-filter-reset" id="reset-edit-issue-filters-btn" type="button">Reset filters</button>
-          </form>
-          <p class="small-copy issue-filter-summary">${escapeHtml(issueFilterSummary)}</p>
-          <div class="list">
-            ${issueList.length ? issueList.map(renderIssueCard).join("") : `<div class="empty">No unresolved issues match these filters right now.</div>`}
-          </div>
-        ` : `
-          <div class="issue-board-archive">
-            <div class="list issue-archive-list">
-              ${resolvedIssueArchive.length ? resolvedIssueArchive.map((issue) => renderIssueCard(issue, { archived: true })).join("") : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
-            </div>
-          </div>
-        `}
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h3>Session History</h3>
-            <p>All editing sessions logged today.</p>
-          </div>
-          <div class="meta-line">
-            <button class="ghost-btn" id="view-all-edit-sessions-btn" type="button">View all sessions</button>
-          </div>
-        </div>
-        <div class="list">
-          ${todayEditSessions.length ? todayEditSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No editing sessions logged today.</div>`}
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h3>Pass Snapshot</h3>
-            <p>A quick read on how the current pass is moving.</p>
-          </div>
-        </div>
-        <div class="snapshot-grid">
-          <div class="snapshot-card">
-            <strong>Words edited</strong>
-            <p>${formatNumber(editStats.totalWordsEdited)}</p>
-            <span>Across all editing sessions</span>
-          </div>
-          <div class="snapshot-card">
-            <strong>Issues resolved</strong>
-            <p>${formatNumber(editStats.resolvedIssueCount)}</p>
-            <span>Problems marked complete</span>
-          </div>
-          <div class="snapshot-card">
-            <strong>Status</strong>
-            <p>${escapeHtml(bundle.editing.passStatus || "Not started")}</p>
-            <span>${escapeHtml(bundle.editing.passStage || "Developmental")}</span>
-          </div>
-          <div class="snapshot-card">
-            <strong>Sections remaining</strong>
-            <p>${progressTotal > 0 ? formatNumber(Math.max(progressTotal - progressCurrent, 0)) : "Set target"}</p>
-            <span>${progressTotal > 0 ? `Out of ${formatNumber(progressTotal)} total` : "Add a section target in Change pass."}</span>
-          </div>
-        </div>
-      </section>
-    </section>
-  `;
-
   bindEditDashboardEvents(bundle);
 }
 
@@ -971,25 +702,72 @@ function bindEditDashboardEvents(bundle) {
   }
 
   if (issueForm) {
+    issueForm.onchange = (event) => {
+      const target = event.target;
+      if (!target?.name) return;
+
+      if (target.name === "priority") {
+        issueForm.dataset.priorityTouched = "true";
+        return;
+      }
+
+      if (target.name === "issuePassKey") {
+        const nextPassKey = normalizeEdit2PassKey(issueForm.elements.issuePassKey?.value || "developmental");
+        const previousPassKey = issueForm.dataset.lastPassKey || nextPassKey;
+        const previousDefaultPriority = getEditIssueDefaultPriority(previousPassKey);
+        const priorityField = issueForm.elements.priority;
+        const currentPriority = String(priorityField?.value || "");
+        const shouldSyncPriority = issueForm.dataset.mode === "create"
+          && priorityField
+          && (issueForm.dataset.priorityTouched !== "true" || currentPriority === previousDefaultPriority);
+
+        if (shouldSyncPriority) {
+          priorityField.value = getEditIssueDefaultPriority(nextPassKey);
+        }
+        issueForm.dataset.lastPassKey = nextPassKey;
+      }
+    };
+
     issueForm.onsubmit = (event) => {
       event.preventDefault();
       const formData = new FormData(issueForm);
       const isEditingExisting = Boolean(editingIssueId);
+      const existingIssue = isEditingExisting
+        ? bundle.issues.find((item) => item.id === editingIssueId)
+        : null;
+      const issuePassKey = normalizeEdit2PassKey(
+        formData.get("issuePassKey"),
+        existingIssue?.passName || bundle.editing.passStage
+      );
+      const nextWorkflowStatusRaw = String(
+        formData.get("issueStatus")
+        || (existingIssue?.status === "Resolved"
+          ? "resolved"
+          : existingIssue?.workflowStatus || "open")
+      );
+      const nextWorkflowStatus = nextWorkflowStatusRaw === "resolved"
+        ? "resolved"
+        : nextWorkflowStatusRaw === "in_progress"
+          ? "in_progress"
+          : "open";
+      const nextStatus = nextWorkflowStatus === "resolved" ? "Resolved" : "Open";
       const issue = normalizeIssue({
         id: editingIssueId || createId(),
         title: String(formData.get("title") || "").trim(),
         type: String(formData.get("type") || "General"),
         sectionLabel: String(formData.get("sectionLabel") || "").trim(),
-        priority: String(formData.get("priority") || "Medium"),
-        status: String(formData.get("status") || "Open"),
+        priority: String(formData.get("priority") || existingIssue?.priority || getEditIssueDefaultPriority(issuePassKey)),
+        status: nextStatus,
         notes: String(formData.get("notes") || "").trim(),
         createdAt: isEditingExisting
-          ? bundle.issues.find((item) => item.id === editingIssueId)?.createdAt || new Date().toISOString()
+          ? existingIssue?.createdAt || new Date().toISOString()
           : new Date().toISOString(),
-        resolvedAt: String(formData.get("status") || "Open") === "Resolved"
-          ? bundle.issues.find((item) => item.id === editingIssueId)?.resolvedAt || new Date().toISOString()
+        resolvedAt: nextStatus === "Resolved"
+          ? existingIssue?.resolvedAt || new Date().toISOString()
           : "",
-        passName: String(formData.get("issuePassName") || "").trim() || bundle.editing.passName || defaultPassName(bundle.editing.passStage)
+        passName: getEditIssuePassLabel(issuePassKey),
+        workflowStatus: nextWorkflowStatus,
+        textLocation: String(formData.get("textLocation") || "").trim()
       });
 
       updateCurrentBundle((projectBundle) => ({
@@ -1350,41 +1128,65 @@ function openIssueModal(issueId = null) {
   const modal = document.getElementById("issue-modal");
   const form = document.getElementById("issue-form");
   const passCopy = document.getElementById("issue-pass-copy");
-  const passOptions = document.getElementById("issue-pass-name-options");
+  const sectionSelect = document.getElementById("issue-section-select");
   const title = document.getElementById("issue-modal-title");
   const copy = document.getElementById("issue-modal-copy");
   const submit = document.getElementById("issue-submit-btn");
   const bundle = currentBundle();
   const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
+  const currentChapterLabel = getCurrentEdit2ChapterLabel(bundle);
   const issue = issueId ? bundle?.issues.find((item) => item.id === issueId) : null;
+  const sectionLabels = getEditIssueSectionOptions(bundle);
 
   editingIssueId = issueId;
   form.reset();
-  passCopy.textContent = `Defaults to ${currentPassName}. Change the pass below if this issue belongs to a different revision pass.`;
-  if (passOptions) {
-    passOptions.innerHTML = getEditPassNameOptions(bundle)
-      .map((passName) => `<option value="${escapeAttr(passName)}"></option>`)
+  form.dataset.mode = issue ? "edit" : "create";
+  form.dataset.priorityTouched = "false";
+
+  if (!issue && !sectionLabels.length) {
+    showToast("Create a chapter first", "Add a chapter to the manuscript structure before logging an issue.");
+    openEdit2ChapterModal?.();
+    return;
+  }
+
+  passCopy.textContent = currentChapterLabel
+    ? `This issue will start in ${currentChapterLabel}. Choose the pass it belongs to, then keep the note lightweight enough to capture while reading.`
+    : `Choose the pass this issue belongs to and place it inside one of your existing chapters so the manuscript map can surface it correctly.`;
+  if (sectionSelect) {
+    sectionSelect.innerHTML = sectionLabels
+      .map((sectionLabel) => `<option value="${escapeAttr(sectionLabel)}">${escapeHtml(sectionLabel)}</option>`)
       .join("");
   }
 
   if (issue) {
-    title.textContent = "Edit Open Issue";
-    copy.textContent = "Update the problem so it stays useful during the pass.";
+    const issuePassKey = normalizeEdit2PassKey(issue.passName, bundle?.editing?.passStage);
+    title.textContent = "Edit Issue";
+    copy.textContent = "Update the issue so it stays easy to place in the right chapter and pass.";
     form.elements.title.value = issue.title || "";
+    form.elements.issuePassKey.value = issuePassKey;
     form.elements.type.value = issue.type || "General";
-    form.elements.priority.value = issue.priority || "Medium";
     form.elements.sectionLabel.value = issue.sectionLabel || "";
-    form.elements.status.value = issue.status || "Open";
-    form.elements.issuePassName.value = issue.passName || currentPassName;
+    form.elements.priority.value = issue.priority || getEditIssueDefaultPriority(issuePassKey);
+    form.elements.issueStatus.value = issue.status === "Resolved"
+      ? "resolved"
+      : issue.workflowStatus === "in_progress"
+        ? "in_progress"
+        : "open";
+    form.elements.textLocation.value = issue.textLocation || "";
     form.elements.notes.value = issue.notes || "";
+    form.dataset.lastPassKey = issuePassKey;
     submit.textContent = "Save changes";
   } else {
+    const issuePassKey = normalizeEdit2PassKey(currentPassName, bundle?.editing?.passStage);
     title.textContent = "Add Open Issue";
-    copy.textContent = "Capture a problem now so you can come back to it during the pass.";
+    copy.textContent = "Capture a problem now, assign it to the right pass, and drop it into the right chapter before you move on.";
+    form.elements.issuePassKey.value = issuePassKey;
     form.elements.type.value = "Pacing";
-    form.elements.priority.value = "Medium";
-    form.elements.status.value = "Open";
-    form.elements.issuePassName.value = currentPassName;
+    form.elements.sectionLabel.value = sectionLabels.includes(currentChapterLabel) ? currentChapterLabel : (sectionLabels[0] || "");
+    form.elements.priority.value = getEditIssueDefaultPriority(issuePassKey);
+    form.elements.issueStatus.value = "open";
+    form.elements.textLocation.value = "";
+    form.dataset.lastPassKey = issuePassKey;
     submit.textContent = "Save issue";
   }
 
@@ -1395,6 +1197,9 @@ function closeIssueModal() {
   const modal = document.getElementById("issue-modal");
   const form = document.getElementById("issue-form");
   form.reset();
+  delete form.dataset.mode;
+  delete form.dataset.priorityTouched;
+  delete form.dataset.lastPassKey;
   editingIssueId = null;
   modal.classList.add("hidden");
 }
