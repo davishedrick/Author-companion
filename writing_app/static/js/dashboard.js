@@ -138,10 +138,10 @@ function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumS
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>Session History</h3>
+          <h3>History</h3>
           <p>All writing sessions logged today.</p>
         </div>
-        <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
+        <button class="ghost-btn" id="view-all-sessions-btn" type="button">Open history</button>
       </div>
       <div class="list">
         ${todaySessions.length ? todaySessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged today.</div>`}
@@ -175,7 +175,7 @@ function renderCompletedManuscriptDashboard(bundle, stats) {
         <div>
           <p class="small-copy">Completed manuscript</p>
           <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
-          <p class="muted">Marked complete on ${formatDate(completedAt)}. The write dashboard is now showing the manuscript's final drafting snapshot until you choose to reopen it.</p>
+          <p class="muted">Marked complete on ${formatDate(completedAt)}. The Write workspace is now showing the manuscript's final drafting snapshot until you choose to reopen it.</p>
         </div>
         <div class="manuscript-complete-actions">
           <span class="pill">Final word count ${formatNumber(finalWordCount)}</span>
@@ -198,7 +198,7 @@ function renderCompletedManuscriptDashboard(bundle, stats) {
       <div class="section-head">
         <div>
           <h3>Final Stats</h3>
-          <p>Your drafting dashboard has been condensed into the clearest completion snapshot we have right now.</p>
+          <p>The Write workspace has been condensed into the clearest completion snapshot we have right now.</p>
         </div>
       </div>
       <div class="metrics">
@@ -242,7 +242,7 @@ function renderCompletedManuscriptDashboard(bundle, stats) {
           <h3>Writing Log</h3>
           <p>Your recent sessions stay visible here in case you want a quick look back at the finish.</p>
         </div>
-        <button class="ghost-btn" id="view-all-sessions-btn" type="button">View all sessions</button>
+        <button class="ghost-btn" id="view-all-sessions-btn" type="button">Open history</button>
       </div>
       <div class="list">
         ${recentSessions.length ? recentSessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No writing sessions logged yet.</div>`}
@@ -278,6 +278,9 @@ function getPublishedProjectSnapshot(bundle, stats = getStats(bundle), editStats
       : "Exactly on the original target";
   const progressCurrent = number(bundle.editing.progressCurrent);
   const progressTotal = number(bundle.editing.progressTotal);
+  const unitLower = getStructureUnitLower(bundle);
+  const unitPlural = getStructureUnitPlural(bundle);
+  const unitPluralLower = unitPlural.toLowerCase();
   const bestDayLabel = stats.bestDay.key
     ? `${formatNumber(stats.bestDay.words)} words on ${formatDate(stats.bestDay.key)}`
     : "No writing day was logged.";
@@ -302,9 +305,10 @@ function getPublishedProjectSnapshot(bundle, stats = getStats(bundle), editStats
     outstandingIssueCount,
     issueSummary: `${formatNumber(editStats.resolvedIssueCount)} resolved / ${formatNumber(outstandingIssueCount)} open`,
     currentPassLabel: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
+    structureUnitPlural: unitPlural,
     sectionsSummary: progressTotal > 0
-      ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} sections logged in the final pass`
-      : "No section target was logged in the editing pass",
+      ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} ${unitPluralLower} logged in the final pass`
+      : `No ${unitLower} target was logged in the editing pass`,
     finalProgressPercent: targetWordCount > 0 ? Math.min(999, (finalWordCount / targetWordCount) * 100) : 0
   };
 }
@@ -396,7 +400,7 @@ function renderPublishedProjectDashboard(bundle) {
         <div class="published-stat-list">
           <div class="published-stat-row"><strong>Final pass</strong><span>${escapeHtml(summary.currentPassLabel)}</span></div>
           <div class="published-stat-row"><strong>Stage</strong><span>${escapeHtml(bundle.editing.passStage)} (${escapeHtml(bundle.editing.passStatus)})</span></div>
-          <div class="published-stat-row"><strong>Sections logged</strong><span>${escapeHtml(summary.sectionsSummary)}</span></div>
+          <div class="published-stat-row"><strong>${escapeHtml(summary.structureUnitPlural)} logged</strong><span>${escapeHtml(summary.sectionsSummary)}</span></div>
           <div class="published-stat-row"><strong>Words edited</strong><span>${formatNumber(editStats.totalWordsEdited)} words</span></div>
           <div class="published-stat-row"><strong>Issue board</strong><span>${escapeHtml(summary.issueSummary)}</span></div>
         </div>
@@ -551,7 +555,7 @@ function bindDashboardEvents(bundle) {
         completion: createDefaultCompletionState()
       }));
       persistAndRender();
-      showToast("Manuscript reopened", "The writing dashboard is live again in case you want to add more words.");
+      showToast("Manuscript reopened", "The Write workspace is live again in case you want to add more words.");
     };
   }
 
@@ -714,7 +718,7 @@ function bindDashboardEvents(bundle) {
       closeManuscriptCompleteModal();
       persistAndRender();
       launchManuscriptCompleteConfetti();
-      showToast("Manuscript marked complete", "The write dashboard is now showing final manuscript stats. Reopen it anytime if more drafting is needed.");
+      showToast("Manuscript marked complete", "The Write workspace is now showing final manuscript stats. Reopen it anytime if more drafting is needed.");
     };
   }
 
@@ -743,7 +747,7 @@ function renderGoalsDashboard(bundle) {
         <div class="section-head">
           <div>
             <p class="small-copy">Shared project layer</p>
-            <h2 class="hero-title">Goals Dashboard</h2>
+            <h2 class="hero-title">Goals Workspace</h2>
             <p class="muted">Manage active targets, preserve archived context, and inspect day-by-day progress history in one place.</p>
           </div>
           <button class="primary-btn" id="open-goal-modal-btn" type="button">Create goal</button>
@@ -880,7 +884,7 @@ function bindGoalsDashboardEvents(bundle) {
       }));
       closeGoalModal();
       persistAndRender();
-      showToast("Goal added", "Your new goal is now visible on the goals dashboard.");
+      showToast("Goal added", "Your new goal is now visible in the Goals workspace.");
     };
   }
 
@@ -1088,7 +1092,7 @@ function openManuscriptCompleteModal(bundle = currentBundle()) {
 
   form.reset();
   title.textContent = "Mark manuscript complete";
-  copy.textContent = "This changes the write dashboard into a final stats view. It will not delete sessions or project data, and you can reopen the manuscript later if you need more drafting time.";
+  copy.textContent = "This changes the Write workspace into a final stats view. It will not delete sessions or project data, and you can reopen the manuscript later if you need more drafting time.";
   summary.textContent = difference >= 0
     ? `You are currently at ${formatNumber(currentWords)} words, which is ${formatNumber(difference)} words over target. Type COMPLETE to confirm.`
     : `You are currently at ${formatNumber(currentWords)} of ${formatNumber(targetWords)} words. If this draft is finished anyway, you can still mark it complete and reopen later if needed.`;
@@ -1245,7 +1249,7 @@ function buildPublishedProjectPdf(bundle) {
   [
     `Final pass: ${summary.currentPassLabel}`,
     `Stage and status: ${bundle.editing.passStage} (${bundle.editing.passStatus})`,
-    `Sections logged in final pass: ${summary.sectionsSummary}`,
+    `${summary.structureUnitPlural} logged in final pass: ${summary.sectionsSummary}`,
     `Editing sessions: ${formatNumber(summary.editingSessions.length)}`,
     `Words edited: ${formatNumber(editStats.totalWordsEdited)} words`,
     `Resolved issues: ${formatNumber(editStats.resolvedIssueCount)}`

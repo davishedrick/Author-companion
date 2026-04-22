@@ -239,7 +239,7 @@ function getEdit2OpenIssues(issues) {
 }
 
 function getEdit2NextFocusScopeLabel() {
-  return "chapter structure";
+  return "manuscript structure";
 }
 
 function getEdit2FocusIssues(chapter) {
@@ -261,12 +261,12 @@ function getEdit2ChapterOpenStageCount(chapter, passKey) {
 }
 
 function getEdit2OverviewSummary(chapter) {
-  return String(chapter.summary || "").trim() || "No chapter purpose saved yet.";
+  return String(chapter.summary || "").trim() || "No structure purpose saved yet.";
 }
 
 function truncateEdit2Summary(summary, maxWords = 12) {
   const normalized = String(summary || "").trim();
-  if (!normalized) return "No chapter purpose saved yet.";
+  if (!normalized) return "No structure purpose saved yet.";
   const words = normalized.split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return normalized;
   return `${words.slice(0, maxWords).join(" ")}…`;
@@ -315,15 +315,15 @@ function scoreEdit2NextFocusIssue(issue, signals) {
   );
 }
 
-function getEdit2NextFocusReasons(issue, chapter, signals) {
+function getEdit2NextFocusReasons(issue, chapter, signals, unitLabel = "Chapter") {
   const priorityLabel = getEdit2IssuePriorityLabel(issue);
   const passLabel = EDIT2_PASS_CONFIG[issue.passKey]?.label || "Editing";
   const reasons = [`${priorityLabel} priority issue in structure`];
 
   if (signals.unresolvedInChapter >= 2) {
-    reasons.push("Multiple unresolved issues in this chapter");
+    reasons.push(`Multiple unresolved issues in this ${unitLabel.toLowerCase()}`);
   } else if (signals.unresolvedInChapter === 1) {
-    reasons.push("Only unresolved issue in this section");
+    reasons.push(`Only unresolved issue in this ${unitLabel.toLowerCase()}`);
   }
 
   if (issue.workflowStatus === "in_progress") {
@@ -335,7 +335,7 @@ function getEdit2NextFocusReasons(issue, chapter, signals) {
   return reasons.slice(0, 3);
 }
 
-function buildEdit2ChapterFallbackRecommendation(chapter, label = "Scan chapter") {
+function buildEdit2ChapterFallbackRecommendation(chapter, label = "Scan structure", unitLabel = "Chapter") {
   const hasMixedPasses = EDIT2_PASS_ORDER
     .filter((passKey) => getEdit2ChapterOpenStageCount(chapter, passKey) > 0)
     .length >= 2;
@@ -345,16 +345,16 @@ function buildEdit2ChapterFallbackRecommendation(chapter, label = "Scan chapter"
     title: chapter.label,
     reasons: chapter.openIssueCount
       ? [
-        "Chapter still has unresolved issues",
+        `${unitLabel} still has unresolved issues`,
         hasMixedPasses ? "Issue mix spans several editing passes" : "One editing pass needs attention"
       ]
       : [
         "Fresh scan can reveal missing issues",
-        "Chapter context needs a clean review"
+        `${unitLabel} context needs a clean review`
       ],
     meta: `${chapter.openIssueCount} open · ${formatNumber(chapter.donePassCount)} / ${EDIT2_PASS_ORDER.length} passes done`,
     primaryAction: "open-chapter",
-    primaryLabel: "Open chapter",
+    primaryLabel: `Open ${unitLabel.toLowerCase()}`,
     secondaryAction: "add-issue",
     secondaryLabel: "Add issue",
     chapterKey: chapter.key
@@ -362,6 +362,7 @@ function buildEdit2ChapterFallbackRecommendation(chapter, label = "Scan chapter"
 }
 
 function buildEdit2NextFocusRecommendations(bundle, chapters) {
+  const unitLabel = getStructureUnitLabel(bundle);
   const rankedCandidates = chapters
     .flatMap((chapter) => getEdit2FocusIssues(chapter).map((issue) => ({
       issue,
@@ -384,12 +385,12 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
       return {
         label: labels[index] || "Next move",
         title: issue.title,
-        reasons: getEdit2NextFocusReasons(issue, chapter, signals),
+        reasons: getEdit2NextFocusReasons(issue, chapter, signals, unitLabel),
         meta: `${chapter.label} · ${passLabel} · ${priorityLabel} priority`,
         primaryAction: "review-issue",
         primaryLabel: "Review issue",
         secondaryAction: "open-chapter",
-        secondaryLabel: "Open chapter",
+        secondaryLabel: `Open ${unitLabel.toLowerCase()}`,
         issueId: issue.id,
         chapterKey: chapter.key
       };
@@ -405,7 +406,7 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
           return new Date(b.lastTouchedAt || 0) - new Date(a.lastTouchedAt || 0);
         })
         .slice(0, 3 - recommendations.length)
-        .map((chapter) => buildEdit2ChapterFallbackRecommendation(chapter, "Scan chapter"));
+        .map((chapter) => buildEdit2ChapterFallbackRecommendation(chapter, `Scan ${unitLabel.toLowerCase()}`, unitLabel));
 
       return [...recommendations, ...fallbackChapters];
     }
@@ -423,21 +424,22 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
       .slice(0, 3)
       .map((chapter, index) => buildEdit2ChapterFallbackRecommendation(
         chapter,
-        index === 0 ? "Scan first" : index === 1 ? "Rebuild context" : "Fresh audit"
+        index === 0 ? "Scan first" : index === 1 ? "Rebuild context" : "Fresh audit",
+        unitLabel
       ));
   }
 
   return [
     {
       label: "Best next move",
-      title: "Create the first chapter anchor",
+      title: `Create the first ${unitLabel.toLowerCase()} anchor`,
       reasons: [
-        "Chapter structure needs its first anchor",
+        `${unitLabel} structure needs its first anchor`,
         "Issues need a clear home first"
       ],
-      meta: `${bundle.editing?.passName || "All stages"} · No chapters tracked`,
+      meta: `${bundle.editing?.passName || "All stages"} · No ${getStructureUnitPlural(bundle).toLowerCase()} tracked`,
       primaryAction: "add-chapter",
-      primaryLabel: "Add chapter",
+      primaryLabel: `Add ${unitLabel.toLowerCase()}`,
       secondaryAction: "start-session",
       secondaryLabel: "Start editing session"
     }
@@ -446,12 +448,14 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
 
 function renderEdit2LaunchCard(bundle, manuscript, chapters) {
   const editStats = getEditStats(bundle);
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = unitLabel.toLowerCase();
   const todayKey = new Date().toISOString().slice(0, 10);
   const todayEditSessions = [...getEditSessions(bundle)]
     .filter((session) => dateKey(session.date) === todayKey);
   const currentPassName = bundle.editing?.passName || defaultPassName(bundle.editing?.passStage);
   const lastSession = editStats.lastSession;
-  const lastAnchor = lastSession?.sectionLabel || chapters.find((chapter) => chapter.lastTouchedAt)?.label || "No chapter touched yet";
+  const lastAnchor = lastSession?.sectionLabel || chapters.find((chapter) => chapter.lastTouchedAt)?.label || `No ${unitLower} touched yet`;
 
   return `
     <section class="card">
@@ -459,7 +463,7 @@ function renderEdit2LaunchCard(bundle, manuscript, chapters) {
         <div class="writing-launch-copy">
           <div>
             <h3>Get editing</h3>
-            <p>Jump into the current revision pass, log what you touched, and keep the chapter map honest as you move through the manuscript.</p>
+            <p>Jump into the current revision pass, log what you touched, and keep the ${unitLower} map honest as you move through the manuscript.</p>
           </div>
           <p class="edit2-launch-meta">
             Current pass: ${escapeHtml(currentPassName)}. ${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today, ${formatHours(editStats.minutesToday)} edited today, and ${formatNumber(manuscript.totalOpenIssues)} unresolved issue${manuscript.totalOpenIssues === 1 ? "" : "s"} still on the board.
@@ -536,7 +540,7 @@ function getEdit2SelectedChapter(chapters) {
   return fallback;
 }
 
-function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount) {
+function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, unitLabel = getStructureUnitLabel(currentBundle())) {
   const heatLevel = getEdit2HeatLevel(chapter, chapters);
   const hasUnassignedContents = chapter.label === "Unassigned" && (chapter.issues.length > 0 || chapter.sessions.length > 0);
   const openByPass = Object.fromEntries(
@@ -593,7 +597,7 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount) {
             <span class="edit2-priority-evaluation is-${escapeAttr(priorityEvaluation.tone)}">${escapeHtml(priorityEvaluation.label)}</span>
           </div>
         </article>
-        <div class="edit2-card-controls edit2-chapter-controls" aria-label="Chapter controls">
+        <div class="edit2-card-controls edit2-chapter-controls" aria-label="${escapeAttr(unitLabel)} controls">
           <button class="icon-btn" type="button" data-edit2-move-chapter="up" data-chapter-id="${escapeAttr(chapter.id)}" aria-label="Move ${escapeAttr(chapter.label)} earlier" ${chapterIndex === 0 ? "disabled" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m12 6-5 5" />
@@ -624,6 +628,7 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount) {
 }
 
 function renderEdit2IssueGroups(chapter) {
+  const unitLower = getStructureUnitLower(currentBundle());
   return EDIT2_PASS_ORDER
     .map((passKey) => {
       const passIssues = chapter.issues.filter((issue) => issue.passKey === passKey);
@@ -640,7 +645,7 @@ function renderEdit2IssueGroups(chapter) {
             <div class="edit2-issue-list">
               ${passIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
             </div>
-          ` : `<div class="empty">No matching ${EDIT2_PASS_CONFIG[passKey].label.toLowerCase()} issues for this chapter right now.</div>`}
+          ` : `<div class="empty">No matching ${EDIT2_PASS_CONFIG[passKey].label.toLowerCase()} issues for this ${escapeHtml(unitLower)} right now.</div>`}
         </section>
       `;
     }).join("");
@@ -693,23 +698,22 @@ function renderEdit2IssueItem(issue) {
 
 function renderEdit2BoardSwitcher(activeBoardView, bundle, chapters) {
   const currentIssueCount = bundle.issues.filter((issue) => issue.status !== "Resolved").length;
+  const unitPlural = getStructureUnitPlural(bundle);
   return `
-    <div class="edit2-primary-view-switch" role="tablist" aria-label="Edit board view">
+    <div class="edit2-primary-view-switch" role="group" aria-label="Edit board filter">
       <button
         class="edit2-primary-view-tab ${activeBoardView === "chapters" ? "active" : ""}"
         type="button"
-        role="tab"
-        aria-selected="${activeBoardView === "chapters" ? "true" : "false"}"
+        aria-pressed="${activeBoardView === "chapters" ? "true" : "false"}"
         data-edit2-board-view="chapters"
       >
-        <span class="edit2-primary-view-label">Chapters</span>
+        <span class="edit2-primary-view-label">${escapeHtml(unitPlural)}</span>
         <strong>${formatNumber(chapters.length)} mapped</strong>
       </button>
       <button
         class="edit2-primary-view-tab ${activeBoardView === "issues" ? "active" : ""}"
         type="button"
-        role="tab"
-        aria-selected="${activeBoardView === "issues" ? "true" : "false"}"
+        aria-pressed="${activeBoardView === "issues" ? "true" : "false"}"
         data-edit2-board-view="issues"
       >
         <span class="edit2-primary-view-label">Issues</span>
@@ -720,14 +724,18 @@ function renderEdit2BoardSwitcher(activeBoardView, bundle, chapters) {
 }
 
 function renderEdit2ChapterBoard(chapters) {
+  const unitLabel = getStructureUnitLabel(currentBundle());
   return `
     <div class="edit2-chapter-grid">
-      ${chapters.map((chapter, index) => renderEdit2ChapterCard(chapter, chapters, index, chapters.length)).join("")}
+      ${chapters.map((chapter, index) => renderEdit2ChapterCard(chapter, chapters, index, chapters.length, unitLabel)).join("")}
     </div>
   `;
 }
 
 function renderEdit2IssueBoard(bundle) {
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = unitLabel.toLowerCase();
+  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
   const issues = [...bundle.issues].sort(compareEditIssuesByPriority);
   const visibleIssues = issues.filter((issue) => issue.status !== "Resolved");
   const resolvedIssues = issues.filter((issue) => issue.status === "Resolved");
@@ -792,9 +800,9 @@ function renderEdit2IssueBoard(bundle) {
               ${issueFilterOptions.types.map((type) => `<option value="${escapeAttr(type)}" ${editIssueFilters.type === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
             </select>
           </label>
-          <label>Section
+          <label>${escapeHtml(unitLabel)}
             <select name="section">
-              <option value="all" ${editIssueFilters.section === "all" ? "selected" : ""}>All sections</option>
+              <option value="all" ${editIssueFilters.section === "all" ? "selected" : ""}>All ${escapeHtml(unitPluralLower)}</option>
               ${issueFilterOptions.sections.map((section) => `<option value="${escapeAttr(section)}" ${editIssueFilters.section === section ? "selected" : ""}>${escapeHtml(section)}</option>`).join("")}
             </select>
           </label>
@@ -803,7 +811,7 @@ function renderEdit2IssueBoard(bundle) {
               <option value="priority" ${editIssueFilters.sort === "priority" ? "selected" : ""}>Priority first</option>
               <option value="newest" ${editIssueFilters.sort === "newest" ? "selected" : ""}>Newest first</option>
               <option value="oldest" ${editIssueFilters.sort === "oldest" ? "selected" : ""}>Oldest first</option>
-              <option value="section" ${editIssueFilters.sort === "section" ? "selected" : ""}>By section</option>
+              <option value="section" ${editIssueFilters.sort === "section" ? "selected" : ""}>By ${escapeHtml(unitLower)}</option>
               <option value="type" ${editIssueFilters.sort === "type" ? "selected" : ""}>By type</option>
             </select>
           </label>
@@ -828,6 +836,8 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
   const nextFocusRecommendations = buildEdit2NextFocusRecommendations(bundle, chapters);
   const activeBoardView = edit2OverviewBoardView === "issues" ? "issues" : "chapters";
   const isIssueBoard = activeBoardView === "issues";
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = unitLabel.toLowerCase();
 
   return `
     <section class="stack">
@@ -843,14 +853,14 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
           <div>
             <h3>${isIssueBoard ? "Issue Board" : "Manuscript Structure"}</h3>
             <p>${isIssueBoard
-              ? "Switch into backlog mode without leaving the chapter-first Edit workspace."
-              : "Stay in scan mode here. Each chapter row compresses recall and highlights where the most serious revision pressure is still sitting."}</p>
+              ? `Switch into backlog mode without leaving the ${unitLower}-first Edit workspace.`
+              : `Stay in scan mode here. Each ${unitLower} row compresses recall and highlights where the most serious revision pressure is still sitting.`}</p>
           </div>
           <div class="edit2-board-head-actions">
             ${!isIssueBoard ? `
               <div class="meta-line">
                 <button class="ghost-btn" id="edit2-open-issue-modal-btn" type="button">Add issue</button>
-                <button class="primary-btn" id="edit2-open-chapter-modal-btn" type="button">Add chapter</button>
+                <button class="primary-btn" id="edit2-open-chapter-modal-btn" type="button">Add ${escapeHtml(unitLower)}</button>
               </div>
             ` : ""}
           </div>
@@ -864,13 +874,14 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
 }
 
 function renderEdit2ChapterSummarySection(selectedChapter) {
+  const unitLower = getStructureUnitLower(currentBundle());
   if (edit2SummaryEditMode) {
     return `
       <section class="card edit2-structure-section">
         <div class="section-head">
           <div>
             <h4>Summary</h4>
-            <p>Keep this brief and structural. It should explain why this section exists in the manuscript.</p>
+            <p>Keep this brief and structural. It should explain why this ${escapeHtml(unitLower)} exists in the manuscript.</p>
           </div>
         </div>
         <form class="edit2-summary-form" id="edit2-chapter-summary-form">
@@ -891,25 +902,26 @@ function renderEdit2ChapterSummarySection(selectedChapter) {
       <div class="section-head">
         <div>
           <h4>Summary</h4>
-          <p>Keep this brief and structural. It should explain why this section exists in the manuscript.</p>
+          <p>Keep this brief and structural. It should explain why this ${escapeHtml(unitLower)} exists in the manuscript.</p>
         </div>
         <button class="ghost-btn" id="edit2-edit-summary-btn" type="button">Edit summary</button>
       </div>
       <div class="edit2-summary-display ${selectedChapter.summary ? "" : "is-empty"}">
-        <p>${escapeHtml(selectedChapter.summary || "No summary yet. Add a short purpose note when this section needs clearer context.")}</p>
+        <p>${escapeHtml(selectedChapter.summary || `No summary yet. Add a short purpose note when this ${unitLower} needs clearer context.`)}</p>
       </div>
     </section>
   `;
 }
 
 function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapterCount) {
+  const unitLabel = getStructureUnitLabel(currentBundle());
   return `
     <section class="stack">
       <section class="card hero">
         <div class="hero-panel edit2-hero edit2-detail-hero">
           <div class="section-head edit2-detail-hero-head">
             <div class="edit2-detail-title-row">
-              <button class="route-chip route-chip-icon-only edit2-detail-back-route" data-edit2-back-to-map type="button" aria-label="Back to Edit dashboard">
+              <button class="route-chip route-chip-icon-only edit2-detail-back-route" data-edit2-back-to-map type="button" aria-label="Back to Edit workspace">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="m14.5 6-6 6 6 6" />
                 </svg>
@@ -929,7 +941,7 @@ function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapt
       <section class="card edit2-detail-page-card">
         <div class="section-head">
           <div>
-            <h3>Section Issues</h3>
+            <h3>${escapeHtml(unitLabel)} Issues</h3>
             <p>Review the issues attached to this part of the manuscript across the three editing stages.</p>
           </div>
           <button class="ghost-btn" id="edit2-open-issue-modal-btn" type="button">Add issue</button>
@@ -952,6 +964,9 @@ function renderEdit2Dashboard(bundle) {
 
   const manuscript = buildEdit2Chapters(bundle);
   const chapters = manuscript.chapters;
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = unitLabel.toLowerCase();
+  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
 
   if (!chapters.length) {
     edit2ViewMode = "overview";
@@ -962,13 +977,13 @@ function renderEdit2Dashboard(bundle) {
           <div class="section-head">
             <div>
               <h3>Manuscript Structure</h3>
-              <p>Add chapters first so issues and editing sessions have a clear place to live in the manuscript structure.</p>
+              <p>Add ${escapeHtml(unitPluralLower)} first so issues and editing sessions have a clear place to live in the manuscript structure.</p>
             </div>
             <div class="meta-line">
-              <button class="primary-btn" id="edit2-open-chapter-modal-btn" type="button">Add chapter</button>
+              <button class="primary-btn" id="edit2-open-chapter-modal-btn" type="button">Add ${escapeHtml(unitLower)}</button>
             </div>
           </div>
-          <div class="empty">No chapter or section labels have been tracked yet.</div>
+          <div class="empty">No ${escapeHtml(unitLower)} labels have been tracked yet.</div>
         </section>
       </section>
     `;
@@ -1002,11 +1017,19 @@ function openEdit2ChapterModal() {
   const title = document.getElementById("edit2-chapter-modal-title");
   const copy = document.getElementById("edit2-chapter-modal-copy");
   const submit = document.getElementById("edit2-chapter-submit-btn");
+  const labelText = document.getElementById("edit2-chapter-label-text");
+  const labelInput = document.getElementById("edit2-chapter-label-input");
+  const summaryLabel = document.getElementById("edit2-chapter-summary-label");
   if (!modal || !form || !title || !copy || !submit) return;
+  const unitLabel = getStructureUnitLabel(currentBundle());
+  const unitLower = unitLabel.toLowerCase();
   form.reset();
-  title.textContent = "Add Chapter";
-  copy.textContent = "Create a chapter anchor so issues and editing sessions have a place to live in the manuscript structure.";
-  submit.textContent = "Add chapter";
+  title.textContent = `Add ${unitLabel}`;
+  copy.textContent = `Create a ${unitLower} anchor so issues and editing sessions have a place to live in the manuscript structure.`;
+  if (labelText) labelText.textContent = `${unitLabel} label`;
+  if (labelInput) labelInput.placeholder = `Example: ${unitLabel} 9`;
+  if (summaryLabel) summaryLabel.textContent = `${unitLabel} summary`;
+  submit.textContent = `Add ${unitLower}`;
   modal.classList.remove("hidden");
   form.elements.label?.focus();
 }
@@ -1061,22 +1084,24 @@ function saveEdit2ChapterSummary(chapterId, summary) {
 }
 
 function addEdit2Chapter(label, summary = "") {
+  const unitLabel = getStructureUnitLabel(currentBundle());
+  const unitLower = unitLabel.toLowerCase();
   const normalizedLabel = String(label || "").trim();
   if (!normalizedLabel) {
-    showToast("Name the chapter", "Give the chapter a label before adding it to the manuscript structure.");
+    showToast(`Name the ${unitLower}`, `Give the ${unitLower} a label before adding it to the manuscript structure.`);
     return false;
   }
 
   const nextLabel = normalizeChapterLabel(normalizedLabel);
   if (nextLabel === "Unassigned") {
-    showToast("Choose a real chapter name", "Unassigned is reserved as the fallback bucket for items that lose their chapter.");
+    showToast(`Choose a real ${unitLower} name`, `Unassigned is reserved as the fallback bucket for items that lose their ${unitLower}.`);
     return false;
   }
 
   const existingChapters = currentBundle()?.editing?.chapters || [];
   const duplicateExists = existingChapters.some((chapter) => normalizeChapterLabel(chapter.label).toLowerCase() === nextLabel.toLowerCase());
   if (duplicateExists) {
-    showToast("Chapter already exists", `${nextLabel} is already part of the manuscript structure.`);
+    showToast(`${unitLabel} already exists`, `${nextLabel} is already part of the manuscript structure.`);
     return false;
   }
 
@@ -1091,12 +1116,14 @@ function addEdit2Chapter(label, summary = "") {
   edit2SelectedChapterKey = "";
   edit2ViewMode = "overview";
   persistAndRender();
-  showToast("Chapter added", `${nextLabel} is now part of the manuscript structure.`);
+  showToast(`${unitLabel} added`, `${nextLabel} is now part of the manuscript structure.`);
   return true;
 }
 
 function deleteEdit2Chapter(chapterKey) {
   const bundle = currentBundle();
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = unitLabel.toLowerCase();
   const normalizedKey = String(chapterKey || "").trim().toLowerCase();
   const chapter = buildEdit2Chapters(bundle).chapters.find((entry) => entry.key === normalizedKey);
   if (!chapter) return;
@@ -1135,7 +1162,7 @@ function deleteEdit2Chapter(chapterKey) {
     edit2ViewMode = "overview";
   }
   persistAndRender();
-  showToast("Chapter deleted", linkedIssueCount || linkedSessionCount
+  showToast(`${unitLabel} deleted`, linkedIssueCount || linkedSessionCount
     ? `${chapter.label} was removed, and linked items were moved to ${fallbackLabel}.`
     : `${chapter.label} was removed from the manuscript structure.`
   );
@@ -1290,7 +1317,9 @@ function bindEdit2DashboardEvents(bundle) {
       event.stopPropagation();
       moveEdit2Chapter(button.dataset.chapterId, button.dataset.edit2MoveChapter);
       persistAndRender();
-      showToast("Chapter moved", button.dataset.edit2MoveChapter === "down" ? "That chapter moved later in the manuscript." : "That chapter moved earlier in the manuscript.");
+      const unitLabel = getStructureUnitLabel(currentBundle());
+      const unitLower = unitLabel.toLowerCase();
+      showToast(`${unitLabel} moved`, button.dataset.edit2MoveChapter === "down" ? `That ${unitLower} moved later in the manuscript.` : `That ${unitLower} moved earlier in the manuscript.`);
     };
   });
 
@@ -1311,7 +1340,7 @@ function bindEdit2DashboardEvents(bundle) {
       saveEdit2ChapterSummary(chapter.id, chapterSummaryForm.elements.summary?.value || "");
       edit2SummaryEditMode = false;
       persistAndRender();
-      showToast("Summary saved", `${chapter.label} now has an updated chapter purpose summary.`);
+      showToast("Summary saved", `${chapter.label} now has an updated ${getStructureUnitLower(currentBundle())} purpose summary.`);
     };
   }
 
@@ -1369,7 +1398,7 @@ function bindEdit2DashboardEvents(bundle) {
         issues: projectBundle.issues.filter((issue) => issue.id !== issueId)
       }));
       persistAndRender();
-      showToast("Issue deleted", "That issue was removed from the chapter.");
+      showToast("Issue deleted", `That issue was removed from the ${getStructureUnitLower(currentBundle())}.`);
     };
   });
 

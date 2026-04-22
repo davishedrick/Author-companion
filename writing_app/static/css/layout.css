@@ -255,7 +255,7 @@
 
 .nav-main {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .nav-publish-shell {
@@ -310,6 +310,7 @@
   text-align: left;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   padding: 12px 14px;
   border-radius: 18px;
@@ -1322,8 +1323,8 @@ textarea:focus-visible {
   }
 
   .nav button {
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start;
+    text-align: left;
     padding: 12px 10px;
   }
 

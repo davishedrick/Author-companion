@@ -323,9 +323,6 @@ function render() {
   if (!bundle && !["dashboard", "plot", "edit", "goals", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
-  if (!bundle && activeView === "projects") {
-    activeView = "dashboard";
-  }
   if (bundle && isProjectPublished(bundle) && !["dashboard", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
@@ -429,12 +426,12 @@ function renderNav(bundle) {
   const isWorkspaceContext = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView));
   const isPublishedBundle = isProjectPublished(bundle);
   const availableViews = isWorkspaceContext
-    ? (isPublishedBundle ? ["dashboard"] : ["plot", "dashboard", "edit", "goals"])
+    ? (isPublishedBundle ? ["dashboard"] : ["dashboard", "plot", "edit", "goals"])
     : [];
   const highlightedView = availableViews.includes(activeView) ? activeView : "";
   const publishEligibility = bundle ? getPublishEligibility(bundle) : null;
   const navLabels = {
-    plot: "Plot",
+    plot: "Story",
     dashboard: isPublishedBundle ? "Final Stats" : "Write",
     edit: "Edit",
     goals: "Goals",
@@ -521,12 +518,13 @@ function openPublishProjectModal(bundle = currentBundle()) {
   const progressCurrent = number(bundle.editing?.progressCurrent);
   const progressTotal = number(bundle.editing?.progressTotal);
   const projectTitle = bundle.project.bookTitle || "Untitled project";
+  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
   const progressSummary = progressTotal > 0
-    ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} sections logged in the final pass`
+    ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} ${unitPluralLower} logged in the final pass`
     : "the final pass marked complete";
 
   title.textContent = `Publish ${projectTitle}`;
-  copy.textContent = "This removes the normal workspace tabs and turns the project into a locked, scrollable final-stats page. It stays reversible from the stats page or the projects dashboard.";
+  copy.textContent = "This removes the normal workspace tabs and turns the project into a locked, scrollable final-stats page. It stays reversible from the stats page or the projects view.";
   summary.textContent = eligibility.canPublish
     ? `${projectTitle} is ready to publish with ${formatNumber(number(bundle.project.currentWordCount))} words, ${progressSummary}, and no remaining open issues.`
     : eligibility.reasons.join(" ");
@@ -554,7 +552,7 @@ function openReopenProjectModal(projectId = state.activeProjectId) {
 
   pendingReopenProjectId = projectId;
   title.textContent = `Re-open ${bundle.project.bookTitle || "project"}`;
-  copy.textContent = "This restores the normal workspace tabs so you can move through writing, plot, editing, and goals again. The published badge will disappear until you publish it another time.";
+  copy.textContent = "This restores the normal workspace tabs so you can move through Write, Story, Edit, and Goals again. The published badge will disappear until you publish it another time.";
   summary.textContent = "Re-opening does not delete any writing or editing history. If you also want to draft again, you can reopen the manuscript separately once the workspace returns.";
   input.value = "";
   modal.classList.remove("hidden");
@@ -689,6 +687,13 @@ function getSidebarFooterIcon(action) {
         <rect x="14" y="14" width="6" height="6" rx="1.5" />
       </svg>
     `,
+    history: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 6v5h5" />
+        <path d="M5.8 11a7 7 0 1 0 2-4.9L5 8.9" />
+        <path d="M12 8v4l3 2" />
+      </svg>
+    `,
     settings: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="3" />
@@ -719,6 +724,10 @@ function renderSidebarFooter(bundle) {
           <span class="sidebar-action-icon">${getSidebarFooterIcon("projects")}</span>
           <span class="sidebar-action-label">View all projects</span>
         </button>
+        <button class="sidebar-text-btn" id="view-history-btn" type="button" aria-label="History" title="History">
+          <span class="sidebar-action-icon">${getSidebarFooterIcon("history")}</span>
+          <span class="sidebar-action-label">History</span>
+        </button>
       ` : ""}
       <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button" aria-label="Settings" title="Settings">
         <span class="sidebar-action-icon">${getSidebarFooterIcon("settings")}</span>
@@ -735,6 +744,12 @@ function renderSidebarFooter(bundle) {
   if (bundle) {
     document.getElementById("view-all-projects-btn").addEventListener("click", () => {
       activeView = "projects";
+      saveState();
+      render();
+    });
+    document.getElementById("view-history-btn").addEventListener("click", () => {
+      sessionsReturnView = isProjectWorkspaceView(activeView) ? activeView : preferredWorkspaceView();
+      activeView = "sessions";
       saveState();
       render();
     });
@@ -822,14 +837,18 @@ function bindImportExportModals() {
 }
 
 function renderProjects() {
-  const hasProjects = state.projects.length > 0;
+  const activeProjects = state.projects.filter((project) => !isProjectArchived(project));
+  const archivedProjects = state.projects
+    .filter(isProjectArchived)
+    .sort((a, b) => new Date(b.archivedAt || 0) - new Date(a.archivedAt || 0));
+  const hasActiveProjects = activeProjects.length > 0;
   document.getElementById("view-projects").innerHTML = `
     <section class="stack">
       <section class="card">
         <div class="section-head">
           <div>
             <p class="small-copy">The Author Engine</p>
-            <h2 class="hero-title">Projects Dashboard</h2>
+            <h2 class="hero-title">Projects</h2>
             <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
           </div>
           <div class="meta-line">
@@ -837,14 +856,27 @@ function renderProjects() {
           </div>
         </div>
         <input id="import-project-csv-input" class="hidden" type="file" accept=".csv,text/csv" />
-        ${hasProjects ? `
+        ${hasActiveProjects ? `
           <div class="projects-grid">
-            ${state.projects.map(renderProjectCard).join("")}
+            ${activeProjects.map(renderProjectCard).join("")}
           </div>
         ` : `
-          <div class="empty">No projects yet. Create one to start tracking your manuscript.</div>
+          <div class="empty">No active projects yet. Create one to start tracking your manuscript.</div>
         `}
       </section>
+      ${archivedProjects.length ? `
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <h3>Archived Projects</h3>
+              <p>Archived projects stay recoverable here until you choose to permanently delete them.</p>
+            </div>
+          </div>
+          <div class="projects-grid">
+            ${archivedProjects.map((bundle) => renderProjectCard(bundle, { archived: true })).join("")}
+          </div>
+        </section>
+      ` : ""}
     </section>
   `;
 
@@ -858,7 +890,7 @@ function renderCreateProject() {
         <div class="section-head">
           <div>
             <h2>Create New Project</h2>
-            <p>Start with the essentials, then refine everything later inside the project dashboard.</p>
+            <p>Start with the essentials, then refine everything later inside the project workspace.</p>
           </div>
         </div>
         ${renderCreateProjectForm()}
@@ -874,6 +906,7 @@ function renderCreateProjectForm() {
       <label class="full">Project title
         <input name="bookTitle" placeholder="Example: The Hollow Orchard" required />
       </label>
+      ${renderProjectTypeFields("create")}
       <label>Target word count estimate
         <input type="number" min="0" name="targetWordCount" value="80000" required />
       </label>
@@ -890,19 +923,79 @@ function renderCreateProjectForm() {
   `;
 }
 
-function renderProjectCard(bundle) {
+function renderProjectTypeFields(scope, project = {}) {
+  const projectType = normalizeProjectType(project.manuscriptType);
+  const structureUnitLabel = normalizeStructureUnitLabel(project.structureUnitLabel, projectType);
+  const structureUnitChoice = STRUCTURE_UNIT_OPTIONS.includes(structureUnitLabel) ? structureUnitLabel : "custom";
+  return `
+    <label>Manuscript type
+      <select name="manuscriptType" id="${scope}-manuscript-type">
+        ${PROJECT_TYPE_OPTIONS.map((type) => `<option value="${escapeAttr(type)}" ${projectType === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+      </select>
+    </label>
+    <label>Structure unit
+      <select name="structureUnitChoice" id="${scope}-structure-unit-choice">
+        ${STRUCTURE_UNIT_OPTIONS.map((unit) => `<option value="${escapeAttr(unit)}" ${structureUnitChoice === unit ? "selected" : ""}>${escapeHtml(unit)}</option>`).join("")}
+        <option value="custom" ${structureUnitChoice === "custom" ? "selected" : ""}>Custom</option>
+      </select>
+    </label>
+    <label class="${structureUnitChoice === "custom" ? "" : "hidden"}" id="${scope}-custom-structure-unit-field">Custom structure unit
+      <input name="customStructureUnitLabel" value="${structureUnitChoice === "custom" ? escapeAttr(structureUnitLabel) : ""}" placeholder="Example: Entry" />
+    </label>
+  `;
+}
+
+function syncProjectStructureUnitFields(form, forceDefault = false) {
+  if (!form) return;
+  const typeInput = form.elements.manuscriptType;
+  const unitChoice = form.elements.structureUnitChoice;
+  const customInput = form.elements.customStructureUnitLabel;
+  if (!typeInput || !unitChoice || !customInput) return;
+  const defaultUnit = defaultStructureUnitForProjectType(typeInput.value);
+  if (forceDefault) {
+    unitChoice.value = defaultUnit && STRUCTURE_UNIT_OPTIONS.includes(defaultUnit) ? defaultUnit : "custom";
+    customInput.value = "";
+  }
+  const customField = form.querySelector("[id$='custom-structure-unit-field']");
+  const isCustom = unitChoice.value === "custom";
+  customField?.classList.toggle("hidden", !isCustom);
+  customInput.required = isCustom;
+}
+
+function getProjectFormStructureUnitLabel(form) {
+  const choice = String(form.elements.structureUnitChoice?.value || "");
+  if (choice === "custom") {
+    return normalizeStructureUnitLabel(form.elements.customStructureUnitLabel?.value, form.elements.manuscriptType?.value);
+  }
+  return normalizeStructureUnitLabel(choice, form.elements.manuscriptType?.value);
+}
+
+function bindProjectTypeFields(form) {
+  if (!form || form.dataset.projectTypeBound === "true") return;
+  form.dataset.projectTypeBound = "true";
+  form.elements.manuscriptType?.addEventListener("change", () => syncProjectStructureUnitFields(form, true));
+  form.elements.structureUnitChoice?.addEventListener("change", () => syncProjectStructureUnitFields(form));
+  syncProjectStructureUnitFields(form);
+}
+
+function renderProjectCard(bundle, options = {}) {
+  const { archived = false } = options;
   const stats = getStats(bundle);
   const published = isProjectPublished(bundle);
   return `
-    <div class="card project-card ${published ? "project-card-published" : ""}">
+    <div class="card project-card ${published ? "project-card-published" : ""} ${archived ? "archived-project" : ""}">
       <div>
         <div class="project-card-head">
           <p class="small-copy">Project</p>
+          ${archived ? `<span class="project-card-status">Archived</span>` : ""}
           ${published ? `<span class="project-card-status">Published</span>` : ""}
         </div>
         <h3 class="hero-title">${escapeHtml(bundle.project.bookTitle)}</h3>
+        ${archived ? `<p class="project-card-status-copy">Archived ${escapeHtml(formatDate(bundle.archivedAt || new Date().toISOString()))}</p>` : ""}
         ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
         <div class="meta-line">
+          <span class="pill">${escapeHtml(bundle.project.manuscriptType || "Novel")}</span>
+          <span class="pill">${escapeHtml(getStructureUnitPlural(bundle))}</span>
           <span class="pill">${formatNumber(bundle.project.currentWordCount)} / ${formatNumber(bundle.project.targetWordCount)} words</span>
           <span class="pill">${bundle.project.deadline ? `Due ${formatDate(bundle.project.deadline)}` : "No deadline"}</span>
         </div>
@@ -927,11 +1020,16 @@ function renderProjectCard(bundle) {
         </div>
       </div>
       <div class="meta-line">
-        <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">${published ? "View final stats" : "Open project"}</button>
-        ${published
-          ? `<button class="ghost-btn" data-action="reopen-project" data-id="${bundle.id}">Re-open</button>`
-          : `<button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>`}
-        <button class="inline-btn" data-action="delete-project" data-id="${bundle.id}">Delete</button>
+        ${archived ? `
+          <button class="ghost-btn" data-action="restore-project" data-id="${bundle.id}">Restore</button>
+          <button class="inline-btn" data-action="delete-project-permanently" data-id="${bundle.id}">Delete permanently</button>
+        ` : `
+          <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">${published ? "View final stats" : "Open project"}</button>
+          ${published
+            ? `<button class="ghost-btn" data-action="reopen-project" data-id="${bundle.id}">Re-open</button>`
+            : `<button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>`}
+          <button class="inline-btn" data-action="archive-project" data-id="${bundle.id}">Archive</button>
+        `}
       </div>
     </div>
   `;
@@ -951,10 +1049,10 @@ function renderSessions(bundle) {
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>All Sessions</h2>
-            <p>View and delete every session logged for this project.</p>
+            <h2>History</h2>
+            <p>View and delete every writing or editing session logged for this project.</p>
           </div>
-          <button class="route-chip" id="back-to-dashboard-btn" type="button" aria-label="Back to dashboard">
+          <button class="route-chip" id="back-to-dashboard-btn" type="button" aria-label="Back to workspace">
             <span class="route-chip-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24">
                 <path d="m14.5 6-6 6 6 6" />
@@ -1006,6 +1104,7 @@ function renderEditProject(bundle) {
           <label class="full">Book title
             <input name="bookTitle" value="${escapeAttr(bundle.project.bookTitle)}" placeholder="Book title" />
           </label>
+          ${renderProjectTypeFields("edit", bundle.project)}
           <label>Target word count
             <input type="number" min="0" name="targetWordCount" value="${escapeAttr(bundle.project.targetWordCount)}" />
           </label>
@@ -1034,6 +1133,7 @@ function renderEditProject(bundle) {
 function bindCreateProjectEvents() {
   const createForm = document.getElementById("create-project-form");
   if (!createForm) return;
+  bindProjectTypeFields(createForm);
   createForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = new FormData(event.target);
@@ -1041,7 +1141,9 @@ function bindCreateProjectEvents() {
       formData.get("bookTitle").trim(),
       formData.get("targetWordCount"),
       formData.get("currentWordCount"),
-      formData.get("deadline")
+      formData.get("deadline"),
+      formData.get("manuscriptType"),
+      getProjectFormStructureUnitLabel(createForm)
     );
     state.projects.unshift(bundle);
     state.activeProjectId = bundle.id;
@@ -1092,15 +1194,46 @@ function bindProjectEvents() {
     });
   });
 
-  document.querySelectorAll("[data-action='delete-project']").forEach((button) => {
+  document.querySelectorAll("[data-action='archive-project']").forEach((button) => {
     button.addEventListener("click", () => {
       const projectId = button.dataset.id;
-      state.projects = state.projects.filter((project) => project.id !== projectId);
+      const bundle = getBundleById(projectId);
+      state.projects = state.projects.map((project) => project.id === projectId
+        ? normalizeProjectBundle({ ...project, status: "archived", archivedAt: new Date().toISOString() })
+        : project
+      );
       if (state.activeProjectId === projectId) {
-        state.activeProjectId = state.projects[0]?.id || null;
-        activeView = state.activeProjectId ? getWorkspaceLandingView(currentBundle()) : DEFAULT_VIEW;
+        state.activeProjectId = state.projects.find((project) => !isProjectArchived(project))?.id || null;
+        activeView = state.activeProjectId ? getWorkspaceLandingView(currentBundle()) : "projects";
       }
       persistAndRender();
+      showToast("Project archived", `${bundle?.project?.bookTitle || "This project"} moved to Archived Projects.`);
+    });
+  });
+
+  document.querySelectorAll("[data-action='restore-project']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const projectId = button.dataset.id;
+      const bundle = getBundleById(projectId);
+      state.projects = state.projects.map((project) => project.id === projectId
+        ? normalizeProjectBundle({ ...project, status: "active", archivedAt: "" })
+        : project
+      );
+      persistAndRender();
+      showToast("Project restored", `${bundle?.project?.bookTitle || "This project"} is active again.`);
+    });
+  });
+
+  document.querySelectorAll("[data-action='delete-project-permanently']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const projectId = button.dataset.id;
+      const bundle = getBundleById(projectId);
+      if (!isProjectArchived(bundle)) return;
+      const confirmed = window.confirm(`Permanently delete "${bundle.project.bookTitle}"? This cannot be undone.`);
+      if (!confirmed) return;
+      state.projects = state.projects.filter((project) => project.id !== projectId);
+      persistAndRender();
+      showToast("Project deleted", `${bundle.project.bookTitle || "This project"} was permanently deleted.`);
     });
   });
 }
@@ -1117,6 +1250,7 @@ function bindEditProjectEvents() {
     });
   }
   if (!form) return;
+  bindProjectTypeFields(form);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const formData = new FormData(form);
@@ -1125,6 +1259,8 @@ function bindEditProjectEvents() {
       project: {
         ...projectBundle.project,
         bookTitle: String(formData.get("bookTitle") || "").trim() || projectBundle.project.bookTitle,
+        manuscriptType: normalizeProjectType(formData.get("manuscriptType")),
+        structureUnitLabel: getProjectFormStructureUnitLabel(form),
         targetWordCount: number(formData.get("targetWordCount")),
         currentWordCount: number(formData.get("currentWordCount")),
         deadline: String(formData.get("deadline") || ""),

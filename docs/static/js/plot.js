@@ -240,7 +240,7 @@ function plotEntriesForSection(bundle, sectionId) {
 function renderPlotDashboard(bundle) {
   const view = document.getElementById("view-plot");
   if (!bundle) {
-    view.innerHTML = renderWorkspaceEmptyState("Plot");
+    view.innerHTML = renderWorkspaceEmptyState("Story");
     bindWorkspaceEmptyActions();
     return;
   }
@@ -254,14 +254,14 @@ function renderPlotDashboard(bundle) {
       <section class="plot-workspace">
         <div class="plot-section-nav-wrap">
           <div hidden>
-            <h3>Story Areas</h3>
+            <h3>Story Categories</h3>
           </div>
-          <div class="plot-section-nav" role="tablist" aria-label="Story areas">
+          <div class="plot-section-nav" role="group" aria-label="Story categories">
             ${PLOT_SECTION_IDS.map((sectionId) => renderPlotSectionTab(bundle, sectionId, activeSectionId)).join("")}
           </div>
         </div>
 
-        <section class="card plot-section-detail" id="plot-section-panel" role="tabpanel" aria-labelledby="plot-tab-${activeSectionId}">
+        <section class="card plot-section-detail" id="plot-section-panel" aria-labelledby="plot-tab-${activeSectionId}">
           <div class="section-head">
             <div>
               <p class="small-copy">${activeSection.kicker}</p>
@@ -297,8 +297,7 @@ function renderPlotSectionTab(bundle, sectionId, activeSectionId) {
       id="plot-tab-${sectionId}"
       data-plot-section="${sectionId}"
       type="button"
-      role="tab"
-      aria-selected="${sectionId === activeSectionId ? "true" : "false"}"
+      aria-pressed="${sectionId === activeSectionId ? "true" : "false"}"
       aria-controls="plot-section-panel"
     >
       <span class="plot-section-count">${formatNumber(count)}</span>
@@ -492,9 +491,9 @@ function openPlotEntryModal(sectionId = currentPlotSectionId(currentBundle()), e
     ? `Edit ${config.singular}`
     : `Add ${config.singular}`;
   document.getElementById("plot-entry-modal-copy").textContent = existingEntry
-    ? `Refine this ${config.singular} so your plot notes stay sharp and searchable.`
+    ? `Refine this ${config.singular} so your story notes stay sharp and searchable.`
     : `Capture a ${config.singular} now so your story logic stays clear as the manuscript expands.`;
-  document.getElementById("plot-entry-section-copy").textContent = `${config.label} stay visible from the Plot dashboard at any time.`;
+  document.getElementById("plot-entry-section-copy").textContent = `${config.label} stay visible from the Story workspace at any time.`;
   document.getElementById("plot-entry-title-label").textContent = config.fields.title.label;
   document.getElementById("plot-entry-summary-label").textContent = config.fields.summary.label;
   document.getElementById("plot-entry-anchor-label").textContent = config.fields.anchor.label;

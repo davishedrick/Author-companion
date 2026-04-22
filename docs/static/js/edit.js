@@ -193,11 +193,12 @@ function scoreEditIssueRecommendation(issue, signals, lens = "urgent") {
   return basePriorityScore + sectionClusterScore + ageScore + (signals.sameAsLastSession ? 8 : 0);
 }
 
-function describeEditRecommendationReason(issue, signals, lens = "urgent") {
+function describeEditRecommendationReason(issue, signals, lens = "urgent", unitLabel = "section") {
+  const unitLower = unitLabel.toLowerCase();
   const reasonParts = [`${issue.priority} priority in the current pass`];
 
   if (signals.unresolvedInSection >= 2) {
-    reasonParts.push(`${formatNumber(signals.unresolvedInSection)} unresolved issues sit in ${issue.sectionLabel || "this section"}`);
+    reasonParts.push(`${formatNumber(signals.unresolvedInSection)} unresolved issues sit in ${issue.sectionLabel || `this ${unitLower}`}`);
   } else if (signals.unresolvedInSection === 1 && issue.sectionLabel) {
     reasonParts.push(`${issue.sectionLabel} is down to a single unresolved issue`);
   }
@@ -206,7 +207,7 @@ function describeEditRecommendationReason(issue, signals, lens = "urgent") {
     if (signals.sameAsLastSession && issue.sectionLabel) {
       reasonParts.push(`you edited ${issue.sectionLabel} most recently, so context should still be warm`);
     } else if (signals.lastTouchedLabel) {
-      reasonParts.push(`this section was touched recently on ${signals.lastTouchedLabel}`);
+      reasonParts.push(`this ${unitLower} was touched recently on ${signals.lastTouchedLabel}`);
     }
   } else if (lens === "cleanup") {
     if (signals.ageDays >= 1) {
@@ -219,7 +220,8 @@ function describeEditRecommendationReason(issue, signals, lens = "urgent") {
   return `${reasonParts.join(". ")}.`;
 }
 
-function buildEditIssueRecommendation(issue, signals, lens = "urgent") {
+function buildEditIssueRecommendation(issue, signals, lens = "urgent", unitLabel = "Section") {
+  const unitLower = unitLabel.toLowerCase();
   const labels = {
     urgent: "Most urgent",
     momentum: "Best momentum move",
@@ -245,16 +247,16 @@ function buildEditIssueRecommendation(issue, signals, lens = "urgent") {
     label: labels[lens] || labels.primary,
     title: issue.title,
     description: descriptions[lens] || descriptions.primary,
-    reason: describeEditRecommendationReason(issue, signals, lens),
+    reason: describeEditRecommendationReason(issue, signals, lens, unitLower),
     badges: [
       issue.priority,
       issue.type,
-      issue.sectionLabel || "No section tagged"
+      issue.sectionLabel || `No ${unitLower} tagged`
     ],
     primaryAction: "review-issue",
     primaryLabel: "Review issue",
     secondaryAction: issue.sectionLabel ? "filter-section" : "start-session",
-    secondaryLabel: issue.sectionLabel ? "Show section issues" : "Start editing session",
+    secondaryLabel: issue.sectionLabel ? `Show ${unitLower} issues` : "Start editing session",
     issueId: issue.id,
     filterSection: issue.sectionLabel || ""
   };
@@ -262,16 +264,18 @@ function buildEditIssueRecommendation(issue, signals, lens = "urgent") {
 
 function buildFallbackEditRecommendation(bundle, editStats) {
   const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+  const unitLower = getStructureUnitLower(bundle);
+  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
   const sectionsRemaining = Math.max(number(bundle.editing.progressTotal) - number(bundle.editing.progressCurrent), 0);
 
   if (sectionsRemaining > 0) {
     return {
       label: "Keep the pass moving",
       title: "Start a fresh pass session",
-      description: `${formatNumber(sectionsRemaining)} section${sectionsRemaining === 1 ? "" : "s"} remain in this pass. A fresh timed session is the fastest way to keep momentum from drifting.`,
-      reason: `${formatNumber(bundle.editing.progressCurrent)} of ${formatNumber(bundle.editing.progressTotal)} sections are marked complete, and there are no current issues steering the next move right now.`,
+      description: `${formatNumber(sectionsRemaining)} ${sectionsRemaining === 1 ? unitLower : unitPluralLower} remain in this pass. A fresh timed session is the fastest way to keep momentum from drifting.`,
+      reason: `${formatNumber(bundle.editing.progressCurrent)} of ${formatNumber(bundle.editing.progressTotal)} ${unitPluralLower} are marked complete, and there are no current issues steering the next move right now.`,
       badges: [
-        `${formatNumber(bundle.editing.progressCurrent)} / ${formatNumber(bundle.editing.progressTotal)} sections reviewed`,
+        `${formatNumber(bundle.editing.progressCurrent)} / ${formatNumber(bundle.editing.progressTotal)} ${unitPluralLower} reviewed`,
         `${formatHours(editStats.currentPassMinutes)} in this pass`,
         bundle.editing.passStatus || "In progress"
       ],
@@ -286,7 +290,7 @@ function buildFallbackEditRecommendation(bundle, editStats) {
     return {
       label: "Best next move",
       title: `Pick up from ${editStats.lastSession.sectionLabel}`,
-      description: `That was the most recently edited section. Use it as the handoff point for your next cleanup or polish pass.`,
+      description: `That was the most recently edited ${unitLower}. Use it as the handoff point for your next cleanup or polish pass.`,
       reason: `There are no open issues in the current pass, so the recommendation falls back to your most recent editing context from ${formatDate(editStats.lastSession.date)}.`,
       badges: [
         formatDate(editStats.lastSession.date),
@@ -303,7 +307,7 @@ function buildFallbackEditRecommendation(bundle, editStats) {
   return {
     label: "Best next move",
     title: "Create the first revision anchor",
-    description: "Start by logging an issue or a timed editing session so the dashboard can begin steering what needs attention next.",
+    description: "Start by logging an issue or a timed editing session so the Edit workspace can begin steering what needs attention next.",
     reason: `Priority-led recommendations need at least one current-pass issue. Until then, the safest suggestion is to start logging what you find.`,
     badges: [
       currentPassName,
@@ -342,19 +346,20 @@ function deriveEditFocusRecommendations(bundle, unresolvedIssues, hotspots, edit
 
   const usedIssueIds = new Set();
   const recommendations = [];
+  const unitLabel = getStructureUnitLabel(bundle);
 
   orderedCandidates.forEach(({ lens, issues }) => {
     const nextIssue = issues.find((issue) => !usedIssueIds.has(issue.id));
     if (!nextIssue) return;
     usedIssueIds.add(nextIssue.id);
-    recommendations.push(buildEditIssueRecommendation(nextIssue, signalsById.get(nextIssue.id), lens));
+    recommendations.push(buildEditIssueRecommendation(nextIssue, signalsById.get(nextIssue.id), lens, unitLabel));
   });
 
   if (currentPassIssues.length > 2 && recommendations.length < 3) {
     rankIssues("urgent").forEach((issue) => {
       if (recommendations.length >= 3 || usedIssueIds.has(issue.id)) return;
       usedIssueIds.add(issue.id);
-      recommendations.push(buildEditIssueRecommendation(issue, signalsById.get(issue.id), "urgent"));
+      recommendations.push(buildEditIssueRecommendation(issue, signalsById.get(issue.id), "urgent", unitLabel));
     });
   }
 
@@ -697,7 +702,7 @@ function bindEditDashboardEvents(bundle) {
 
       closeEditSessionModal();
       persistAndRender();
-      showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", "Your revision work is now part of the dashboard.");
+      showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", "Your revision work is now part of the Edit workspace.");
     };
   }
 
@@ -864,7 +869,13 @@ function bindEditDashboardEvents(bundle) {
 function openEditPassModal() {
   const modal = document.getElementById("edit-pass-modal");
   const form = document.getElementById("edit-pass-form");
-  const editing = currentBundle()?.editing || createDefaultEditingState();
+  const bundle = currentBundle();
+  const editing = bundle?.editing || createDefaultEditingState();
+  const unitPlural = getStructureUnitPlural(bundle).toLowerCase();
+  const currentLabel = document.getElementById("edit-pass-progress-current-label");
+  const totalLabel = document.getElementById("edit-pass-progress-total-label");
+  if (currentLabel) currentLabel.textContent = `${unitPlural.charAt(0).toUpperCase()}${unitPlural.slice(1)} reviewed`;
+  if (totalLabel) totalLabel.textContent = `Total ${unitPlural}`;
   form.elements.passStage.value = editing.passStage || "Developmental";
   form.elements.passStatus.value = editing.passStatus || "Not started";
   form.elements.passName.value = editing.passName || defaultPassName(editing.passStage);
@@ -887,11 +898,16 @@ function openEditSessionModal(sessionId = null) {
   const title = document.getElementById("edit-session-title");
   const copy = document.getElementById("edit-session-copy");
   const submit = document.getElementById("edit-session-submit-btn");
+  const sectionLabel = document.getElementById("edit-session-section-label");
+  const sectionInput = document.getElementById("edit-session-section-input");
   const existingSession = sessionId ? bundle?.sessions.find((item) => item.id === sessionId) : null;
+  const unitLabel = getStructureUnitLabel(bundle);
 
   editingEditSessionId = sessionId;
   form.reset();
   passCopy.textContent = `Active pass: ${bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage)}`;
+  if (sectionLabel) sectionLabel.textContent = `${unitLabel} worked on`;
+  if (sectionInput) sectionInput.placeholder = `Example: ${unitLabel} 12`;
 
   if (existingSession) {
     title.textContent = "Edit Editing Session";
@@ -1132,7 +1148,10 @@ function openIssueModal(issueId = null) {
   const title = document.getElementById("issue-modal-title");
   const copy = document.getElementById("issue-modal-copy");
   const submit = document.getElementById("issue-submit-btn");
+  const sectionLabel = document.getElementById("issue-section-label");
   const bundle = currentBundle();
+  const unitLabel = getStructureUnitLabel(bundle);
+  const unitLower = getStructureUnitLower(bundle);
   const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
   const currentChapterLabel = getCurrentEdit2ChapterLabel(bundle);
   const issue = issueId ? bundle?.issues.find((item) => item.id === issueId) : null;
@@ -1142,16 +1161,18 @@ function openIssueModal(issueId = null) {
   form.reset();
   form.dataset.mode = issue ? "edit" : "create";
   form.dataset.priorityTouched = "false";
+  if (sectionLabel) sectionLabel.textContent = unitLabel;
+  if (form.elements.title) form.elements.title.placeholder = `Example: ${unitLabel} 8 stalls after the reveal`;
 
   if (!issue && !sectionLabels.length) {
-    showToast("Create a chapter first", "Add a chapter to the manuscript structure before logging an issue.");
+    showToast(`Create a ${unitLower} first`, `Add a ${unitLower} to the manuscript structure before logging an issue.`);
     openEdit2ChapterModal?.();
     return;
   }
 
   passCopy.textContent = currentChapterLabel
     ? `This issue will start in ${currentChapterLabel}. Choose the pass it belongs to, then keep the note lightweight enough to capture while reading.`
-    : `Choose the pass this issue belongs to and place it inside one of your existing chapters so the manuscript map can surface it correctly.`;
+    : `Choose the pass this issue belongs to and place it inside one of your existing ${getStructureUnitPlural(bundle).toLowerCase()} so the manuscript map can surface it correctly.`;
   if (sectionSelect) {
     sectionSelect.innerHTML = sectionLabels
       .map((sectionLabel) => `<option value="${escapeAttr(sectionLabel)}">${escapeHtml(sectionLabel)}</option>`)
@@ -1161,7 +1182,7 @@ function openIssueModal(issueId = null) {
   if (issue) {
     const issuePassKey = normalizeEdit2PassKey(issue.passName, bundle?.editing?.passStage);
     title.textContent = "Edit Issue";
-    copy.textContent = "Update the issue so it stays easy to place in the right chapter and pass.";
+    copy.textContent = `Update the issue so it stays easy to place in the right ${unitLower} and pass.`;
     form.elements.title.value = issue.title || "";
     form.elements.issuePassKey.value = issuePassKey;
     form.elements.type.value = issue.type || "General";
@@ -1179,7 +1200,7 @@ function openIssueModal(issueId = null) {
   } else {
     const issuePassKey = normalizeEdit2PassKey(currentPassName, bundle?.editing?.passStage);
     title.textContent = "Add Open Issue";
-    copy.textContent = "Capture a problem now, assign it to the right pass, and drop it into the right chapter before you move on.";
+    copy.textContent = `Capture a problem now, assign it to the right pass, and drop it into the right ${unitLower} before you move on.`;
     form.elements.issuePassKey.value = issuePassKey;
     form.elements.type.value = "Pacing";
     form.elements.sectionLabel.value = sectionLabels.includes(currentChapterLabel) ? currentChapterLabel : (sectionLabels[0] || "");

@@ -124,7 +124,7 @@
       <div class="section-head manuscript-complete-modal-head">
         <div>
           <h3 id="manuscript-complete-modal-title">Mark manuscript complete</h3>
-          <p id="manuscript-complete-modal-copy">Switch the write dashboard into a final stats view once this manuscript is genuinely done.</p>
+          <p id="manuscript-complete-modal-copy">Switch the Write workspace into a final stats view once this manuscript is genuinely done.</p>
         </div>
         <button class="ghost-btn" id="close-manuscript-complete-modal-btn" type="button">Close</button>
       </div>
@@ -218,7 +218,7 @@
       <div class="section-head">
         <div>
           <h3 id="goal-modal-title">Create Goal</h3>
-          <p id="goal-modal-copy">Set a simple daily target you can review quickly from the goals dashboard.</p>
+          <p id="goal-modal-copy">Set a simple daily target you can review quickly from the Goals workspace.</p>
         </div>
         <button class="ghost-btn" id="close-goal-modal-btn" type="button">Close</button>
       </div>
@@ -337,7 +337,7 @@
       <div class="section-head">
         <div>
           <h3 id="edit-pass-title">Current Pass</h3>
-          <p id="edit-pass-copy">Define the editing pass this dashboard should revolve around.</p>
+          <p id="edit-pass-copy">Define the editing pass this workspace should revolve around.</p>
         </div>
         <button class="ghost-btn" id="close-edit-pass-btn" type="button">Close</button>
       </div>
@@ -364,10 +364,10 @@
         <label class="full">Pass objective
           <textarea name="passObjective" placeholder="What is this pass trying to improve?"></textarea>
         </label>
-        <label>Sections reviewed
+        <label><span id="edit-pass-progress-current-label">Structure units reviewed</span>
           <input type="number" min="0" name="progressCurrent" value="0" />
         </label>
-        <label>Total sections
+        <label><span id="edit-pass-progress-total-label">Total structure units</span>
           <input type="number" min="0" name="progressTotal" value="0" />
         </label>
         <div class="full">
@@ -452,8 +452,8 @@
         <label>Duration (minutes)
           <input type="number" min="1" name="durationMinutes" value="45" required />
         </label>
-        <label>Section worked on
-          <input name="sectionLabel" placeholder="Example: Chapter 12" />
+        <label><span id="edit-session-section-label">Structure unit worked on</span>
+          <input id="edit-session-section-input" name="sectionLabel" placeholder="Example: Scene 12" />
         </label>
         <label>Words edited
           <input type="number" min="0" name="wordsEdited" value="0" required />
@@ -479,7 +479,7 @@
       <form id="issue-form" class="form-grid">
         <p class="small-copy full" id="issue-pass-copy"></p>
         <label class="full">Problem title
-          <input name="title" placeholder="Example: Chapter 8 pacing stalls after the reveal" required />
+          <input name="title" placeholder="Example: This scene stalls after the reveal" required />
         </label>
         <label>Pass
           <select name="issuePassKey">
@@ -488,7 +488,7 @@
             <option value="polish">Polish</option>
           </select>
         </label>
-        <label>Chapter
+        <label><span id="issue-section-label">Structure unit</span>
           <select name="sectionLabel" id="issue-section-select" required></select>
         </label>
         <label>Issue type
@@ -535,20 +535,20 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="edit2-chapter-modal-title">Add Chapter</h3>
-          <p id="edit2-chapter-modal-copy">Create a chapter anchor so issues and editing sessions have a place to live in the manuscript structure.</p>
+          <h3 id="edit2-chapter-modal-title">Add Structure Unit</h3>
+          <p id="edit2-chapter-modal-copy">Create a structure anchor so issues and editing sessions have a place to live in the manuscript.</p>
         </div>
         <button class="ghost-btn" id="close-edit2-chapter-modal-btn" type="button">Close</button>
       </div>
       <form id="edit2-chapter-form" class="form-grid">
-        <label>Chapter label
-          <input id="edit2-chapter-label-input" name="label" placeholder="Example: Chapter 9" required />
+        <label><span id="edit2-chapter-label-text">Structure label</span>
+          <input id="edit2-chapter-label-input" name="label" placeholder="Example: Scene 9" required />
         </label>
-        <label class="full">Chapter summary
-          <textarea name="summary" maxlength="280" placeholder="Optional one-line purpose for why this chapter belongs in the manuscript"></textarea>
+        <label class="full"><span id="edit2-chapter-summary-label">Structure summary</span>
+          <textarea name="summary" maxlength="280" placeholder="Optional one-line purpose for why this part belongs in the manuscript"></textarea>
         </label>
         <div class="full">
-          <button class="primary-btn" id="edit2-chapter-submit-btn" type="submit">Add chapter</button>
+          <button class="primary-btn" id="edit2-chapter-submit-btn" type="submit">Add structure</button>
         </div>
       </form>
     </div>
@@ -557,8 +557,8 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="plot-entry-modal-title">Add Plot Entry</h3>
-          <p id="plot-entry-modal-copy">Capture story references so your plot dashboard stays useful as the manuscript grows.</p>
+          <h3 id="plot-entry-modal-title">Add Story Entry</h3>
+          <p id="plot-entry-modal-copy">Capture story references so your Story workspace stays useful as the manuscript grows.</p>
         </div>
         <button class="ghost-btn" id="close-plot-entry-modal-btn" type="button">Close</button>
       </div>

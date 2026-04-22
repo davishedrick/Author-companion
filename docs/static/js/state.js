@@ -12,7 +12,9 @@ const GOAL_DAY_LABELS = {
   saturday: "Sat",
   sunday: "Sun"
 };
-const PRIMARY_WORKSPACE_VIEWS = ["plot", "dashboard", "edit"];
+const PROJECT_TYPE_OPTIONS = ["Novel", "Short story", "Screenplay", "Essay", "Other"];
+const STRUCTURE_UNIT_OPTIONS = ["Chapter", "Scene", "Section"];
+const PRIMARY_WORKSPACE_VIEWS = ["dashboard", "plot", "edit"];
 const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals"];
 const views = ["projects", "create-project", "dashboard", "plot", "edit", "goals", "sessions", "edit-project"];
 const requiredImportColumns = [
@@ -52,6 +54,10 @@ const exportColumns = [
   "row_type",
   "project_id",
   "project_title",
+  "project_manuscript_type",
+  "project_structure_unit_label",
+  "project_status",
+  "project_archived_at",
   "project_target_word_count",
   "project_current_word_count",
   "project_deadline",
@@ -135,6 +141,44 @@ function normalizeLegacyEditPassName(passName = "", activeStage = "Developmental
     return defaultPassName(activeStage);
   }
   return normalizedPassName;
+}
+
+function normalizeProjectType(type = "Novel") {
+  const normalizedType = String(type || "").trim();
+  return PROJECT_TYPE_OPTIONS.includes(normalizedType) ? normalizedType : "Novel";
+}
+
+function defaultStructureUnitForProjectType(type = "Novel") {
+  const projectType = normalizeProjectType(type);
+  if (projectType === "Novel") return "Chapter";
+  if (projectType === "Short story" || projectType === "Screenplay") return "Scene";
+  if (projectType === "Essay") return "Section";
+  return "";
+}
+
+function normalizeStructureUnitLabel(label = "", projectType = "Novel") {
+  const normalizedLabel = String(label || "").trim();
+  return normalizedLabel || defaultStructureUnitForProjectType(projectType) || "Section";
+}
+
+function getStructureUnitLabel(bundleOrProject = currentBundle()) {
+  const project = bundleOrProject?.project || bundleOrProject || {};
+  return normalizeStructureUnitLabel(project.structureUnitLabel, project.manuscriptType);
+}
+
+function getStructureUnitLower(bundleOrProject = currentBundle()) {
+  return getStructureUnitLabel(bundleOrProject).toLowerCase();
+}
+
+function pluralizeStructureUnit(label = "Section") {
+  const normalizedLabel = normalizeStructureUnitLabel(label);
+  if (/[^aeiou]y$/i.test(normalizedLabel)) return `${normalizedLabel.slice(0, -1)}ies`;
+  if (/(s|x|z|ch|sh)$/i.test(normalizedLabel)) return `${normalizedLabel}es`;
+  return `${normalizedLabel}s`;
+}
+
+function getStructureUnitPlural(bundleOrProject = currentBundle()) {
+  return pluralizeStructureUnit(getStructureUnitLabel(bundleOrProject));
 }
 
 function normalizeChapterLabel(label = "") {
@@ -267,6 +311,8 @@ function createId() {
 const defaultProjectTemplate = {
   project: {
     bookTitle: "",
+    manuscriptType: "Novel",
+    structureUnitLabel: "Chapter",
     targetWordCount: 80000,
     currentWordCount: 0,
     deadline: "",
@@ -319,12 +365,18 @@ function isPrimaryWorkspaceView(view) {
   return PRIMARY_WORKSPACE_VIEWS.includes(view);
 }
 
-function createProjectBundle(title, targetWordCount, currentWordCount, deadline) {
+function createProjectBundle(title, targetWordCount, currentWordCount, deadline, projectType = "Novel", unitLabel = "") {
+  const manuscriptType = normalizeProjectType(projectType);
+  const structureUnitLabel = normalizeStructureUnitLabel(unitLabel, manuscriptType);
   return {
     id: createId(),
+    status: "active",
+    archivedAt: "",
     project: {
       ...cloneValue(defaultProjectTemplate.project),
       bookTitle: title || "Untitled Manuscript",
+      manuscriptType,
+      structureUnitLabel,
       targetWordCount: number(targetWordCount) || 80000,
       currentWordCount: number(currentWordCount),
       deadline: deadline || "",
@@ -355,14 +407,15 @@ function normalizeLoadedState(snapshot) {
 
   if (Array.isArray(snapshot.projects)) {
     const normalizedProjects = snapshot.projects.map(normalizeProjectBundle);
-    const hasStoredActiveId = normalizedProjects.some((project) => project.id === snapshot.activeProjectId);
+    const activeProjects = normalizedProjects.filter((project) => !isProjectArchived(project));
+    const hasStoredActiveId = activeProjects.some((project) => project.id === snapshot.activeProjectId);
     return {
       ...cloneValue(defaultState),
       ...snapshot,
       projects: normalizedProjects,
       activeProjectId: hasStoredActiveId
         ? snapshot.activeProjectId
-        : normalizedProjects[0]?.id || null,
+        : activeProjects[0]?.id || null,
       themePreference: normalizeThemePreference(snapshot.themePreference),
       sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed)
     };
@@ -396,6 +449,7 @@ function normalizeStoredActiveView(snapshot, normalizedState = normalizeLoadedSt
   const storedView = views.includes(rawView) ? rawView : DEFAULT_VIEW;
   const hasProjects = normalizedState.projects.length > 0;
   if (!hasProjects) return DEFAULT_VIEW;
+  if (["projects", "create-project"].includes(storedView)) return storedView;
   return isProjectWorkspaceView(storedView) ? storedView : DEFAULT_VIEW;
 }
 
@@ -440,9 +494,18 @@ function normalizeProjectBundle(bundle) {
   const normalizedSessions = Array.isArray(bundle.sessions) ? bundle.sessions.map(normalizeSession) : [];
   const normalizedIssues = Array.isArray(bundle.issues) ? bundle.issues.map(normalizeIssue) : [];
   const normalizedEditing = normalizeEditingState(bundle.editing, normalizedIssues, normalizedSessions);
+  const mergedProject = { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) };
+  const manuscriptType = normalizeProjectType(mergedProject.manuscriptType || mergedProject.projectType);
+  const status = bundle.status === "archived" || bundle.project?.status === "archived" ? "archived" : "active";
   return {
     id: bundle.id || createId(),
-    project: { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) },
+    status,
+    archivedAt: status === "archived" ? (bundle.archivedAt || bundle.project?.archivedAt || new Date().toISOString()) : "",
+    project: {
+      ...mergedProject,
+      manuscriptType,
+      structureUnitLabel: normalizeStructureUnitLabel(mergedProject.structureUnitLabel, manuscriptType)
+    },
     completion: normalizeCompletionState(bundle.completion),
     publication: normalizePublicationState(bundle.publication),
     editing: normalizedEditing,
@@ -452,6 +515,10 @@ function normalizeProjectBundle(bundle) {
     issues: normalizedIssues,
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
   };
+}
+
+function isProjectArchived(bundle) {
+  return bundle?.status === "archived";
 }
 
 function normalizeEditingState(editing, issues = [], sessions = []) {
@@ -951,16 +1018,18 @@ function getPublishEligibility(bundle) {
   const progressTotal = number(bundle.editing?.progressTotal);
   const progressCurrent = number(bundle.editing?.progressCurrent);
   const remainingSections = progressTotal > 0 ? Math.max(progressTotal - progressCurrent, 0) : 0;
+  const unitLower = getStructureUnitLower(bundle);
+  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
   const reasons = [];
 
   if (!manuscriptComplete) {
-    reasons.push("Mark the manuscript complete on the write dashboard first.");
+    reasons.push("Mark the manuscript complete in Write first.");
   }
   if (!editingComplete) {
     reasons.push("Finish the editing workflow by setting the Proofread pass to Complete.");
   }
   if (remainingSections > 0) {
-    reasons.push(`Complete the remaining ${formatNumber(remainingSections)} proofread section${remainingSections === 1 ? "" : "s"}.`);
+    reasons.push(`Complete the remaining ${formatNumber(remainingSections)} proofread ${remainingSections === 1 ? unitLower : unitPluralLower}.`);
   }
   if (outstandingIssueCount > 0) {
     reasons.push(`Resolve the remaining ${formatNumber(outstandingIssueCount)} open or deferred issue${outstandingIssueCount === 1 ? "" : "s"} first.`);
@@ -1330,7 +1399,7 @@ function renderWorkspaceEmptyState(label) {
       <div class="empty-panel">
         <p class="small-copy">${escapeHtml(label)}</p>
         <h2 class="hero-title">Create a project to track your progress</h2>
-        <p class="muted">Start your first manuscript project to unlock the full Write, Edit, and Stats workspace.</p>
+        <p class="muted">Start your first manuscript project to unlock the full Write, Story, Edit, and Goals workspace.</p>
         <div class="meta-line" style="margin-top: 22px;">
           <button class="primary-btn writing-launch-cta" data-action="create-first-project" type="button">Create first project</button>
         </div>
@@ -1431,6 +1500,10 @@ function projectExportBaseRow(bundle) {
     row_type: "",
     project_id: bundle.id,
     project_title: bundle.project.bookTitle || "",
+    project_manuscript_type: bundle.project.manuscriptType || "Novel",
+    project_structure_unit_label: getStructureUnitLabel(bundle),
+    project_status: bundle.status || "active",
+    project_archived_at: bundle.archivedAt || "",
     project_target_word_count: number(bundle.project.targetWordCount),
     project_current_word_count: number(bundle.project.currentWordCount),
     project_deadline: bundle.project.deadline || "",
@@ -1644,8 +1717,12 @@ function buildBundleFromImportedRows(rows) {
 
   const bundle = normalizeProjectBundle({
     id: projectRow.project_id || createId(),
+    status: projectRow.project_status === "archived" ? "archived" : "active",
+    archivedAt: projectRow.project_archived_at || "",
     project: {
       bookTitle: projectRow.project_title || "Imported Manuscript",
+      manuscriptType: projectRow.project_manuscript_type || "Novel",
+      structureUnitLabel: projectRow.project_structure_unit_label || defaultStructureUnitForProjectType(projectRow.project_manuscript_type || "Novel"),
       targetWordCount: number(projectRow.project_target_word_count),
       currentWordCount: number(projectRow.project_current_word_count),
       deadline: projectRow.project_deadline || "",
