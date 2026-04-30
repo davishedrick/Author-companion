@@ -2,6 +2,7 @@ let editSessionDraftMinutes = 45;
 let activeEditingSession = null;
 let editingSessionInFocusMode = true;
 let pendingCompletedEditSession = null;
+let loggingPastEditingSession = false;
 let editSessionTimerHandle = null;
 let editIssueFilters = createDefaultEditIssueFilters();
 let editIssueBoardView = "current";
@@ -243,8 +244,8 @@ function buildEditIssueRecommendation(issue, signals, lens = "urgent", unitLabel
     ],
     primaryAction: "review-issue",
     primaryLabel: "Review issue",
-    secondaryAction: issue.sectionLabel ? "filter-section" : "start-session",
-    secondaryLabel: issue.sectionLabel ? `Show ${unitLower} issues` : "Start editing session",
+    secondaryAction: issue.sectionLabel ? "filter-section" : "",
+    secondaryLabel: issue.sectionLabel ? `Show ${unitLower} issues` : "",
     issueId: issue.id,
     filterSection: issue.sectionLabel || ""
   };
@@ -264,23 +265,23 @@ function buildFallbackEditRecommendation(bundle, editStats) {
         `${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} logged`,
         `${formatNumber(editStats.resolvedIssueCount)} resolved issue${editStats.resolvedIssueCount === 1 ? "" : "s"}`
       ],
-      primaryAction: "start-session",
-      primaryLabel: "Start editing session",
-      secondaryAction: "add-issue",
-      secondaryLabel: "Log issue"
+      primaryAction: "add-issue",
+      primaryLabel: "Log issue",
+      secondaryAction: "",
+      secondaryLabel: ""
     };
   }
 
   return {
     label: "Best next move",
     title: "Create the first revision anchor",
-    description: "Start by logging an issue or a timed editing session so the Edit workspace can begin steering what needs attention next.",
+    description: "Start by logging an issue so the Edit workspace can begin steering what needs attention next.",
     reason: "Priority-led recommendations need at least one issue on the board. Until then, the safest suggestion is to start logging what you find.",
     badges: ["No edit history yet"],
     primaryAction: "add-issue",
     primaryLabel: "Add issue",
-    secondaryAction: "start-session",
-    secondaryLabel: "Start editing session"
+    secondaryAction: "",
+    secondaryLabel: ""
   };
 }
 
@@ -773,7 +774,6 @@ function bindEditDashboardEvents(bundle) {
   const issueForm = document.getElementById("issue-form");
   const issueFilterForm = document.getElementById("edit-issue-filters-form");
   const issueViewButtons = document.querySelectorAll("[data-edit-issue-view]");
-  const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
   const closeEditSessionStartButton = document.getElementById("close-edit-session-start-btn");
   const startEditSessionButton = document.getElementById("start-edit-session-btn");
   const endEditSessionButton = document.getElementById("end-edit-session-btn");
@@ -785,18 +785,6 @@ function bindEditDashboardEvents(bundle) {
   const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
   const closeEditSessionButton = document.getElementById("close-edit-session-btn");
   const closeIssueButton = document.getElementById("close-issue-modal-btn");
-
-  function openEditSessionFlow() {
-    if (getActiveFocusSession()) {
-      showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
-      return;
-    }
-    openEditSessionStartModal();
-  }
-
-  if (openEditSessionButton) {
-    openEditSessionButton.onclick = openEditSessionFlow;
-  }
 
   if (startEditSessionButton) {
     startEditSessionButton.onclick = () => {
@@ -1160,10 +1148,6 @@ function bindEditDashboardEvents(bundle) {
         openIssueModal(button.dataset.issueId);
         return;
       }
-      if (action === "start-session") {
-        openEditSessionFlow();
-        return;
-      }
       if (action === "filter-section") {
         editIssueBoardView = "current";
         editIssueFilters = {
@@ -1254,10 +1238,12 @@ function openEditSessionModal(sessionId = null) {
     }
     submit.textContent = "Save changes";
   } else {
-    title.textContent = "Editing Session Complete";
+    title.textContent = loggingPastEditingSession ? "Log editing session" : "Editing Session Complete";
     copy.textContent = pendingCompletedEditSession
       ? `You edited for ${describeMinutes(pendingCompletedEditSession.durationMinutes)}. Close the loop with a quick handoff.`
-      : "Capture what matters for the restart and leave the rest behind.";
+      : loggingPastEditingSession
+        ? "Capture the essentials from an editing session you already finished elsewhere."
+        : "Capture what matters for the restart and leave the rest behind.";
     form.elements.sessionDate.value = toInputDate(pendingCompletedEditSession?.endedAt || new Date().toISOString());
     form.elements.durationMinutes.value = String(Math.max(1, number(pendingCompletedEditSession?.durationMinutes || editSessionDraftMinutes)));
     form.elements.sectionLabel.value = pendingSnapshot?.structureUnitName || "";
@@ -1292,8 +1278,17 @@ function closeEditSessionModal() {
   form.reset();
   editingEditSessionId = null;
   pendingCompletedEditSession = null;
+  loggingPastEditingSession = false;
   clearPendingSessionSnapshotContext();
   modal.classList.add("hidden");
+}
+
+function openPastEditingSessionModal() {
+  loggingPastEditingSession = true;
+  pendingCompletedEditSession = null;
+  editingEditSessionId = null;
+  clearPendingSessionSnapshotContext();
+  openEditSessionModal();
 }
 
 function openEditSessionStartModal() {

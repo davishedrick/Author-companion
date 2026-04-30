@@ -544,46 +544,15 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
     },
     secondary: [
       {
-        key: "start-edit-session",
-        title: "Start editing session",
-        reason: "A short session will create fresh context for the first next step.",
+        key: "add-first-issue",
+        title: "Log the first issue",
+        reason: "One concrete issue will create useful context for the first next step.",
         meta: "No edit history yet",
-        primaryAction: "start-session",
-        primaryLabel: "Start editing session"
+        primaryAction: "add-issue",
+        primaryLabel: "Add issue"
       }
     ]
   };
-}
-
-function renderEdit2LaunchCard(bundle, manuscript, chapters) {
-  const editStats = getEditStats(bundle);
-  const unitLabel = getStructureUnitLabel(bundle);
-  const unitLower = unitLabel.toLowerCase();
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const todayEditSessions = [...getEditSessions(bundle)]
-    .filter((session) => dateKey(session.date) === todayKey);
-  const lastSession = editStats.lastSession;
-  const lastAnchor = lastSession?.sectionLabel || chapters.find((chapter) => chapter.lastTouchedAt)?.label || `No ${unitLower} touched yet`;
-
-  return `
-    <section class="card">
-      <div class="writing-launch edit2-launch">
-        <div class="writing-launch-copy">
-          <div>
-            <h3>Editing Workspace</h3>
-            <p>Log what you touched so the ${unitLower} map stays honest and the next restart is obvious.</p>
-          </div>
-          <p class="edit2-launch-meta">
-            ${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today, ${formatHours(editStats.minutesToday)} edited today, and ${formatNumber(manuscript.totalOpenIssues)} unresolved issue${manuscript.totalOpenIssues === 1 ? "" : "s"} still on the board.
-          </p>
-          <p class="edit2-launch-note">
-            Last worked on: <strong>${escapeHtml(lastAnchor)}</strong>${lastSession?.date ? ` on ${escapeHtml(formatDate(lastSession.date))}` : ""}.
-          </p>
-        </div>
-        <button class="primary-btn writing-launch-cta" id="edit2-start-session-btn" type="button">Start editing session</button>
-      </div>
-    </section>
-  `;
 }
 
 function renderEdit2NextFocusCards(recommendations) {
@@ -766,34 +735,25 @@ function renderEdit2IssueGroups(chapter) {
   const unitLower = getStructureUnitLower(currentBundle());
   const currentIssues = chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) !== "resolved");
   const resolvedIssues = chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) === "resolved");
+  const activeIssueView = editIssueBoardView === "resolved" ? "resolved" : "current";
+  const visibleIssues = activeIssueView === "resolved" ? resolvedIssues : currentIssues;
+  const title = activeIssueView === "resolved" ? "Archived Issues" : "Open Issues";
+  const emptyCopy = activeIssueView === "resolved"
+    ? `Archived issues will collect here once you resolve them.`
+    : `No open issues are attached to this ${unitLower} right now.`;
   return `
     <section class="edit2-pass-group">
       <div class="section-head">
         <div>
-          <h4>Current Issues</h4>
-          <p>Keep active problems visible while you work through this ${escapeHtml(unitLower)}.</p>
+          <h4>${escapeHtml(title)}</h4>
         </div>
-        <span class="pill">${formatNumber(currentIssues.length)} issue${currentIssues.length === 1 ? "" : "s"}</span>
+        <span class="pill">${formatNumber(visibleIssues.length)} issue${visibleIssues.length === 1 ? "" : "s"}</span>
       </div>
-      ${currentIssues.length ? `
+      ${visibleIssues.length ? `
         <div class="edit2-issue-list">
-          ${currentIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
+          ${visibleIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
         </div>
-      ` : `<div class="empty">No current issues are attached to this ${escapeHtml(unitLower)} right now.</div>`}
-    </section>
-    <section class="edit2-pass-group">
-      <div class="section-head">
-        <div>
-          <h4>Resolved Issues</h4>
-          <p>Finished notes stay here for context in case anything needs another look.</p>
-        </div>
-        <span class="pill">${formatNumber(resolvedIssues.length)} issue${resolvedIssues.length === 1 ? "" : "s"}</span>
-      </div>
-      ${resolvedIssues.length ? `
-        <div class="edit2-issue-list">
-          ${resolvedIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
-        </div>
-      ` : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
+      ` : `<div class="empty">${escapeHtml(emptyCopy)}</div>`}
     </section>
   `;
 }
@@ -817,7 +777,7 @@ function renderEdit2IssueItem(issue) {
         </div>
       </div>
       ${issue.snippet ? `<blockquote class="edit2-issue-snippet">${escapeHtml(issue.snippet)}</blockquote>` : ""}
-      ${issue.notes ? `<p class="edit2-issue-note">${escapeHtml(issue.notes)}</p>` : ""}
+      ${issue.notes ? `<details class="edit2-issue-note-wrap"><summary>Note</summary><p class="edit2-issue-note">${escapeHtml(issue.notes)}</p></details>` : ""}
       <div class="edit2-issue-actions">
         ${workflowStatus !== "resolved" ? `
           <button class="ghost-btn" type="button" data-edit2-workflow="${workflowStatus === "open" ? "in_progress" : "open"}" data-issue-id="${escapeAttr(issue.id)}">
@@ -983,8 +943,6 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
 
   return `
     <section class="stack">
-      ${renderEdit2LaunchCard(bundle, manuscript, chapters)}
-
       ${renderEdit2NextFocusCards(nextFocusRecommendations)}
 
       <section class="card edit2-map-card edit2-map-card-full">
@@ -1024,7 +982,6 @@ function renderEdit2ChapterSummarySection(selectedChapter) {
         <div class="section-head">
           <div>
             <h4>Summary</h4>
-            <p>Keep this brief and structural. It should explain why this ${escapeHtml(unitLower)} exists in the manuscript.</p>
           </div>
         </div>
         <form class="edit2-summary-form" id="edit2-chapter-summary-form">
@@ -1045,7 +1002,6 @@ function renderEdit2ChapterSummarySection(selectedChapter) {
       <div class="section-head">
         <div>
           <h4>Summary</h4>
-          <p>Keep this brief and structural. It should explain why this ${escapeHtml(unitLower)} exists in the manuscript.</p>
         </div>
         <div class="edit2-structure-actions">
           <button class="ghost-btn" id="edit2-edit-summary-btn" type="button">Edit summary</button>
@@ -1053,10 +1009,40 @@ function renderEdit2ChapterSummarySection(selectedChapter) {
         </div>
       </div>
       <div class="edit2-summary-display ${selectedChapter.summary ? "" : "is-empty"}">
-        <p>${escapeHtml(selectedChapter.summary || `No summary yet. Add a short purpose note when this ${unitLower} needs clearer context.`)}</p>
+        <p>${escapeHtml(selectedChapter.summary || `Add a quick ${unitLower} summary.`)}</p>
         ${selectedChapter.completedAt ? `<p class="small-copy">${escapeHtml(`Completed ${formatDate(selectedChapter.completedAt)}`)}</p>` : ""}
       </div>
     </section>
+  `;
+}
+
+function renderEdit2ChapterDetailTabs(selectedChapter, manuscript) {
+  const currentIssues = selectedChapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) !== "resolved");
+  const resolvedIssues = selectedChapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) === "resolved");
+  const activeIssueView = editIssueBoardView === "resolved" ? "resolved" : "current";
+  return `
+    <div class="edit2-primary-view-switch edit2-detail-tabs" role="tablist" aria-label="${escapeAttr(selectedChapter.label)} sections">
+      <button
+        class="edit2-primary-view-tab ${activeIssueView === "current" ? "active" : ""}"
+        type="button"
+        role="tab"
+        aria-selected="${activeIssueView === "current" ? "true" : "false"}"
+        data-edit2-detail-tab="current"
+      >
+        <span class="edit2-primary-view-label">Open issues</span>
+        <strong>${formatNumber(currentIssues.length)} current</strong>
+      </button>
+      <button
+        class="edit2-primary-view-tab ${activeIssueView === "resolved" ? "active" : ""}"
+        type="button"
+        role="tab"
+        aria-selected="${activeIssueView === "resolved" ? "true" : "false"}"
+        data-edit2-detail-tab="resolved"
+      >
+        <span class="edit2-primary-view-label">Archived</span>
+        <strong>${formatNumber(resolvedIssues.length)} saved</strong>
+      </button>
+    </div>
   `;
 }
 
@@ -1076,7 +1062,6 @@ function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapt
               <div>
                 <p class="small-copy">Edit</p>
                 <h2 class="hero-title">${escapeHtml(selectedChapter.label)}</h2>
-                <p class="muted">A focused workspace for reviewing the issues attached to this part of the manuscript.</p>
               </div>
             </div>
           </div>
@@ -1089,7 +1074,7 @@ function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapt
         <div class="section-head">
           <div>
             <h3>${escapeHtml(unitLabel)} Issues</h3>
-            <p>Review the issues attached to this part of the manuscript without losing the surrounding context.</p>
+            ${renderEdit2ChapterDetailTabs(selectedChapter, manuscript)}
           </div>
           <button class="ghost-btn" id="edit2-open-issue-modal-btn" type="button">Add issue</button>
         </div>
@@ -1119,7 +1104,6 @@ function renderEdit2Dashboard(bundle) {
     edit2ViewMode = "overview";
     view.innerHTML = `
       <section class="stack">
-        ${renderEdit2LaunchCard(bundle, manuscript, chapters)}
         <section class="card edit2-empty-state">
           <div class="section-head">
             <div>
@@ -1148,14 +1132,6 @@ function renderEdit2Dashboard(bundle) {
   }
 
   bindEdit2DashboardEvents(bundle);
-}
-
-function openEdit2SessionFlow() {
-  if (getActiveFocusSession()) {
-    showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
-    return;
-  }
-  openEditSessionStartModal();
 }
 
 function openEdit2ChapterModal() {
@@ -1354,6 +1330,7 @@ function updateEdit2Issue(issueId, updater) {
 function openEdit2ChapterByKey(chapterKey) {
   edit2SelectedChapterKey = String(chapterKey || "");
   edit2SummaryEditMode = false;
+  editIssueBoardView = "current";
   edit2ViewMode = "detail";
   render();
 }
@@ -1414,6 +1391,14 @@ function bindEdit2DashboardEvents(bundle) {
     };
   });
 
+  view?.querySelectorAll("[data-edit2-detail-tab]").forEach((button) => {
+    button.onclick = () => {
+      const detailTab = button.dataset.edit2DetailTab;
+      editIssueBoardView = detailTab === "resolved" ? "resolved" : "current";
+      render();
+    };
+  });
+
   const edit2IssueFilterForm = document.getElementById("edit2-issue-filters-form");
   if (edit2IssueFilterForm) {
     edit2IssueFilterForm.onchange = () => {
@@ -1454,10 +1439,6 @@ function bindEdit2DashboardEvents(bundle) {
         openEdit2ChapterByKey(button.dataset.chapterKey);
         return;
       }
-      if (action === "start-session") {
-        openEdit2SessionFlow();
-        return;
-      }
       if (action === "add-issue") {
         openIssueModal();
         return;
@@ -1481,13 +1462,6 @@ function bindEdit2DashboardEvents(bundle) {
       render();
     };
   });
-
-  const startSessionButton = document.getElementById("edit2-start-session-btn");
-  if (startSessionButton) {
-    startSessionButton.onclick = () => {
-      openEdit2SessionFlow();
-    };
-  }
 
   const openIssueButton = document.getElementById("edit2-open-issue-modal-btn");
   if (openIssueButton) {

@@ -15,6 +15,7 @@ let floatingFocusTimerDock = "top-right";
 let floatingFocusTimerResizeBound = false;
 let floatingFocusTimerPosition = null;
 let sidebarCollapseResizeBound = false;
+let startSessionMenuDocumentBound = false;
 let publishCelebrationTimer = null;
 let pendingReopenProjectId = null;
 
@@ -380,6 +381,12 @@ function renderBrand(bundle) {
 
 function getNavIcon(view) {
   const icons = {
+    session: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="7.5" />
+        <path d="M12 8v4l3 2" />
+      </svg>
+    `,
     plot: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 18h14" />
@@ -421,6 +428,93 @@ function getNavIcon(view) {
   return icons[view] || "";
 }
 
+function closeStartSessionMenu() {
+  const trigger = document.getElementById("start-session-menu-btn");
+  const menu = document.getElementById("start-session-menu");
+  if (!trigger || !menu) return;
+  trigger.setAttribute("aria-expanded", "false");
+  menu.classList.add("hidden");
+}
+
+function openStartSessionMenu() {
+  const trigger = document.getElementById("start-session-menu-btn");
+  const menu = document.getElementById("start-session-menu");
+  if (!trigger || !menu) return;
+  trigger.setAttribute("aria-expanded", "true");
+  menu.classList.remove("hidden");
+}
+
+function toggleStartSessionMenu() {
+  const menu = document.getElementById("start-session-menu");
+  if (!menu) return;
+  if (menu.classList.contains("hidden")) {
+    openStartSessionMenu();
+  } else {
+    closeStartSessionMenu();
+  }
+}
+
+function startSidebarSession(action) {
+  if (!currentBundle()) {
+    showToast("Create a project first", "Sessions need an active project so the handoff has somewhere to land.");
+    return;
+  }
+  if (getActiveFocusSession()) {
+    showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
+    return;
+  }
+
+  clearPendingSessionSnapshotContext();
+  closeStartSessionMenu();
+
+  if (action === "write") {
+    openSessionModal();
+    return;
+  }
+  if (action === "edit") {
+    openEditSessionStartModal();
+    return;
+  }
+  if (action === "log-previous-writing") {
+    openPastWritingSessionModal();
+    return;
+  }
+  if (action === "log-previous-editing") {
+    openPastEditingSessionModal();
+  }
+}
+
+function bindStartSessionMenu() {
+  const shell = document.getElementById("start-session-menu-shell");
+  const trigger = document.getElementById("start-session-menu-btn");
+  const menu = document.getElementById("start-session-menu");
+  if (!shell || !trigger || !menu || shell.dataset.bound === "true") return;
+  shell.dataset.bound = "true";
+
+  trigger.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleStartSessionMenu();
+  });
+
+  menu.querySelectorAll("[data-session-action]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      startSidebarSession(button.dataset.sessionAction);
+    });
+  });
+
+  if (!startSessionMenuDocumentBound) {
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest("#start-session-menu-shell")) closeStartSessionMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeStartSessionMenu();
+    });
+    startSessionMenuDocumentBound = true;
+  }
+}
+
 function renderNav(bundle) {
   const nav = document.getElementById("nav");
   const isWorkspaceContext = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView));
@@ -443,6 +537,33 @@ function renderNav(bundle) {
       ? "Lock this project into its final stats view."
       : publishEligibility?.reasons[0] || "Finish the manuscript and editing flow before publishing.";
   nav.innerHTML = `
+    ${bundle && !isPublishedBundle ? `
+      <div class="nav-session-shell" id="start-session-menu-shell">
+        <button class="nav-session-trigger" id="start-session-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="start-session-menu" aria-label="Start a session" title="Start a session">
+          <span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>
+          <span class="nav-label">Start a session</span>
+          <span class="nav-session-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="m7 10 5 5 5-5" />
+            </svg>
+          </span>
+        </button>
+        <div class="nav-session-menu hidden" id="start-session-menu" role="menu" aria-label="Session type">
+          <button type="button" role="menuitem" data-session-action="write">
+            <span>Write</span>
+          </button>
+          <button type="button" role="menuitem" data-session-action="edit">
+            <span>Edit</span>
+          </button>
+          <button type="button" role="menuitem" data-session-action="log-previous-writing">
+            <span>Log previous writing session</span>
+          </button>
+          <button type="button" role="menuitem" data-session-action="log-previous-editing">
+            <span>Log previous editing session</span>
+          </button>
+        </div>
+      </div>
+    ` : ""}
     <div class="nav-main">
       ${availableViews.map((view) => `
         <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}" title="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
@@ -462,8 +583,9 @@ function renderNav(bundle) {
     ` : ""}
   `;
 
-  [...nav.querySelectorAll("button")].forEach((button) => {
-    if (button.id === "open-publish-project-btn") return;
+  bindStartSessionMenu();
+
+  [...nav.querySelectorAll("button[data-view]")].forEach((button) => {
     button.addEventListener("click", () => {
       activeView = button.dataset.view;
       saveState();

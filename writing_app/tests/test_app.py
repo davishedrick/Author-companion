@@ -241,7 +241,7 @@ def test_static_assets_load():
     assert ".stack > * {" in get_css_asset("layout.css")
     assert ".hero > * {" in get_css_asset("layout.css")
     assert "width: 100%;" in get_css_asset("layout.css")
-    assert ".writing-launch {" in get_css_asset("dashboard.css")
+    assert ".resume-card {" in get_css_asset("dashboard.css")
     assert ".manuscript-complete-hero {" in get_css_asset("dashboard.css")
     assert ".published-hero {" in get_css_asset("dashboard.css")
     assert ".manuscript-confetti-burst {" in get_css_asset("dashboard.css")
@@ -329,7 +329,7 @@ def test_focus_mode_can_be_minimized_into_a_shared_floating_timer():
     assert "function enterEditingFocusMode()" in edit_js
     assert "function setWritingSessionMinimized(minimized)" in dashboard_js
     assert "Session already running" in dashboard_js
-    assert "Session already running" in edit_js
+    assert "Session already running" in app_js
     assert ".floating-focus-timer {" in css
     assert ".floating-focus-timer button {" in css
     assert ".writing-session-actions {" in css
@@ -369,11 +369,12 @@ def test_write_dashboard_resume_card_and_handoff_logging():
 
     assert 'id="session-modal"' in html
     assert 'id="session-dial"' in html
-    assert 'id="log-past-session-btn"' in js
-    assert 'id="resume-session-btn"' in js
     assert 'id="resume-view-history-btn"' in js
     assert "function buildResumeCard(snapshot, bundle = currentBundle())" in js
-    assert "Resume this section" in js
+    assert 'id="open-session-modal-btn"' not in js
+    assert 'id="log-past-session-btn"' not in js
+    assert 'id="resume-session-btn"' not in js
+    assert "Resume this section" not in js
     assert "View full history" in js
     assert "You worked on" in js
     assert "What got done" in html
@@ -524,6 +525,40 @@ def test_sidebar_can_collapse_to_icon_only_navigation():
     assert ".app-shell.sidebar-collapsed {" in css
     assert ".sidebar-collapse-btn {" in css
     assert ".sidebar-action-label {" in css
+
+
+def test_sidebar_start_session_menu_launches_global_session_flows():
+    js = get_app_js()
+    css = get_css_asset("layout.css")
+    theme_css = get_css_asset("themes.css")
+
+    assert 'id="start-session-menu-btn"' in js
+    assert 'id="start-session-menu"' in js
+    assert 'data-session-action="write"' in js
+    assert 'data-session-action="edit"' in js
+    assert 'data-session-action="log-previous-writing"' in js
+    assert 'data-session-action="log-previous-editing"' in js
+    assert "Open the writing timer" not in js
+    assert "Open the editing timer" not in js
+    assert "function bindStartSessionMenu()" in js
+    assert "function startSidebarSession(action)" in js
+    assert "openSessionModal();" in js
+    assert "openEditSessionStartModal();" in js
+    assert "openPastWritingSessionModal();" in js
+    assert "openPastEditingSessionModal();" in js
+    assert 'nav.querySelectorAll("button[data-view]")' in js
+    assert (
+        '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>' in js
+    )
+    assert ".nav-session-shell {" in css
+    assert ".nav-session-menu {" in css
+    assert "background: #fffaf3;" in css
+    session_menu_block = css[
+        css.index(".nav-session-menu {") : css.index(".nav-session-menu.hidden {")
+    ]
+    assert "backdrop-filter" not in session_menu_block
+    assert ".nav-session-trigger .nav-session-icon {" in css
+    assert 'html[data-theme="dark"] .nav-session-menu' in theme_css
 
 
 def test_goal_type_dropdown_includes_writing_time():
@@ -732,8 +767,18 @@ def test_edit2_dashboard_view_and_navigation_are_present():
     assert 'data-edit2-board-view="issues"' in js
     assert 'id="edit2-issue-filters-form"' in js
     assert 'data-edit2-issue-view="current"' in js
+    assert 'data-edit2-detail-tab="chapters"' not in js
+    assert 'data-edit2-detail-tab="current"' in js
+    assert 'data-edit2-detail-tab="resolved"' in js
+    assert "Open issues" in js
+    assert "Archived Issues" in js
+    assert 'editIssueBoardView = "current";' in js
+    assert 'edit2ViewMode = "overview";' in js
+    assert "A focused workspace for reviewing" not in js
+    assert "Keep this brief and structural." not in js
+    assert "Review the issues attached" not in js
+    assert "Keep active problems visible" not in js
     assert "<h4>Summary</h4>" in js
-    assert "<h3>Editing Workspace</h3>" in edit2_js
     assert "<h3>Next Up</h3>" in edit2_js
     assert 'data-edit2-next-focus-action="' in edit2_js
     assert (

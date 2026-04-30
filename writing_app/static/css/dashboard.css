@@ -37,34 +37,6 @@
   background: rgba(255, 255, 255, 0.52);
 }
 
-.writing-launch {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-  gap: 18px;
-  align-items: center;
-}
-
-.writing-launch-copy {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-}
-
-.writing-launch-copy h3,
-.writing-launch-copy p {
-  margin: 0;
-}
-
-.writing-launch-copy p {
-  color: var(--muted);
-}
-
-.writing-launch-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 .writing-launch-cta {
   justify-self: end;
   min-width: 220px;
@@ -464,11 +436,6 @@
 }
 
 @media (max-width: 900px) {
-  .writing-launch {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
-  }
-
   .writing-launch-cta {
     justify-self: stretch;
     width: 100%;
@@ -518,16 +485,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .writing-launch {
-    gap: 14px;
-  }
-
-  .writing-launch-meta {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .writing-launch-copy p,
   .session-dial-caption {
     font-size: 0.94rem;
   }
@@ -1426,11 +1383,6 @@ body.dragging-floating-focus-timer * {
     width: 100%;
   }
 
-  .resume-card-actions .writing-launch-cta {
-    justify-self: stretch;
-    width: 100%;
-  }
-
   .resume-card-summary,
   .session-handoff-secondary {
     grid-template-columns: 1fr;
@@ -1442,11 +1394,6 @@ body.dragging-floating-focus-timer * {
 
   .today-command-actions {
     justify-content: start;
-    width: 100%;
-  }
-
-  .today-command-actions .writing-launch-cta {
-    justify-self: stretch;
     width: 100%;
   }
 

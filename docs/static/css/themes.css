@@ -117,6 +117,40 @@ html[data-theme="dark"] .theme-option span {
   color: var(--ink);
 }
 
+html[data-theme="dark"] .nav-session-trigger {
+  background:
+    linear-gradient(180deg, rgba(28, 21, 17, 0.08), transparent),
+    linear-gradient(180deg, #e2a06e, #ca7f51);
+  color: #1c1511;
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(28, 21, 17, 0.08);
+}
+
+html[data-theme="dark"] .nav-session-trigger .nav-session-icon {
+  background: rgba(28, 21, 17, 0.14);
+  color: #1c1511;
+  box-shadow: inset 0 0 0 1px rgba(28, 21, 17, 0.08);
+}
+
+html[data-theme="dark"] .nav-session-menu {
+  background: #16120f;
+  border-color: rgba(245, 230, 214, 0.12);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+}
+
+html[data-theme="dark"] .nav-session-menu button {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(245, 230, 214, 0.1);
+  color: var(--ink);
+}
+
+html[data-theme="dark"] .nav-session-menu button:hover {
+  background: linear-gradient(180deg, #e2a06e, #ca7f51);
+  color: #1c1511;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
+}
+
 html[data-theme="dark"] .route-chip {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.07), rgba(240, 178, 134, 0.09)),
@@ -173,6 +207,13 @@ html[data-theme="dark"] .plot-section-tab.active .plot-section-count {
   background: rgba(28, 21, 17, 0.14);
   color: #1c1511;
   box-shadow: inset 0 0 0 1px rgba(28, 21, 17, 0.08);
+}
+
+html[data-theme="dark"] .nav-session-trigger:hover {
+  background:
+    linear-gradient(180deg, rgba(28, 21, 17, 0.1), transparent),
+    linear-gradient(180deg, #efaf79, #ca7f51);
+  color: #1c1511;
 }
 
 html[data-theme="dark"] .project-topbar-nav button.active,

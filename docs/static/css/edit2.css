@@ -3,22 +3,12 @@
   gap: 18px;
 }
 
-.edit2-launch {
-  gap: 24px;
-}
-
-.edit2-launch-meta,
-.edit2-launch-note,
 .edit2-focus-meta {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.edit2-launch-note strong {
-  color: var(--ink);
 }
 
 .edit-focus-shell {
@@ -573,6 +563,10 @@
   align-items: flex-start;
 }
 
+.edit2-detail-hero {
+  min-height: 0;
+}
+
 .edit2-detail-title-row {
   display: flex;
   align-items: flex-start;
@@ -611,7 +605,7 @@
 }
 
 .edit2-summary-display {
-  padding: 16px 18px;
+  padding: 14px 16px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.62);
   box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.08);
@@ -652,7 +646,7 @@
 
 .edit2-pass-groups {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 
 .edit2-pass-group {
@@ -660,15 +654,19 @@
   gap: 12px;
 }
 
+.edit2-detail-tabs {
+  margin-top: 12px;
+}
+
 .edit2-issue-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .edit2-issue-item {
   display: grid;
-  gap: 10px;
-  padding: 16px;
+  gap: 8px;
+  padding: 14px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.68);
   box-shadow: inset 0 0 0 1px rgba(77, 61, 48, 0.08);
@@ -682,20 +680,31 @@
 }
 
 .edit2-issue-item h5 {
-  font-size: 1.18rem;
-  line-height: 1.1;
+  font-size: 1.04rem;
+  line-height: 1.15;
 }
 
 .edit2-issue-note {
-  margin: 0;
+  margin: 8px 0 0;
   color: var(--muted);
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
+.edit2-issue-note-wrap {
+  color: var(--muted);
+}
+
+.edit2-issue-note-wrap summary {
+  width: max-content;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
 .edit2-issue-snippet {
   margin: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   border-left: 3px solid var(--accent);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.64);
@@ -737,6 +746,10 @@
   .edit2-primary-view-tab {
     flex: 1 1 0;
     padding-inline: 10px;
+  }
+
+  .edit2-detail-tabs {
+    width: 100%;
   }
 
   .edit2-chapter-card {

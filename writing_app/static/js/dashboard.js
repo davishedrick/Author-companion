@@ -104,8 +104,6 @@ function buildResumeCard(snapshot, bundle = currentBundle()) {
             <p class="muted">End a writing or editing session with a short handoff so your next restart has somewhere to begin.</p>
           </div>
           <div class="resume-card-actions">
-            <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
-            <button class="ghost-btn" id="log-past-session-btn" type="button">Log past session</button>
             <button class="ghost-btn" id="resume-view-history-btn" type="button">View full history</button>
           </div>
         </div>
@@ -134,9 +132,6 @@ function buildResumeCard(snapshot, bundle = currentBundle()) {
           <p class="muted">${escapeHtml(sessionSnapshotTypeLabel(snapshot.sessionType))} handoff${snapshot.endedAt ? ` from ${escapeHtml(formatDate(snapshot.endedAt))}` : ""}.</p>
         </div>
         <div class="resume-card-actions">
-          <button class="primary-btn writing-launch-cta" id="resume-session-btn" data-snapshot-id="${escapeAttr(snapshot.id)}" type="button">Resume this section</button>
-          <button class="ghost-btn" id="open-session-modal-btn" type="button">Start writing session</button>
-          <button class="ghost-btn" id="log-past-session-btn" type="button">Log past session</button>
           <button class="ghost-btn" id="resume-view-history-btn" type="button">View full history</button>
         </div>
       </div>
@@ -640,10 +635,7 @@ function bindDashboardEvents(bundle) {
   const sessionModal = document.getElementById("session-modal");
   const sessionCompleteModal = document.getElementById("session-complete-modal");
   const endSessionConfirmModal = document.getElementById("end-session-confirm-modal");
-  const openSessionButton = document.getElementById("open-session-modal-btn");
-  const resumeSessionButton = document.getElementById("resume-session-btn");
   const resumeViewHistoryButton = document.getElementById("resume-view-history-btn");
-  const logPastSessionButton = document.getElementById("log-past-session-btn");
   const closeSessionButton = document.getElementById("close-session-modal-btn");
   const closeSessionCompleteButton = document.getElementById("close-session-complete-btn");
   const startSessionButton = document.getElementById("start-session-btn");
@@ -660,51 +652,6 @@ function bindDashboardEvents(bundle) {
   const prevHeatmapButton = document.getElementById("heatmap-prev-month-btn");
   const nextHeatmapButton = document.getElementById("heatmap-next-month-btn");
   const viewAllSessionsButton = document.getElementById("view-all-sessions-btn");
-
-  if (openSessionButton) {
-    openSessionButton.onclick = () => {
-      if (getActiveFocusSession()) {
-        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
-        return;
-      }
-      clearPendingSessionSnapshotContext();
-      openSessionModal();
-    };
-  }
-
-  if (resumeSessionButton) {
-    resumeSessionButton.onclick = () => {
-      if (getActiveFocusSession()) {
-        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
-        return;
-      }
-      const snapshot = getLatestSnapshot(bundle);
-      if (!snapshot) {
-        clearPendingSessionSnapshotContext();
-        openSessionModal();
-        return;
-      }
-      setPendingSessionSnapshotContext(snapshot);
-      if (snapshot.sessionType === "editing") {
-        activeView = "edit";
-        render();
-        window.requestAnimationFrame(() => openEditSessionStartModal());
-        return;
-      }
-      openSessionModal();
-    };
-  }
-
-  if (logPastSessionButton) {
-    logPastSessionButton.onclick = () => {
-      if (getActiveFocusSession()) {
-        showToast("Session already running", "Finish or end the active session before logging a past writing session.");
-        return;
-      }
-      clearPendingSessionSnapshotContext();
-      openPastWritingSessionModal();
-    };
-  }
 
   if (startSessionButton) {
     startSessionButton.onclick = () => {
