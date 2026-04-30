@@ -26,7 +26,7 @@
 
 .plot-overview-card p {
   font-size: 1.22rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.08;
 }
 
@@ -53,10 +53,12 @@
   position: relative;
   z-index: 1;
   margin: 0 0 12px;
+  padding-left: 48px;
   overflow: visible;
 }
 
 .plot-section-nav {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -64,7 +66,7 @@
   align-items: center;
   min-width: 0;
   width: fit-content;
-  max-width: 100%;
+  max-width: calc(100% - 48px);
   margin: 0 auto;
   padding: 5px;
   border-radius: 999px;
@@ -113,7 +115,7 @@
 .plot-section-title {
   margin: 0;
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.1;
   white-space: nowrap;
 }
@@ -131,8 +133,153 @@
   color: var(--accent-strong);
   box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.14);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 600;
   flex-shrink: 0;
+}
+
+.plot-add-tab-btn {
+  position: absolute;
+  top: 5px;
+  left: -48px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(184, 92, 56, 0.12);
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.14);
+}
+
+.plot-add-tab-btn:hover {
+  background: rgba(184, 92, 56, 0.18);
+  transform: translateY(-1px);
+}
+
+.plot-add-tab-btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.plot-add-tab-btn svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2.15;
+  stroke-linecap: round;
+}
+
+.plot-add-tab-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+#plot-tab-modal h3 {
+  font-weight: 600;
+}
+
+.plot-tab-picker-field {
+  display: grid;
+  gap: 12px;
+}
+
+.plot-tab-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.plot-tab-choice {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  background: transparent;
+  color: var(--accent-strong);
+  box-shadow: inset 0 0 0 1px rgba(184, 92, 56, 0.34);
+  text-align: left;
+  transform-origin: center;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.plot-tab-choice:hover {
+  background: rgba(184, 92, 56, 0.08);
+  transform: translateY(-1px);
+}
+
+.plot-tab-choice:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.plot-tab-choice.is-selected {
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  color: white;
+  box-shadow: 0 14px 28px rgba(95, 66, 44, 0.16);
+  transform: scale(1.06);
+}
+
+.plot-tab-choice span {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.plot-tab-picker-empty {
+  margin: 0;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.plot-section-utility {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+
+.plot-remove-tab-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 0.92rem;
+  text-align: left;
+  transition: color 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+.plot-remove-tab-link:hover,
+.plot-remove-tab-link:focus-visible {
+  color: var(--accent-strong);
+}
+
+.plot-remove-tab-link:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+.plot-remove-tab-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--muted);
 }
 
 .plot-section-detail {
@@ -249,6 +396,7 @@
 
   .plot-section-nav-wrap {
     margin-inline: 0;
+    padding-left: 48px;
   }
 
   .plot-entry-card .item-top {
@@ -280,8 +428,19 @@
 }
 
 @media (max-width: 620px) {
+  .plot-section-nav-wrap {
+    padding-left: 0;
+    padding-top: 46px;
+  }
+
   .plot-section-nav {
     gap: 6px;
+    max-width: 100%;
+  }
+
+  .plot-add-tab-btn {
+    top: -46px;
+    left: 0;
   }
 
   .plot-section-tab {

@@ -218,6 +218,534 @@ const PLOT_SECTION_CONFIG = {
         placeholder: "Symbols, rituals, contradictions, sect differences, or scenes tied to this belief"
       }
     }
+  },
+  premise: {
+    label: "Premise",
+    singular: "premise note",
+    kicker: "Core promise",
+    description: "Clarify the central story engine, reader promise, and the question the manuscript keeps testing.",
+    navCopy: "Hooks, loglines, central questions, promises, and the story's core pressure.",
+    emptyCopy: "Add the premise, promise, or core dramatic question that helps every other choice stay aligned.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "The situation, the pressure, and why this story needs to be told now."
+      },
+      {
+        label: "Watch for",
+        copy: "Promises the opening makes, genre expectations, and where the manuscript drifts from its center."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Premise title",
+        placeholder: "Example: A reluctant heir must bargain with the empire she plans to burn"
+      },
+      summary: {
+        label: "Core promise",
+        placeholder: "Political fantasy about loyalty, inheritance, and the cost of impossible bargains"
+      },
+      anchor: {
+        label: "Central question",
+        placeholder: "Can Mara save her brother without becoming the ruler she hates?"
+      },
+      detail: {
+        label: "Genre or reader expectation",
+        placeholder: "Court intrigue, escalating betrayals, and a morally expensive victory"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Alternate loglines, market comps, tonal guardrails, or themes to protect"
+      }
+    }
+  },
+  themes: {
+    label: "Themes",
+    singular: "theme",
+    kicker: "Meaning and resonance",
+    description: "Track the ideas, arguments, and emotional patterns the manuscript keeps returning to.",
+    navCopy: "Recurring questions, moral tensions, motifs, symbols, and emotional arguments.",
+    emptyCopy: "Add the ideas or questions you want the reader to feel building under the plot.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "The theme, where it appears, and what tension makes it interesting."
+      },
+      {
+        label: "Watch for",
+        copy: "Scenes that repeat the idea too plainly or miss a chance to complicate it."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Theme",
+        placeholder: "Example: Freedom always asks for collateral"
+      },
+      summary: {
+        label: "Meaning",
+        placeholder: "Every escape creates an obligation to someone left behind"
+      },
+      anchor: {
+        label: "Where it appears",
+        placeholder: "Mara's bargains, her brother's captivity, and the dockworker uprising"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Motifs, symbols, reversals, or scenes that carry this idea"
+      }
+    }
+  },
+  timeline: {
+    label: "Timeline",
+    singular: "timeline event",
+    kicker: "Sequence and causality",
+    description: "Track when events happen so cause, consequence, memory, and pacing stay coherent.",
+    navCopy: "Backstory, present action, deadlines, reveals, flashbacks, and chronology checks.",
+    emptyCopy: "Add events that anchor the order of the story or explain why pressure arrives when it does.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What happened, when it happened, and what it caused."
+      },
+      {
+        label: "Watch for",
+        copy: "Contradictory dates, impossible travel, forgotten deadlines, and reveals arriving too early."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Event",
+        placeholder: "Example: The harbor gates close"
+      },
+      summary: {
+        label: "When",
+        placeholder: "Night three, two hours before the coronation vote"
+      },
+      anchor: {
+        label: "Cause or consequence",
+        placeholder: "Traps the rebels inside the city and exposes Mara's stolen pass"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Dependencies, continuity risks, calendar notes, or related scenes"
+      }
+    }
+  },
+  plotThreads: {
+    label: "Plot Threads",
+    singular: "plot thread",
+    kicker: "Open loops",
+    description: "Track promises, mysteries, subplots, and payoffs so nothing important disappears.",
+    navCopy: "Subplots, reveals, clues, mysteries, emotional threads, and delayed payoffs.",
+    emptyCopy: "Add a thread when the story opens a loop you will need to develop or resolve later.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What is opened, who notices it, and what resolution would satisfy the reader."
+      },
+      {
+        label: "Watch for",
+        copy: "Threads that vanish, resolve too neatly, or need a stronger escalation beat."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Thread",
+        placeholder: "Example: Who paid for the assassination attempt?"
+      },
+      summary: {
+        label: "Current state",
+        placeholder: "Opened in chapter four, suspected by Mara, hidden from the council"
+      },
+      anchor: {
+        label: "Payoff or next beat",
+        placeholder: "Reveal the sponsor through the burned ledger in act three"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Clues, red herrings, emotional stakes, or places to reinforce the thread"
+      }
+    }
+  },
+  scenes: {
+    label: "Scenes",
+    singular: "scene",
+    kicker: "Scene inventory",
+    description: "Track planned, drafted, or missing scenes and the job each scene needs to do.",
+    navCopy: "Scene ideas, set pieces, missing bridges, emotional turns, and revision targets.",
+    emptyCopy: "Add scenes that need a clear purpose before drafting or revision.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "The scene's purpose, conflict, turn, and where it belongs."
+      },
+      {
+        label: "Watch for",
+        copy: "Scenes with no turn, repeated beats, or bridges that exist only to move people around."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Scene title",
+        placeholder: "Example: Mara steals the council seal"
+      },
+      summary: {
+        label: "Scene purpose",
+        placeholder: "Force Mara to choose speed over secrecy"
+      },
+      anchor: {
+        label: "Turn or outcome",
+        placeholder: "She succeeds, but exposes her brother's location"
+      },
+      detail: {
+        label: "Placement",
+        placeholder: "Act two midpoint, after the docks betrayal"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Sensory cues, conflict notes, missing setup, or revision concerns"
+      }
+    }
+  },
+  relationships: {
+    label: "Relationships",
+    singular: "relationship",
+    kicker: "Connection and friction",
+    description: "Track relationship arcs, alliances, betrayals, power imbalances, and emotional debt.",
+    navCopy: "Romance, family, rivalry, mentorship, alliances, betrayals, and shifting trust.",
+    emptyCopy: "Add relationships that change the story because trust, need, or history keeps moving.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "Who is connected, what each person wants, and what makes the bond unstable."
+      },
+      {
+        label: "Watch for",
+        copy: "Relationships that stay static, change without evidence, or need sharper turning points."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Relationship",
+        placeholder: "Example: Mara and Iven"
+      },
+      summary: {
+        label: "Current dynamic",
+        placeholder: "Protective siblings split by ambition, guilt, and political leverage"
+      },
+      anchor: {
+        label: "Pressure point",
+        placeholder: "Iven knows Mara caused the raid that captured him"
+      },
+      detail: {
+        label: "Arc",
+        placeholder: "From rescue fantasy to honest accountability"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "History, wounds, secrets, intimacy beats, or betrayal points"
+      }
+    }
+  },
+  cultures: {
+    label: "Cultures",
+    singular: "culture note",
+    kicker: "Customs and social texture",
+    description: "Track social practices, values, customs, taboos, class signals, and daily life.",
+    navCopy: "Customs, food, etiquette, institutions, class behavior, dialect, and social expectations.",
+    emptyCopy: "Add cultural details that shape how characters behave, judge, celebrate, or hide.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What the custom is, who follows it, and what it reveals."
+      },
+      {
+        label: "Watch for",
+        copy: "Details that feel decorative but do not affect choices, conflict, or belonging."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Custom or social detail",
+        placeholder: "Example: Salt-bread mourning"
+      },
+      summary: {
+        label: "Meaning",
+        placeholder: "Families share salted bread before naming the dead"
+      },
+      anchor: {
+        label: "Story effect",
+        placeholder: "Mara refuses the rite and publicly rejects her father's faction"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Class differences, regional versions, sensory details, or scene uses"
+      }
+    }
+  },
+  magicSystems: {
+    label: "Magic Systems",
+    singular: "magic rule",
+    kicker: "Power with limits",
+    description: "Track abilities, costs, limits, loopholes, training, and consequences.",
+    navCopy: "Magic, powers, rituals, supernatural rules, costs, exceptions, and failure modes.",
+    emptyCopy: "Add magical or supernatural rules that need consistency and real consequence.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What the power does, what it costs, and what it cannot do."
+      },
+      {
+        label: "Watch for",
+        copy: "Convenient exceptions, missing costs, unclear limits, and abilities that solve too much."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Power or rule",
+        placeholder: "Example: Oathfire burns only spoken lies"
+      },
+      summary: {
+        label: "Limit",
+        placeholder: "It reveals intent, but cannot prove facts the speaker believes are true"
+      },
+      anchor: {
+        label: "Cost or consequence",
+        placeholder: "Each use scars the speaker's tongue and shortens their voice"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Training, loopholes, visuals, cultural attitudes, or plot risks"
+      }
+    }
+  },
+  technology: {
+    label: "Technology",
+    singular: "technology note",
+    kicker: "Tools and constraints",
+    description: "Track inventions, devices, systems, resources, and technical limits.",
+    navCopy: "Devices, weapons, infrastructure, communication, transport, science, and constraints.",
+    emptyCopy: "Add technology or practical systems that shape what characters can do.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What it does, who has access, and what limitation creates story pressure."
+      },
+      {
+        label: "Watch for",
+        copy: "Tools that become too convenient, inconsistent access, or missing maintenance costs."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Technology",
+        placeholder: "Example: Signal-glass relays"
+      },
+      summary: {
+        label: "Function",
+        placeholder: "Transmit coded flashes between towers across the harbor"
+      },
+      anchor: {
+        label: "Limit or access",
+        placeholder: "Only licensed guild operators can read the full code"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Materials, failures, operators, cost, or scene implications"
+      }
+    }
+  },
+  research: {
+    label: "Research",
+    singular: "research note",
+    kicker: "Facts and references",
+    description: "Track factual references, sources, questions, and accuracy checks.",
+    navCopy: "Research notes, source links, fact checks, expert questions, and realism constraints.",
+    emptyCopy: "Add research notes when a factual choice needs evidence or later verification.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "The fact, source, uncertainty, and where it affects the manuscript."
+      },
+      {
+        label: "Watch for",
+        copy: "Unsupported assumptions, outdated references, and places where a fact changes story logic."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Research topic",
+        placeholder: "Example: 1890s harbor quarantine procedure"
+      },
+      summary: {
+        label: "Known fact",
+        placeholder: "Ships waited outside port until health officers cleared the manifest"
+      },
+      anchor: {
+        label: "Source or use",
+        placeholder: "Used in chapter seven during the plague inspection"
+      },
+      detail: {
+        label: "Open question",
+        placeholder: "Confirm whether private cargo could be inspected before passengers"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Source links, citations, expert contacts, or decisions made"
+      }
+    }
+  },
+  memoirPeople: {
+    label: "Memoir People",
+    singular: "person",
+    kicker: "Real people and boundaries",
+    description: "Track real people, composite characters, privacy boundaries, and emotional context.",
+    navCopy: "Family, friends, mentors, antagonists, composites, consent notes, and privacy concerns.",
+    emptyCopy: "Add people whose role, boundaries, or emotional context matters to the manuscript.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "Who they are, why they matter, and what boundary or truth needs care."
+      },
+      {
+        label: "Watch for",
+        copy: "Unclear consent, flattened complexity, avoidant scenes, and places where truth needs precision."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Person or composite",
+        placeholder: "Example: Aunt L."
+      },
+      summary: {
+        label: "Role in the story",
+        placeholder: "Caretaker, witness, and the first person to name what was happening"
+      },
+      anchor: {
+        label: "Boundary or sensitivity",
+        placeholder: "Use initials and avoid identifying workplace details"
+      },
+      detail: {
+        label: "Arc or emotional function",
+        placeholder: "Represents safety before becoming a source of complicated grief"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Consent, composites, privacy decisions, scene memories, or fact checks"
+      }
+    }
+  },
+  memories: {
+    label: "Memories",
+    singular: "memory",
+    kicker: "Lived moments",
+    description: "Track remembered moments, sensory anchors, emotional turns, and memoir scene seeds.",
+    navCopy: "Memoir scenes, sensory fragments, formative moments, flashbacks, and emotional evidence.",
+    emptyCopy: "Add memories that might become scenes or explain why an event still matters.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What happened, what you remember physically, and what changed afterward."
+      },
+      {
+        label: "Watch for",
+        copy: "Beautiful fragments that need context, missing causality, or memories carrying too much at once."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Memory",
+        placeholder: "Example: The blue kitchen after the storm"
+      },
+      summary: {
+        label: "What happened",
+        placeholder: "We waited by candlelight while the ceiling leaked into mixing bowls"
+      },
+      anchor: {
+        label: "Sensory anchor",
+        placeholder: "Wet plaster, metal bowls, and the smell of gas from the stove"
+      },
+      detail: {
+        label: "Why it matters",
+        placeholder: "The first time I understood adults could be afraid and still act calm"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Timeline, people present, emotional residue, or scenes it connects to"
+      }
+    }
+  },
+  objects: {
+    label: "Objects",
+    singular: "object",
+    kicker: "Meaningful things",
+    description: "Track objects, artifacts, documents, heirlooms, clues, and recurring symbols.",
+    navCopy: "Artifacts, props, letters, heirlooms, evidence, symbols, and objects with emotional weight.",
+    emptyCopy: "Add objects that carry meaning, trigger action, or need continuity tracking.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "What the object is, who controls it, and what meaning it gathers."
+      },
+      {
+        label: "Watch for",
+        copy: "Objects that vanish, change hands unclearly, or become symbolic without enough grounding."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Object",
+        placeholder: "Example: The cracked ivory compass"
+      },
+      summary: {
+        label: "Meaning or function",
+        placeholder: "A family heirloom that points toward debts instead of north"
+      },
+      anchor: {
+        label: "Who has it",
+        placeholder: "Mara steals it from Iven before the harbor escape"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Continuity, symbolism, chain of custody, or scenes where it appears"
+      }
+    }
+  },
+  questions: {
+    label: "Questions",
+    singular: "open question",
+    kicker: "Decisions to resolve",
+    description: "Track unresolved craft, continuity, research, and story logic questions.",
+    navCopy: "Open decisions, continuity questions, research unknowns, and revision puzzles.",
+    emptyCopy: "Add questions that should stay visible until the manuscript gives you an answer.",
+    prompts: [
+      {
+        label: "Capture",
+        copy: "The question, what depends on it, and what kind of answer would unlock progress."
+      },
+      {
+        label: "Watch for",
+        copy: "Questions that hide bigger structural issues or decisions you keep postponing."
+      }
+    ],
+    fields: {
+      title: {
+        label: "Question",
+        placeholder: "Example: Why does the council spare Iven?"
+      },
+      summary: {
+        label: "What depends on it",
+        placeholder: "Mara's midpoint choice and the credibility of the council's threat"
+      },
+      anchor: {
+        label: "Possible answer",
+        placeholder: "They need his bloodline to legitimize the vote"
+      },
+      notes: {
+        label: "Notes",
+        placeholder: "Options, risks, related scenes, or what to test in revision"
+      }
+    }
   }
 };
 
@@ -228,9 +756,46 @@ function plotSectionConfig(sectionId) {
   return PLOT_SECTION_CONFIG[sectionId] || PLOT_SECTION_CONFIG[PLOT_SECTION_IDS[0]];
 }
 
+function activePlotSectionIds(bundle) {
+  const activeSections = Array.isArray(bundle?.plot?.activeSections)
+    ? bundle.plot.activeSections
+    : DEFAULT_PLOT_SECTION_IDS;
+  const normalizedSections = [...new Set(activeSections)].filter((sectionId) => PLOT_SECTION_IDS.includes(sectionId));
+  return normalizedSections.length ? normalizedSections : [...DEFAULT_PLOT_SECTION_IDS];
+}
+
+function inactivePlotSectionIds(bundle) {
+  const activeSections = activePlotSectionIds(bundle);
+  return PLOT_SECTION_IDS.filter((sectionId) => !activeSections.includes(sectionId));
+}
+
+function plotArchivedSectionIds(bundle) {
+  return inactivePlotSectionIds(bundle).filter((sectionId) => plotEntriesForSection(bundle, sectionId).length > 0);
+}
+
+const PLOT_TAB_PICKER_GROUPS = [
+  {
+    label: "Story Core",
+    sectionIds: ["characters", "relationships", "premise", "themes", "plotThreads", "scenes"]
+  },
+  {
+    label: "World",
+    sectionIds: ["locations", "worldRules", "history", "mythology", "cultures", "objects"]
+  },
+  {
+    label: "Systems and Reference",
+    sectionIds: ["glossary", "timeline", "magicSystems", "technology", "research", "questions"]
+  },
+  {
+    label: "Memoir",
+    sectionIds: ["memoirPeople", "memories"]
+  }
+];
+
 function currentPlotSectionId(bundle) {
   const sectionId = bundle?.plot?.activeSection;
-  return PLOT_SECTION_IDS.includes(sectionId) ? sectionId : PLOT_SECTION_IDS[0];
+  const activeSections = activePlotSectionIds(bundle);
+  return activeSections.includes(sectionId) ? sectionId : activeSections[0];
 }
 
 function plotEntriesForSection(bundle, sectionId) {
@@ -246,8 +811,10 @@ function renderPlotDashboard(bundle) {
   }
 
   const activeSectionId = currentPlotSectionId(bundle);
+  const activeSectionIds = activePlotSectionIds(bundle);
   const activeSection = plotSectionConfig(activeSectionId);
   const activeEntries = plotEntriesForSection(bundle, activeSectionId);
+  const inactiveSectionIds = inactivePlotSectionIds(bundle);
 
   view.innerHTML = `
     <section class="stack">
@@ -257,7 +824,19 @@ function renderPlotDashboard(bundle) {
             <h3>Story Categories</h3>
           </div>
           <div class="plot-section-nav" role="group" aria-label="Story categories">
-            ${PLOT_SECTION_IDS.map((sectionId) => renderPlotSectionTab(bundle, sectionId, activeSectionId)).join("")}
+            <button
+              class="plot-add-tab-btn"
+              id="open-plot-tab-modal-btn"
+              type="button"
+              aria-label="Add Story tab"
+              ${inactiveSectionIds.length ? "" : "disabled"}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </button>
+            ${activeSectionIds.map((sectionId) => renderPlotSectionTab(bundle, sectionId, activeSectionId)).join("")}
           </div>
         </div>
 
@@ -279,6 +858,20 @@ function renderPlotDashboard(bundle) {
                 <p>${activeSection.emptyCopy}</p>
               </div>
             `}
+          </div>
+          <div class="plot-section-utility">
+            <button class="plot-remove-tab-link" id="remove-active-plot-section-btn" type="button" ${activeSectionIds.length <= 1 ? "disabled" : ""} title="Content stays saved if this tab is added back later">
+              <span class="sidebar-action-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M5 7h14"></path>
+                  <path d="M9 7V4h6v3"></path>
+                  <path d="M8 7l1 12h6l1-12"></path>
+                  <path d="M10 11v5"></path>
+                  <path d="M14 11v5"></path>
+                </svg>
+              </span>
+              <span>Remove tab</span>
+            </button>
           </div>
         </section>
       </section>
@@ -351,12 +944,26 @@ function renderPlotEntryField(field, value, className = "") {
 function bindPlotDashboardEvents(bundle) {
   const activeSectionId = currentPlotSectionId(bundle);
   const openButtons = [document.getElementById("add-active-plot-entry-btn")].filter(Boolean);
+  const openTabModalButton = document.getElementById("open-plot-tab-modal-btn");
+  const removeSectionButton = document.getElementById("remove-active-plot-section-btn");
 
   openButtons.forEach((button) => {
     button.onclick = () => {
       openPlotEntryModal(activeSectionId);
     };
   });
+
+  if (openTabModalButton) {
+    openTabModalButton.onclick = () => {
+      openPlotTabModal();
+    };
+  }
+
+  if (removeSectionButton) {
+    removeSectionButton.onclick = () => {
+      removePlotSection(activeSectionId);
+    };
+  }
 
   document.querySelectorAll("[data-plot-section]").forEach((button) => {
     button.onclick = () => {
@@ -400,6 +1007,193 @@ function bindPlotDashboardEvents(bundle) {
   });
 
   bindPlotEntryModal();
+  bindPlotTabModal();
+}
+
+function selectedPlotTabIds() {
+  return Array.from(document.querySelectorAll("[data-plot-tab-choice].is-selected"))
+    .map((button) => button.dataset.plotTabChoice)
+    .filter(Boolean);
+}
+
+function renderPlotTabChoices(bundle) {
+  const inactiveSectionIds = inactivePlotSectionIds(bundle);
+  if (!inactiveSectionIds.length) {
+    return `<p class="plot-tab-picker-empty">All Story tabs are active.</p>`;
+  }
+  const inactiveSectionSet = new Set(inactiveSectionIds);
+  const orderedSectionIds = PLOT_TAB_PICKER_GROUPS.flatMap((group) => group.sectionIds)
+    .filter((sectionId) => inactiveSectionSet.has(sectionId));
+  const remainingSectionIds = inactiveSectionIds.filter((sectionId) => !orderedSectionIds.includes(sectionId));
+  return [...orderedSectionIds, ...remainingSectionIds]
+    .map((sectionId) => renderPlotTabChoice(bundle, sectionId))
+    .join("");
+}
+
+function renderPlotTabChoice(bundle, sectionId) {
+  const config = plotSectionConfig(sectionId);
+  return `
+    <button
+      class="plot-tab-choice"
+      type="button"
+      data-plot-tab-choice="${escapeAttr(sectionId)}"
+      aria-pressed="false"
+    >
+      <span>${escapeHtml(config.label)}</span>
+    </button>
+  `;
+}
+
+function syncPlotTabModalState() {
+  const bundle = currentBundle();
+  const copy = document.getElementById("plot-tab-saved-copy");
+  const submitButton = document.getElementById("plot-tab-submit-btn");
+  if (!bundle || !copy || !submitButton) return;
+  const sectionIds = selectedPlotTabIds();
+  submitButton.disabled = !sectionIds.length;
+  if (!sectionIds.length) {
+    const inactiveCount = inactivePlotSectionIds(bundle).length;
+    const archivedSectionCount = plotArchivedSectionIds(bundle).length;
+    if (!inactiveCount) {
+      copy.textContent = "All Story tabs are already active.";
+      return;
+    }
+    copy.textContent = archivedSectionCount
+      ? `${formatNumber(archivedSectionCount)} hidden ${archivedSectionCount === 1 ? "tab has" : "tabs have"} saved content.`
+      : "Pick one or more tabs to add them to the Story workspace.";
+    return;
+  }
+  const savedEntryCount = sectionIds.reduce((total, sectionId) => total + plotEntriesForSection(bundle, sectionId).length, 0);
+  if (savedEntryCount) {
+    copy.textContent = `${formatNumber(savedEntryCount)} saved ${savedEntryCount === 1 ? "entry" : "entries"} will return across ${formatNumber(sectionIds.length)} selected ${sectionIds.length === 1 ? "tab" : "tabs"}.`;
+    return;
+  }
+  if (sectionIds.length === 1) {
+    copy.textContent = plotSectionConfig(sectionIds[0]).navCopy;
+    return;
+  }
+  copy.textContent = `${formatNumber(sectionIds.length)} Story tabs selected. Add them together when you're ready.`;
+}
+
+function bindPlotTabChoices() {
+  document.querySelectorAll("[data-plot-tab-choice]").forEach((button) => {
+    button.onclick = () => {
+      const isSelected = !button.classList.contains("is-selected");
+      button.classList.toggle("is-selected", isSelected);
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      syncPlotTabModalState();
+    };
+  });
+}
+
+function openPlotTabModal() {
+  const bundle = currentBundle();
+  const modal = document.getElementById("plot-tab-modal");
+  const form = document.getElementById("plot-tab-form");
+  const picker = document.getElementById("plot-tab-picker");
+  if (!bundle || !modal || !form || !picker) return;
+  form.reset();
+  picker.innerHTML = renderPlotTabChoices(bundle);
+  bindPlotTabChoices();
+  document.getElementById("plot-tab-submit-btn").disabled = true;
+  syncPlotTabModalState();
+  modal.classList.remove("hidden");
+}
+
+function closePlotTabModal() {
+  const modal = document.getElementById("plot-tab-modal");
+  const form = document.getElementById("plot-tab-form");
+  form?.reset();
+  modal?.classList.add("hidden");
+}
+
+function bindPlotTabModal() {
+  const modal = document.getElementById("plot-tab-modal");
+  const closeButton = document.getElementById("close-plot-tab-modal-btn");
+  const form = document.getElementById("plot-tab-form");
+
+  if (closeButton) {
+    closeButton.onclick = () => {
+      closePlotTabModal();
+    };
+  }
+  if (modal) {
+    modal.onclick = (event) => {
+      if (event.target === modal) closePlotTabModal();
+    };
+  }
+  if (form) {
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      const sectionIds = selectedPlotTabIds();
+      if (!sectionIds.length) {
+        syncPlotTabModalState();
+        return;
+      }
+      closePlotTabModal();
+      addPlotSections(sectionIds);
+    };
+  }
+}
+
+function addPlotSection(sectionId) {
+  addPlotSections([sectionId]);
+}
+
+function addPlotSections(sectionIds) {
+  const validSectionIds = [...new Set(sectionIds)].filter((sectionId) => PLOT_SECTION_IDS.includes(sectionId));
+  if (!validSectionIds.length) return;
+  const finalSectionId = validSectionIds[validSectionIds.length - 1];
+  updateCurrentBundle((projectBundle) => {
+    const activeSections = activePlotSectionIds(projectBundle);
+    const nextActiveSections = [
+      ...activeSections,
+      ...validSectionIds.filter((sectionId) => !activeSections.includes(sectionId))
+    ];
+    const nextSections = { ...projectBundle.plot.sections };
+    validSectionIds.forEach((sectionId) => {
+      nextSections[sectionId] = projectBundle.plot.sections?.[sectionId] || [];
+    });
+    return {
+      ...projectBundle,
+      plot: {
+        ...projectBundle.plot,
+        activeSection: finalSectionId,
+        activeSections: nextActiveSections,
+        sections: nextSections
+      }
+    };
+  });
+  persistAndRender();
+  if (validSectionIds.length === 1) {
+    const config = plotSectionConfig(validSectionIds[0]);
+    showToast(`${config.label} added`, `That Story tab is active again. Any saved ${config.singular} entries are still here.`);
+    return;
+  }
+  showToast(`${formatNumber(validSectionIds.length)} tabs added`, "Those Story tabs are active again. Any saved entries are still here.");
+}
+
+function removePlotSection(sectionId) {
+  const bundle = currentBundle();
+  const activeSections = activePlotSectionIds(bundle);
+  if (activeSections.length <= 1) {
+    showToast("Keep one Story tab", "The Story workspace needs at least one active category.");
+    return;
+  }
+  if (!activeSections.includes(sectionId)) return;
+  const config = plotSectionConfig(sectionId);
+  const nextActiveSections = activeSections.filter((activeSectionId) => activeSectionId !== sectionId);
+  const nextActiveSection = nextActiveSections[0];
+  updateCurrentBundle((projectBundle) => ({
+    ...projectBundle,
+    plot: {
+      ...projectBundle.plot,
+      activeSection: nextActiveSection,
+      activeSections: nextActiveSections
+    }
+  }));
+  persistAndRender();
+  showToast(`${config.label} hidden`, `This tab was removed from view, but its content stays saved and will return if you add it back.`);
 }
 
 function bindPlotEntryModal() {

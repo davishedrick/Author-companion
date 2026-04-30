@@ -5,10 +5,10 @@ let pendingCompletedEditSession = null;
 let editSessionTimerHandle = null;
 let editIssueFilters = createDefaultEditIssueFilters();
 let editIssueBoardView = "current";
+let editSessionGlobalActionsBound = false;
 
 function createDefaultEditIssueFilters() {
   return {
-    passScope: "current",
     priority: "all",
     type: "all",
     section: "all",
@@ -20,12 +20,10 @@ function normalizeEditIssueFilters(filters, options = {}) {
   const defaults = createDefaultEditIssueFilters();
   const types = Array.isArray(options.types) ? options.types : [];
   const sections = Array.isArray(options.sections) ? options.sections : [];
-  const allowedScopes = ["current", "all"];
   const allowedPriorities = ["all", "High", "Medium", "Low"];
   const allowedSorts = ["priority", "newest", "oldest", "section", "type"];
 
   return {
-    passScope: allowedScopes.includes(filters?.passScope) ? filters.passScope : defaults.passScope,
     priority: allowedPriorities.includes(filters?.priority) ? filters.priority : defaults.priority,
     type: types.includes(filters?.type) ? filters.type : defaults.type,
     section: sections.includes(filters?.section) ? filters.section : defaults.section,
@@ -42,11 +40,6 @@ function getEditIssueFilterOptions(issues) {
   };
 }
 
-function scopeMatchesEditPass(itemPassName, currentPassName, scope = "current") {
-  if (scope === "all") return true;
-  return !itemPassName || itemPassName === currentPassName;
-}
-
 function compareEditIssuesByPriority(a, b) {
   const priorityRank = { High: 0, Medium: 1, Low: 2 };
   const statusRank = { Open: 0, Deferred: 1 };
@@ -58,12 +51,10 @@ function compareEditIssuesByPriority(a, b) {
 }
 
 function getFilteredEditIssues(bundle, issues, filters) {
-  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
   const normalizedFilters = normalizeEditIssueFilters(filters, getEditIssueFilterOptions(issues));
 
   return [...issues]
     .filter((issue) => issue.status !== "Resolved")
-    .filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, normalizedFilters.passScope))
     .filter((issue) => normalizedFilters.priority === "all" || issue.priority === normalizedFilters.priority)
     .filter((issue) => normalizedFilters.type === "all" || issue.type === normalizedFilters.type)
     .filter((issue) => normalizedFilters.section === "all" || issue.sectionLabel === normalizedFilters.section)
@@ -82,8 +73,7 @@ function getFilteredEditIssues(bundle, issues, filters) {
     });
 }
 
-function buildEditSectionHotspots(bundle, scope = "current") {
-  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
+function buildEditSectionHotspots(bundle) {
   const hotspots = new Map();
 
   function getSectionEntry(sectionLabel) {
@@ -114,7 +104,6 @@ function buildEditSectionHotspots(bundle, scope = "current") {
   }
 
   bundle.issues
-    .filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, scope))
     .forEach((issue) => {
       const entry = getSectionEntry(issue.sectionLabel);
       if (!entry) return;
@@ -125,7 +114,6 @@ function buildEditSectionHotspots(bundle, scope = "current") {
     });
 
   getEditSessions(bundle)
-    .filter((session) => scopeMatchesEditPass(session.passName, currentPassName, scope))
     .forEach((session) => {
       const entry = getSectionEntry(session.sectionLabel);
       if (!entry) return;
@@ -195,7 +183,7 @@ function scoreEditIssueRecommendation(issue, signals, lens = "urgent") {
 
 function describeEditRecommendationReason(issue, signals, lens = "urgent", unitLabel = "section") {
   const unitLower = unitLabel.toLowerCase();
-  const reasonParts = [`${issue.priority} priority in the current pass`];
+  const reasonParts = [`${issue.priority} priority issue`];
 
   if (signals.unresolvedInSection >= 2) {
     reasonParts.push(`${formatNumber(signals.unresolvedInSection)} unresolved issues sit in ${issue.sectionLabel || `this ${unitLower}`}`);
@@ -239,8 +227,8 @@ function buildEditIssueRecommendation(issue, signals, lens = "urgent", unitLabel
       ? `Use ${issue.sectionLabel} as a contained cleanup target.`
       : `This issue is a strong candidate for clearing something old off the board.`,
     primary: issue.sectionLabel
-      ? `Start with ${issue.sectionLabel} so the highest-value issue in the current pass is handled first.`
-      : `Start here because it is the strongest unresolved issue in the current pass.`
+      ? `Start with ${issue.sectionLabel} so the highest-value issue there is handled first.`
+      : "Start here because it is the strongest unresolved issue on the board."
   };
 
   return {
@@ -263,35 +251,14 @@ function buildEditIssueRecommendation(issue, signals, lens = "urgent", unitLabel
 }
 
 function buildFallbackEditRecommendation(bundle, editStats) {
-  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
   const unitLower = getStructureUnitLower(bundle);
-  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
-  const sectionsRemaining = Math.max(number(bundle.editing.progressTotal) - number(bundle.editing.progressCurrent), 0);
-
-  if (sectionsRemaining > 0) {
-    return {
-      label: "Keep the pass moving",
-      title: "Start a fresh pass session",
-      description: `${formatNumber(sectionsRemaining)} ${sectionsRemaining === 1 ? unitLower : unitPluralLower} remain in this pass. A fresh timed session is the fastest way to keep momentum from drifting.`,
-      reason: `${formatNumber(bundle.editing.progressCurrent)} of ${formatNumber(bundle.editing.progressTotal)} ${unitPluralLower} are marked complete, and there are no current issues steering the next move right now.`,
-      badges: [
-        `${formatNumber(bundle.editing.progressCurrent)} / ${formatNumber(bundle.editing.progressTotal)} ${unitPluralLower} reviewed`,
-        `${formatHours(editStats.currentPassMinutes)} in this pass`,
-        bundle.editing.passStatus || "In progress"
-      ],
-      primaryAction: "start-session",
-      primaryLabel: "Start editing session",
-      secondaryAction: "change-pass",
-      secondaryLabel: "Adjust pass"
-    };
-  }
 
   if (editStats.lastSession?.sectionLabel) {
     return {
       label: "Best next move",
       title: `Pick up from ${editStats.lastSession.sectionLabel}`,
-      description: `That was the most recently edited ${unitLower}. Use it as the handoff point for your next cleanup or polish pass.`,
-      reason: `There are no open issues in the current pass, so the recommendation falls back to your most recent editing context from ${formatDate(editStats.lastSession.date)}.`,
+      description: `That was the most recently edited ${unitLower}. Use it as the handoff point for your next revision session.`,
+      reason: `There are no open issues on the board, so the recommendation falls back to your most recent editing context from ${formatDate(editStats.lastSession.date)}.`,
       badges: [
         formatDate(editStats.lastSession.date),
         `${formatNumber(editStats.sessionCount)} editing session${editStats.sessionCount === 1 ? "" : "s"} logged`,
@@ -308,12 +275,8 @@ function buildFallbackEditRecommendation(bundle, editStats) {
     label: "Best next move",
     title: "Create the first revision anchor",
     description: "Start by logging an issue or a timed editing session so the Edit workspace can begin steering what needs attention next.",
-    reason: `Priority-led recommendations need at least one current-pass issue. Until then, the safest suggestion is to start logging what you find.`,
-    badges: [
-      currentPassName,
-      bundle.editing.passStatus || "Not started",
-      "No edit history yet"
-    ],
+    reason: "Priority-led recommendations need at least one issue on the board. Until then, the safest suggestion is to start logging what you find.",
+    badges: ["No edit history yet"],
     primaryAction: "add-issue",
     primaryLabel: "Add issue",
     secondaryAction: "start-session",
@@ -322,21 +285,20 @@ function buildFallbackEditRecommendation(bundle, editStats) {
 }
 
 function deriveEditFocusRecommendations(bundle, unresolvedIssues, hotspots, editStats) {
-  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
-  const currentPassIssues = unresolvedIssues.filter((issue) => scopeMatchesEditPass(issue.passName, currentPassName, "current"));
+  const activeFocusIssues = [...unresolvedIssues];
 
-  if (!currentPassIssues.length) {
+  if (!activeFocusIssues.length) {
     return [buildFallbackEditRecommendation(bundle, editStats)];
   }
 
-  const signalsById = new Map(currentPassIssues.map((issue) => [issue.id, getEditIssueRecommendationSignals(issue, hotspots, editStats)]));
-  const rankIssues = (lens) => [...currentPassIssues].sort((a, b) => {
+  const signalsById = new Map(activeFocusIssues.map((issue) => [issue.id, getEditIssueRecommendationSignals(issue, hotspots, editStats)]));
+  const rankIssues = (lens) => [...activeFocusIssues].sort((a, b) => {
     const scoreDelta = scoreEditIssueRecommendation(b, signalsById.get(b.id), lens) - scoreEditIssueRecommendation(a, signalsById.get(a.id), lens);
     if (scoreDelta !== 0) return scoreDelta;
     return compareEditIssuesByPriority(a, b);
   });
 
-  const orderedCandidates = currentPassIssues.length <= 2
+  const orderedCandidates = activeFocusIssues.length <= 2
     ? [{ lens: "primary", issues: rankIssues("urgent") }]
     : [
         { lens: "urgent", issues: rankIssues("urgent") },
@@ -355,7 +317,7 @@ function deriveEditFocusRecommendations(bundle, unresolvedIssues, hotspots, edit
     recommendations.push(buildEditIssueRecommendation(nextIssue, signalsById.get(nextIssue.id), lens, unitLabel));
   });
 
-  if (currentPassIssues.length > 2 && recommendations.length < 3) {
+  if (activeFocusIssues.length > 2 && recommendations.length < 3) {
     rankIssues("urgent").forEach((issue) => {
       if (recommendations.length >= 3 || usedIssueIds.has(issue.id)) return;
       usedIssueIds.add(issue.id);
@@ -368,34 +330,14 @@ function deriveEditFocusRecommendations(bundle, unresolvedIssues, hotspots, edit
 
 function describeEditIssueFilterSummary(issues, filters) {
   if (!issues.length) return "No unresolved issues match these filters right now.";
-  const scopeLabel = filters.passScope === "all" ? "across all passes" : "in the current pass";
   const extraFilters = [filters.priority, filters.type, filters.section].filter((value) => value && value !== "all");
-  return `${formatNumber(issues.length)} unresolved issue${issues.length === 1 ? "" : "s"} ${scopeLabel}${extraFilters.length ? ` filtered by ${extraFilters.join(", ")}` : ""}.`;
-}
-
-function getCurrentPassUnresolvedIssueCount(bundle) {
-  if (!bundle) return 0;
-  const currentPassName = bundle.editing.passName || defaultPassName(bundle.editing.passStage);
-  return bundle.issues.filter((issue) => issue.status !== "Resolved" && scopeMatchesEditPass(issue.passName, currentPassName, "current")).length;
+  return `${formatNumber(issues.length)} unresolved issue${issues.length === 1 ? "" : "s"}${extraFilters.length ? ` filtered by ${extraFilters.join(", ")}` : ""}.`;
 }
 
 function compareResolvedEditIssues(a, b) {
   const dateDelta = new Date(b.resolvedAt || b.createdAt || 0) - new Date(a.resolvedAt || a.createdAt || 0);
   if (dateDelta !== 0) return dateDelta;
   return String(a.title || "").localeCompare(String(b.title || ""));
-}
-
-function getEditPassNameOptions(bundle) {
-  const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
-  return [...new Set([
-    currentPassName,
-    ...(bundle?.issues || []).map((issue) => String(issue.passName || "").trim()),
-    ...(bundle?.sessions || []).map((session) => String(session.passName || "").trim())
-  ].filter(Boolean))].sort((a, b) => {
-    if (a === currentPassName) return -1;
-    if (b === currentPassName) return 1;
-    return a.localeCompare(b);
-  });
 }
 
 function getEditIssueSectionOptions(bundle) {
@@ -417,55 +359,404 @@ function getEditIssueSectionOptions(bundle) {
   });
 }
 
-function getEditIssuePassLabel(passKey = "developmental") {
-  return EDIT2_PASS_CONFIG[passKey]?.label || EDIT2_PASS_CONFIG.developmental.label;
+function getEditIssueDefaultPriority() {
+  return "Medium";
 }
 
-function getEditIssueDefaultPriority(passKey = "developmental") {
-  return EDIT2_PASS_CONFIG[passKey]?.defaultPriority || "Medium";
+const ISSUE_TITLE_WORD_LIMIT = 8;
+const ISSUE_SECTION_UNIT_WORD_PATTERN = "zero|one|two|three|four|five|six|seven|eight|nine";
+const ISSUE_SECTION_TEEN_WORD_PATTERN = "ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen";
+const ISSUE_SECTION_TENS_WORD_PATTERN = "twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety";
+const ISSUE_SECTION_WORD_PATTERN = `(?:${ISSUE_SECTION_UNIT_WORD_PATTERN}|${ISSUE_SECTION_TEEN_WORD_PATTERN}|${ISSUE_SECTION_TENS_WORD_PATTERN})(?:[-\\s](?:one|two|three|four|five|six|seven|eight|nine))?`;
+const ISSUE_SECTION_REGEX = new RegExp(`(chapter|scene|section)\\s+(?:\\d+|${ISSUE_SECTION_WORD_PATTERN})\\b`, "i");
+const ISSUE_SECTION_NUMBER_WORDS = {
+  zero: 0,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
+  twenty: 20,
+  thirty: 30,
+  forty: 40,
+  fifty: 50,
+  sixty: 60,
+  seventy: 70,
+  eighty: 80,
+  ninety: 90
+};
+const ISSUE_TYPE_RULES = [
+  { type: "Dialogue", keywords: ["dialogue", "conversation", "line"] },
+  { type: "Pacing", keywords: ["slow", "fast", "drag", "rush"] },
+  { type: "Clarity", keywords: ["confusing", "unclear", "hard to follow"] },
+  { type: "Character", keywords: ["motivation", "arc", "character"] },
+  { type: "Grammar", keywords: ["grammar", "typo", "spelling"] }
+];
+const ISSUE_HIGH_PRIORITY_KEYWORDS = ["major", "critical", "big"];
+const ISSUE_COMPLETION_RULE = /\b(fixed|resolve(?:d|s)?|finish(?:ed|es)?|complet(?:e|ed|es)|done|address(?:ed|es)|clarif(?:y|ied|ies)|tighten(?:ed|s)?|rewrote|rewrite|rework(?:ed|s)?|clean(?:ed)? up|cleaned|correct(?:ed|s)?|polish(?:ed|es)?|trim(?:med|s)?|cut|smoothed|improv(?:ed|es))\b/i;
+const ISSUE_PARTIAL_PROGRESS_RULE = /\b(start(?:ed|ing)?|begin|began|continu(?:e|ed|ing)|next|later|todo|to do|still|partial|blocked|need(?:ed|s)?|remaining|left)\b/i;
+const ISSUE_TEXT_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "been",
+  "being",
+  "but",
+  "by",
+  "for",
+  "from",
+  "had",
+  "has",
+  "have",
+  "i",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "their",
+  "them",
+  "there",
+  "this",
+  "those",
+  "to",
+  "was",
+  "were",
+  "with"
+]);
+const ISSUE_TYPE_MATCH_KEYWORDS = {
+  Dialogue: ["dialogue", "conversation", "line", "lines"],
+  Pacing: ["pacing", "slow", "fast", "drag", "drags", "dragging", "rush", "rushed"],
+  Clarity: ["clarity", "clear", "clarified", "clarify", "confusing", "unclear"],
+  Character: ["character", "motivation", "arc"],
+  Grammar: ["grammar", "typo", "proof", "proofread", "proofreading"],
+  Continuity: ["continuity", "consistency"],
+  Prose: ["prose", "sentence", "sentences"],
+  Research: ["research", "fact", "facts"],
+  "Scene logic": ["scene", "logic"],
+  General: []
+};
+
+function normalizeIssueNoteText(note = "") {
+  return String(note || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeIssueComparisonText(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function tokenizeIssueComparisonText(value = "", options = {}) {
+  const allowShort = options.allowShort === true;
+  return normalizeIssueComparisonText(value)
+    .split(" ")
+    .filter((token) => token)
+    .filter((token) => allowShort || token.length >= 3 || /^\d+$/.test(token))
+    .filter((token) => !ISSUE_TEXT_STOP_WORDS.has(token));
+}
+
+function issueTextIncludesKeyword(text = "", keyword = "") {
+  const normalizedText = normalizeIssueComparisonText(text);
+  const normalizedKeyword = normalizeIssueComparisonText(keyword);
+  if (!normalizedText || !normalizedKeyword) return false;
+  return new RegExp(`(^|\\s)${normalizedKeyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\s|$)`).test(normalizedText);
+}
+
+function deriveIssueTitleFromNote(note = "") {
+  const normalizedNote = normalizeIssueNoteText(note);
+  if (!normalizedNote) return "Untitled issue";
+  const words = normalizedNote.split(" ").filter(Boolean);
+  return words.slice(0, Math.min(ISSUE_TITLE_WORD_LIMIT, words.length)).join(" ");
+}
+
+function parseIssueSectionNumber(value = "") {
+  const normalizedValue = normalizeIssueNoteText(value);
+  if (/^\d+$/.test(normalizedValue)) return normalizedValue;
+
+  const wordTokens = normalizeIssueComparisonText(normalizedValue)
+    .split(" ")
+    .filter(Boolean);
+  if (!wordTokens.length) return normalizedValue;
+  if (!wordTokens.every((token) => Object.prototype.hasOwnProperty.call(ISSUE_SECTION_NUMBER_WORDS, token))) {
+    return normalizedValue;
+  }
+  return String(wordTokens.reduce((total, token) => total + ISSUE_SECTION_NUMBER_WORDS[token], 0));
+}
+
+function formatDerivedIssueSection(match = "") {
+  const normalizedMatch = String(match || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sectionParts = normalizedMatch.match(/^(chapter|scene|section)\s+(.+)$/i);
+  if (!sectionParts) return normalizedMatch;
+  const sectionType = sectionParts[1].charAt(0).toUpperCase() + sectionParts[1].slice(1).toLowerCase();
+  return `${sectionType} ${parseIssueSectionNumber(sectionParts[2])}`;
+}
+
+function getLastActiveIssueSectionLabel(bundle = currentBundle()) {
+  const currentChapterLabel = getCurrentEdit2ChapterLabel(bundle);
+  if (currentChapterLabel) return currentChapterLabel;
+  const pendingSnapshot = getPendingSessionSnapshotContext();
+  if (pendingSnapshot?.structureUnitName) return pendingSnapshot.structureUnitName;
+  const lastSessionLabel = getEditStats(bundle).lastSession?.sectionLabel || "";
+  return String(lastSessionLabel || "").trim();
+}
+
+function getIssueCreationContext(context = currentBundle()) {
+  if (context?.bundle) {
+    return {
+      bundle: context.bundle,
+      lastActiveSection: String(context.lastActiveSection || "").trim(),
+      timestamp: context.timestamp || "",
+      focusKey: context.focusKey || context.bundle?.editing?.focusKey || "revision",
+      snippet: String(context.snippet || "")
+    };
+  }
+  return {
+    bundle: context || currentBundle(),
+    lastActiveSection: "",
+    timestamp: "",
+    focusKey: context?.editing?.focusKey || "revision",
+    snippet: String(context?.snippet || "")
+  };
+}
+
+function deriveIssueSectionFromNote(note = "", bundle = currentBundle()) {
+  const issueContext = getIssueCreationContext(bundle);
+  const matchedSection = String(note || "").match(ISSUE_SECTION_REGEX);
+  if (matchedSection?.[0]) return formatDerivedIssueSection(matchedSection[0]);
+  const lastActiveSection = issueContext.lastActiveSection || getLastActiveIssueSectionLabel(issueContext.bundle);
+  return normalizeChapterLabel(lastActiveSection || "Unassigned");
+}
+
+function deriveIssueTypeFromNote(note = "") {
+  const normalizedNote = normalizeIssueNoteText(note).toLowerCase();
+  const matchedRule = ISSUE_TYPE_RULES.find((rule) => rule.keywords.some((keyword) => normalizedNote.includes(keyword)));
+  return matchedRule?.type || "General";
+}
+
+function deriveIssuePriorityFromNote(note = "") {
+  const normalizedNote = normalizeIssueNoteText(note).toLowerCase();
+  return ISSUE_HIGH_PRIORITY_KEYWORDS.some((keyword) => normalizedNote.includes(keyword)) ? "High" : "Medium";
+}
+
+function deriveIssueFieldsFromNote(note = "", bundle = currentBundle()) {
+  const rawNote = String(note || "");
+  return {
+    title: deriveIssueTitleFromNote(rawNote),
+    sectionLabel: deriveIssueSectionFromNote(rawNote, bundle),
+    type: deriveIssueTypeFromNote(rawNote),
+    priority: deriveIssuePriorityFromNote(rawNote),
+    notes: rawNote
+  };
+}
+
+function createIssueFromNote(note = "", context = {}) {
+  const issueContext = getIssueCreationContext(context);
+  const derivedIssue = deriveIssueFieldsFromNote(note, issueContext);
+  return normalizeIssue({
+    id: context.id || createId(),
+    title: derivedIssue.title,
+    type: derivedIssue.type,
+    priority: derivedIssue.priority,
+    sectionLabel: derivedIssue.sectionLabel,
+    notes: derivedIssue.notes,
+    snippet: issueContext.snippet || "",
+    createdAt: context.timestamp || new Date().toISOString(),
+    status: "Open",
+    focusKey: issueContext.focusKey || "revision",
+    passName: "",
+    workflowStatus: "open",
+    textLocation: String(context.textLocation || "")
+  });
+}
+
+function formatIssueDraftPreview(note = "", bundle = currentBundle()) {
+  const normalizedNote = normalizeIssueNoteText(note);
+  if (!normalizedNote) return "";
+  const derivedIssue = deriveIssueFieldsFromNote(normalizedNote, bundle);
+  return `Will file under ${derivedIssue.sectionLabel} | ${derivedIssue.type} | ${derivedIssue.priority} priority.`;
+}
+
+function syncIssueDraftPreview(note = "", bundle = currentBundle()) {
+  const preview = document.getElementById("issue-derived-preview");
+  const form = document.getElementById("issue-form");
+  if (!preview || !form) return;
+
+  if (form.dataset.mode === "edit") {
+    preview.textContent = "";
+    preview.classList.add("hidden");
+    return;
+  }
+
+  const previewCopy = formatIssueDraftPreview(note, bundle);
+  preview.textContent = previewCopy;
+  preview.classList.toggle("hidden", !previewCopy);
+}
+
+function getIssueMatchKeywords(issue = {}) {
+  return tokenizeIssueComparisonText([
+    issue.title || "",
+    issue.notes || "",
+    issue.type || ""
+  ].join(" "));
+}
+
+function getIssueTypeMatchKeywordList(issueType = "General") {
+  const mappedKeywords = ISSUE_TYPE_MATCH_KEYWORDS[String(issueType || "General")] || [];
+  return [...new Set([
+    ...mappedKeywords,
+    ...tokenizeIssueComparisonText(issueType, { allowShort: true })
+  ])];
+}
+
+function scoreIssueMatchAgainstText(text = "", issue = {}, context = {}) {
+  const normalizedText = normalizeIssueComparisonText(text);
+  const textKeywords = new Set(tokenizeIssueComparisonText(text, { allowShort: true }));
+  const issueKeywords = getIssueMatchKeywords(issue);
+  const overlapCount = issueKeywords.filter((keyword) => textKeywords.has(keyword)).length;
+  const sectionBonus = issue.sectionLabel && normalizeIssueComparisonText(issue.sectionLabel)
+    && normalizedText.includes(normalizeIssueComparisonText(issue.sectionLabel))
+    ? 1
+    : 0;
+  const typeBonus = getIssueTypeMatchKeywordList(issue.type).some((keyword) => textKeywords.has(keyword)) ? 1 : 0;
+  const titlePhrase = normalizeIssueComparisonText(issue.title || "");
+  const titleBonus = titlePhrase && titlePhrase.length > 8 && normalizedText.includes(titlePhrase) ? 2 : 0;
+  const selectedBonus = Array.isArray(context.selectedIssueIds) && context.selectedIssueIds.includes(issue.id) ? 1 : 0;
+
+  return overlapCount + sectionBonus + typeBonus + titleBonus + selectedBonus;
+}
+
+function shouldAutoResolveFromAccomplished(accomplished = "", outcomeStatus = "partial") {
+  const normalizedAccomplished = normalizeIssueNoteText(accomplished);
+  if (!normalizedAccomplished) return false;
+  if (String(outcomeStatus || "").toLowerCase() === "blocked") return false;
+  const hasCompletionCue = ISSUE_COMPLETION_RULE.test(normalizedAccomplished) || String(outcomeStatus || "").toLowerCase() === "completed";
+  const onlyPartialCue = ISSUE_PARTIAL_PROGRESS_RULE.test(normalizedAccomplished) && !ISSUE_COMPLETION_RULE.test(normalizedAccomplished);
+  return hasCompletionCue && !onlyPartialCue;
+}
+
+function getAutoResolvedIssueIdsFromSession(accomplished = "", issues = [], context = {}) {
+  if (!shouldAutoResolveFromAccomplished(accomplished, context.outcomeStatus)) return [];
+  return issues
+    .filter((issue) => issue.status !== "Resolved")
+    .filter((issue) => {
+      const score = scoreIssueMatchAgainstText(accomplished, issue, context);
+      if (Array.isArray(context.selectedIssueIds) && context.selectedIssueIds.includes(issue.id)) {
+        return score >= 1;
+      }
+      return score >= 2;
+    })
+    .map((issue) => issue.id);
+}
+
+function findExistingIssueForNote(note = "", issues = [], context = {}) {
+  const normalizedNote = normalizeIssueNoteText(note);
+  if (!normalizedNote) return null;
+
+  const derivedIssue = deriveIssueFieldsFromNote(normalizedNote, context);
+  const normalizedDerivedTitle = normalizeIssueComparisonText(derivedIssue.title);
+  const normalizedDerivedNote = normalizeIssueComparisonText(normalizedNote);
+  const derivedKeywords = new Set(tokenizeIssueComparisonText(normalizedNote, { allowShort: true }));
+
+  return issues.find((issue) => {
+    const normalizedIssueTitle = normalizeIssueComparisonText(issue.title || "");
+    const normalizedIssueNote = normalizeIssueComparisonText(issue.notes || "");
+    if (normalizedDerivedNote && (normalizedDerivedNote === normalizedIssueNote || normalizedDerivedNote === normalizedIssueTitle)) {
+      return true;
+    }
+    if (normalizedDerivedTitle && (
+      normalizedDerivedTitle === normalizedIssueTitle
+      || (normalizedIssueTitle && normalizedIssueTitle.includes(normalizedDerivedTitle))
+      || (normalizedDerivedTitle && normalizedDerivedTitle.includes(normalizedIssueTitle))
+    )) {
+      return true;
+    }
+    const keywordOverlap = getIssueMatchKeywords(issue).filter((keyword) => derivedKeywords.has(keyword)).length;
+    const sameSection = normalizeChapterLabel(issue.sectionLabel) === normalizeChapterLabel(derivedIssue.sectionLabel);
+    const sameType = String(issue.type || "General") === derivedIssue.type;
+    return sameSection && sameType && keywordOverlap >= 2;
+  }) || null;
+}
+
+function maybeCreateNextStepIssue(nextStep = "", issues = [], context = {}) {
+  const normalizedNextStep = normalizeIssueNoteText(nextStep);
+  if (!normalizedNextStep) {
+    return {
+      issues: [...issues],
+      createdIssue: null,
+      matchedIssue: null
+    };
+  }
+
+  const matchedIssue = findExistingIssueForNote(normalizedNextStep, issues, context);
+  if (matchedIssue) {
+    return {
+      issues: [...issues],
+      createdIssue: null,
+      matchedIssue
+    };
+  }
+
+  const createdIssue = createIssueFromNote(normalizedNextStep, context);
+  return {
+    issues: [createdIssue, ...issues],
+    createdIssue,
+    matchedIssue: null
+  };
+}
+
+function applyEditSessionIssueAutomation(issues = [], context = {}) {
+  const normalizedIssues = Array.isArray(issues) ? [...issues] : [];
+  const resolvedIssueIds = getAutoResolvedIssueIdsFromSession(context.accomplished, normalizedIssues, context);
+  const resolvedIssueIdSet = new Set(resolvedIssueIds);
+  const issuesAfterResolution = normalizedIssues.map((issue) => {
+    if (!resolvedIssueIdSet.has(issue.id)) return issue;
+    return normalizeIssue({
+      ...issue,
+      status: "Resolved",
+      workflowStatus: "resolved",
+      resolvedAt: issue.resolvedAt || context.timestamp || new Date().toISOString()
+    });
+  });
+  const nextStepResult = maybeCreateNextStepIssue(context.nextStep, issuesAfterResolution, context);
+
+  return {
+    issues: nextStepResult.issues,
+    resolvedIssueIds,
+    createdIssue: nextStepResult.createdIssue,
+    matchedNextIssue: nextStepResult.matchedIssue
+  };
 }
 
 function getCurrentEdit2ChapterLabel(bundle) {
   if (activeView !== "edit" || !edit2SelectedChapterKey) return "";
   return buildEdit2Chapters(bundle).chapters.find((chapter) => chapter.key === edit2SelectedChapterKey)?.label || "";
-}
-
-function getEditStageRoadmap(passStage, passStatus) {
-  const stages = [
-    {
-      name: "Developmental",
-      cue: "Big picture",
-      description: "Story, structure, and major revision choices."
-    },
-    {
-      name: "Line Edit",
-      cue: "Sentence craft",
-      description: "Voice, clarity, rhythm, and prose texture."
-    },
-    {
-      name: "Copyedit",
-      cue: "Mechanics",
-      description: "Consistency, grammar, and technical cleanup."
-    },
-    {
-      name: "Proofread",
-      cue: "Final polish",
-      description: "Last-pass typo checks before calling it done."
-    }
-  ];
-  const activeStage = stages.find((stage) => stage.name === passStage)?.name || stages[0].name;
-  const activeIndex = stages.findIndex((stage) => stage.name === activeStage);
-  const isComplete = String(passStatus || "").toLowerCase() === "complete";
-
-  return stages.map((stage, index) => ({
-    ...stage,
-    state:
-      index < activeIndex
-        ? "complete"
-        : index === activeIndex
-          ? (isComplete ? "current-complete" : "current")
-          : "upcoming"
-  }));
 }
 
 function renderEditDashboard(bundle) {
@@ -474,16 +765,14 @@ function renderEditDashboard(bundle) {
 
 
 function bindEditDashboardEvents(bundle) {
-  const passModal = document.getElementById("edit-pass-modal");
+  bindEditSessionGlobalActions();
   const editSessionStartModal = document.getElementById("edit-session-start-modal");
   const editSessionModal = document.getElementById("edit-session-modal");
   const issueModal = document.getElementById("issue-modal");
-  const passForm = document.getElementById("edit-pass-form");
   const editSessionForm = document.getElementById("edit-session-form");
   const issueForm = document.getElementById("issue-form");
   const issueFilterForm = document.getElementById("edit-issue-filters-form");
   const issueViewButtons = document.querySelectorAll("[data-edit-issue-view]");
-  const openPassButton = document.getElementById("open-edit-pass-btn");
   const openEditSessionButton = document.getElementById("open-edit-session-modal-btn");
   const closeEditSessionStartButton = document.getElementById("close-edit-session-start-btn");
   const startEditSessionButton = document.getElementById("start-edit-session-btn");
@@ -494,21 +783,8 @@ function bindEditDashboardEvents(bundle) {
   const openIssueButton = document.getElementById("open-issue-modal-btn");
   const resetIssueFiltersButton = document.getElementById("reset-edit-issue-filters-btn");
   const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
-  const closePassButton = document.getElementById("close-edit-pass-btn");
   const closeEditSessionButton = document.getElementById("close-edit-session-btn");
   const closeIssueButton = document.getElementById("close-issue-modal-btn");
-
-  function openEditPassFlow() {
-    const unresolvedCount = getCurrentPassUnresolvedIssueCount(currentBundle());
-    if (unresolvedCount > 0) {
-      showToast(
-        "Resolve this pass first",
-        `${formatNumber(unresolvedCount)} unresolved issue${unresolvedCount === 1 ? "" : "s"} still belong to the current pass. Clear them before changing passes.`
-      );
-      return;
-    }
-    openEditPassModal();
-  }
 
   function openEditSessionFlow() {
     if (getActiveFocusSession()) {
@@ -516,10 +792,6 @@ function bindEditDashboardEvents(bundle) {
       return;
     }
     openEditSessionStartModal();
-  }
-
-  if (openPassButton) {
-    openPassButton.onclick = openEditPassFlow;
   }
 
   if (openEditSessionButton) {
@@ -533,7 +805,9 @@ function bindEditDashboardEvents(bundle) {
   }
 
   if (endEditSessionButton) {
-    endEditSessionButton.onclick = () => {
+    endEditSessionButton.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       openEndEditSessionConfirmModal();
     };
   }
@@ -545,13 +819,17 @@ function bindEditDashboardEvents(bundle) {
   }
 
   if (cancelEndEditSessionButton) {
-    cancelEndEditSessionButton.onclick = () => {
+    cancelEndEditSessionButton.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       closeEndEditSessionConfirmModal();
     };
   }
 
   if (confirmEndEditSessionButton) {
-    confirmEndEditSessionButton.onclick = () => {
+    confirmEndEditSessionButton.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       closeEndEditSessionConfirmModal();
       finishActiveEditingSession(false);
     };
@@ -566,7 +844,6 @@ function bindEditDashboardEvents(bundle) {
   if (issueFilterForm) {
     issueFilterForm.onchange = () => {
       editIssueFilters = {
-        passScope: String(issueFilterForm.elements.passScope?.value || "current"),
         priority: String(issueFilterForm.elements.priority?.value || "all"),
         type: String(issueFilterForm.elements.type?.value || "all"),
         section: String(issueFilterForm.elements.section?.value || "all"),
@@ -598,12 +875,6 @@ function bindEditDashboardEvents(bundle) {
     };
   }
 
-  if (closePassButton) {
-    closePassButton.onclick = () => {
-      closeEditPassModal();
-    };
-  }
-
   if (closeEditSessionButton) {
     closeEditSessionButton.onclick = () => {
       closeEditSessionModal();
@@ -619,12 +890,6 @@ function bindEditDashboardEvents(bundle) {
   if (closeIssueButton) {
     closeIssueButton.onclick = () => {
       closeIssueModal();
-    };
-  }
-
-  if (passModal) {
-    passModal.onclick = (event) => {
-      if (event.target === passModal) closeEditPassModal();
     };
   }
 
@@ -653,35 +918,24 @@ function bindEditDashboardEvents(bundle) {
     };
   }
 
-  if (passForm) {
-    passForm.onsubmit = (event) => {
-      event.preventDefault();
-      const formData = new FormData(passForm);
-      const passStage = String(formData.get("passStage") || "Developmental");
-      const passName = String(formData.get("passName") || "").trim() || defaultPassName(passStage);
-      updateCurrentBundle((projectBundle) => ({
-        ...projectBundle,
-        editing: {
-          ...projectBundle.editing,
-          passStage,
-          passStatus: String(formData.get("passStatus") || "Not started"),
-          passName,
-          passObjective: String(formData.get("passObjective") || "").trim(),
-          progressCurrent: number(formData.get("progressCurrent")),
-          progressTotal: number(formData.get("progressTotal"))
-        }
-      }));
-      closeEditPassModal();
-      persistAndRender();
-      showToast("Pass updated", `${passName} is now the active editing pass.`);
-    };
-  }
-
   if (editSessionForm) {
     editSessionForm.onsubmit = (event) => {
       event.preventDefault();
       const formData = new FormData(editSessionForm);
       const isEditingExisting = Boolean(editingEditSessionId);
+      const existingSnapshot = isEditingExisting ? getSnapshotForSession(bundle, editingEditSessionId) : null;
+      const structureUnitName = String(formData.get("sectionLabel") || "").trim();
+      const outcomeStatus = String(formData.get("sessionOutcomeStatus") || "partial");
+      const accomplished = String(formData.get("sessionAccomplished") || "").trim();
+      const nextStep = String(formData.get("sessionNextStep") || "").trim();
+      const blocker = String(formData.get("sessionBlocker") || "").trim();
+      const confidenceLevel = String(formData.get("sessionConfidenceLevel") || "").trim();
+      const excerpt = String(formData.get("sessionExcerpt") || "").trim();
+      const issueIds = readSelectedSessionIssueIds("edit-session-issue-links-field");
+      const sessionFocusKey = normalizeEditFocusKey(
+        existingSnapshot?.focusKey || pendingCompletedEditSession?.focusKey || bundle.editing.focusKey
+      );
+      const sessionTimestamp = pendingCompletedEditSession?.endedAt || new Date().toISOString();
       const session = normalizeSession({
         id: editingEditSessionId || createId(),
         type: "edit",
@@ -689,20 +943,87 @@ function bindEditDashboardEvents(bundle) {
         durationMinutes: Math.max(1, number(formData.get("durationMinutes"))),
         wordsEdited: Math.max(0, number(formData.get("wordsEdited"))),
         notes: String(formData.get("sessionNotes") || "").trim(),
-        passName: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
-        sectionLabel: String(formData.get("sectionLabel") || "").trim()
+        focusKey: sessionFocusKey,
+        passName: "",
+        sectionLabel: structureUnitName
       });
+      let automationResult = null;
 
-      updateCurrentBundle((projectBundle) => ({
-        ...projectBundle,
-        sessions: isEditingExisting
-          ? projectBundle.sessions.map((item) => item.id === editingEditSessionId ? session : item)
-          : [session, ...projectBundle.sessions]
-      }));
+      updateCurrentBundle((projectBundle) => {
+        const snapshotToPreserve = isEditingExisting ? getSnapshotForSession(projectBundle, editingEditSessionId) : null;
+        const linkedIssueIds = [...issueIds];
+        const nextIssues = !isEditingExisting
+          ? (() => {
+              automationResult = applyEditSessionIssueAutomation(projectBundle.issues, {
+                bundle: projectBundle,
+                lastActiveSection: structureUnitName,
+                timestamp: sessionTimestamp,
+                focusKey: sessionFocusKey,
+                outcomeStatus,
+                accomplished,
+                nextStep,
+                selectedIssueIds: issueIds
+              });
+              return automationResult.issues;
+            })()
+          : projectBundle.issues;
+        const linkedIssueIdSet = new Set(linkedIssueIds);
+        if (automationResult?.createdIssue?.id) linkedIssueIdSet.add(automationResult.createdIssue.id);
+        if (automationResult?.matchedNextIssue?.id) linkedIssueIdSet.add(automationResult.matchedNextIssue.id);
+        (automationResult?.resolvedIssueIds || []).forEach((issueId) => linkedIssueIdSet.add(issueId));
+        const updatedBundle = {
+          ...projectBundle,
+          issues: nextIssues,
+          sessions: isEditingExisting
+            ? projectBundle.sessions.map((item) => item.id === editingEditSessionId ? session : item)
+            : [session, ...projectBundle.sessions]
+        };
+        return upsertSessionSnapshot(updatedBundle, createSessionSnapshot({
+          id: session.id,
+          projectId: projectBundle.id,
+          sessionType: "editing",
+          startedAt: snapshotToPreserve?.startedAt || pendingCompletedEditSession?.startedAt || (
+            session.date
+              ? new Date(new Date(session.date).getTime() - (Math.max(1, number(session.durationMinutes)) * 60000)).toISOString()
+              : ""
+          ),
+          endedAt: session.date,
+          durationMinutes: Math.max(1, number(session.durationMinutes)),
+          structureUnitId: snapshotToPreserve?.structureUnitId || "",
+          structureUnitName,
+          structureUnitType: snapshotToPreserve?.structureUnitType || getStructureUnitLower(projectBundle),
+          startWordCount: snapshotToPreserve?.startWordCount,
+          endWordCount: formData.get("sessionEndWordCount"),
+          wordsAdded: snapshotToPreserve?.wordsAdded,
+          wordsRemoved: snapshotToPreserve?.wordsRemoved,
+          netWords: snapshotToPreserve?.netWords,
+          intendedGoal: snapshotToPreserve?.intendedGoal || "revise",
+          outcomeStatus,
+          focusKey: sessionFocusKey,
+          accomplished,
+          nextStep,
+          blocker,
+          confidenceLevel,
+          excerpt,
+          notes: String(formData.get("sessionNotes") || "").trim(),
+          issueIds: [...linkedIssueIdSet]
+        }, projectBundle));
+      });
 
       closeEditSessionModal();
       persistAndRender();
-      showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", "Your revision work is now part of the Edit workspace.");
+      const createdIssueTitle = automationResult?.createdIssue?.title || "";
+      const matchedIssueTitle = automationResult?.matchedNextIssue?.title || "";
+      const resolvedCount = automationResult?.resolvedIssueIds?.length || 0;
+      let toastCopy = "Your revision work is now part of the Edit workspace.";
+      if (!isEditingExisting && createdIssueTitle) {
+        toastCopy = `Created "${createdIssueTitle}" from your next step and saved the session handoff.`;
+      } else if (!isEditingExisting && matchedIssueTitle) {
+        toastCopy = `Linked your next step to "${matchedIssueTitle}" and saved the session handoff.`;
+      } else if (!isEditingExisting && resolvedCount) {
+        toastCopy = `Updated ${formatNumber(resolvedCount)} linked issue${resolvedCount === 1 ? "" : "s"} from the session handoff.`;
+      }
+      showToast(isEditingExisting ? "Editing session updated" : "Editing session logged", toastCopy);
     };
   }
 
@@ -713,23 +1034,6 @@ function bindEditDashboardEvents(bundle) {
 
       if (target.name === "priority") {
         issueForm.dataset.priorityTouched = "true";
-        return;
-      }
-
-      if (target.name === "issuePassKey") {
-        const nextPassKey = normalizeEdit2PassKey(issueForm.elements.issuePassKey?.value || "developmental");
-        const previousPassKey = issueForm.dataset.lastPassKey || nextPassKey;
-        const previousDefaultPriority = getEditIssueDefaultPriority(previousPassKey);
-        const priorityField = issueForm.elements.priority;
-        const currentPriority = String(priorityField?.value || "");
-        const shouldSyncPriority = issueForm.dataset.mode === "create"
-          && priorityField
-          && (issueForm.dataset.priorityTouched !== "true" || currentPriority === previousDefaultPriority);
-
-        if (shouldSyncPriority) {
-          priorityField.value = getEditIssueDefaultPriority(nextPassKey);
-        }
-        issueForm.dataset.lastPassKey = nextPassKey;
       }
     };
 
@@ -740,15 +1044,23 @@ function bindEditDashboardEvents(bundle) {
       const existingIssue = isEditingExisting
         ? bundle.issues.find((item) => item.id === editingIssueId)
         : null;
-      const issuePassKey = normalizeEdit2PassKey(
-        formData.get("issuePassKey"),
-        existingIssue?.passName || bundle.editing.passStage
-      );
+      const note = String(formData.get("note") || "");
+      const snippet = String(formData.get("snippet") || "");
+      if (!isEditingExisting && !normalizeIssueNoteText(note)) {
+        showToast("Add a note", "A short note is enough. Jot what you noticed and we’ll place it for you.");
+        issueForm.elements.note?.focus();
+        return;
+      }
+      const issuePassKey = normalizeEdit2PassKey(existingIssue?.focusKey || bundle.editing.focusKey);
       const nextWorkflowStatusRaw = String(
-        formData.get("issueStatus")
-        || (existingIssue?.status === "Resolved"
-          ? "resolved"
-          : existingIssue?.workflowStatus || "open")
+        isEditingExisting
+          ? (
+              formData.get("issueStatus")
+              || (existingIssue?.status === "Resolved"
+                ? "resolved"
+                : existingIssue?.workflowStatus || "open")
+            )
+          : "open"
       );
       const nextWorkflowStatus = nextWorkflowStatusRaw === "resolved"
         ? "resolved"
@@ -756,24 +1068,34 @@ function bindEditDashboardEvents(bundle) {
           ? "in_progress"
           : "open";
       const nextStatus = nextWorkflowStatus === "resolved" ? "Resolved" : "Open";
-      const issue = normalizeIssue({
-        id: editingIssueId || createId(),
-        title: String(formData.get("title") || "").trim(),
-        type: String(formData.get("type") || "General"),
-        sectionLabel: String(formData.get("sectionLabel") || "").trim(),
-        priority: String(formData.get("priority") || existingIssue?.priority || getEditIssueDefaultPriority(issuePassKey)),
-        status: nextStatus,
-        notes: String(formData.get("notes") || "").trim(),
-        createdAt: isEditingExisting
-          ? existingIssue?.createdAt || new Date().toISOString()
-          : new Date().toISOString(),
-        resolvedAt: nextStatus === "Resolved"
-          ? existingIssue?.resolvedAt || new Date().toISOString()
-          : "",
-        passName: getEditIssuePassLabel(issuePassKey),
-        workflowStatus: nextWorkflowStatus,
-        textLocation: String(formData.get("textLocation") || "").trim()
-      });
+      const createdIssue = isEditingExisting
+        ? null
+        : createIssueFromNote(note, {
+            bundle,
+            focusKey: issuePassKey,
+            timestamp: new Date().toISOString(),
+            snippet
+          });
+      const issue = isEditingExisting
+        ? normalizeIssue({
+            id: editingIssueId || createId(),
+            title: String(formData.get("title") || "").trim(),
+            type: String(formData.get("type") || "General"),
+            sectionLabel: String(formData.get("sectionLabel") || "").trim(),
+            priority: String(formData.get("priority") || existingIssue?.priority || getEditIssueDefaultPriority(issuePassKey)),
+            status: nextStatus,
+            notes: note,
+            snippet,
+            createdAt: existingIssue?.createdAt || new Date().toISOString(),
+            resolvedAt: nextStatus === "Resolved"
+              ? existingIssue?.resolvedAt || new Date().toISOString()
+              : "",
+            focusKey: issuePassKey,
+            passName: "",
+            workflowStatus: nextWorkflowStatus,
+            textLocation: existingIssue?.textLocation || ""
+          })
+        : createdIssue;
 
       updateCurrentBundle((projectBundle) => ({
         ...projectBundle,
@@ -785,7 +1107,7 @@ function bindEditDashboardEvents(bundle) {
       editIssueBoardView = issue.status === "Resolved" ? "resolved" : "current";
       closeIssueModal();
       persistAndRender();
-      showToast(isEditingExisting ? "Issue updated" : "Issue added", "That editing problem has been filed away for the current pass.");
+      showToast(isEditingExisting ? "Issue updated" : "Issue added", "That editing problem is saved to the Edit workspace.");
     };
   }
 
@@ -846,14 +1168,9 @@ function bindEditDashboardEvents(bundle) {
         editIssueBoardView = "current";
         editIssueFilters = {
           ...editIssueFilters,
-          passScope: "current",
           section: String(button.dataset.section || "all")
         };
         render();
-        return;
-      }
-      if (action === "change-pass") {
-        openEditPassFlow();
         return;
       }
       if (action === "add-issue") {
@@ -866,70 +1183,105 @@ function bindEditDashboardEvents(bundle) {
   bindEditSessionDial();
 }
 
-function openEditPassModal() {
-  const modal = document.getElementById("edit-pass-modal");
-  const form = document.getElementById("edit-pass-form");
-  const bundle = currentBundle();
-  const editing = bundle?.editing || createDefaultEditingState();
-  const unitPlural = getStructureUnitPlural(bundle).toLowerCase();
-  const currentLabel = document.getElementById("edit-pass-progress-current-label");
-  const totalLabel = document.getElementById("edit-pass-progress-total-label");
-  if (currentLabel) currentLabel.textContent = `${unitPlural.charAt(0).toUpperCase()}${unitPlural.slice(1)} reviewed`;
-  if (totalLabel) totalLabel.textContent = `Total ${unitPlural}`;
-  form.elements.passStage.value = editing.passStage || "Developmental";
-  form.elements.passStatus.value = editing.passStatus || "Not started";
-  form.elements.passName.value = editing.passName || defaultPassName(editing.passStage);
-  form.elements.passObjective.value = editing.passObjective || "";
-  form.elements.progressCurrent.value = String(number(editing.progressCurrent));
-  form.elements.progressTotal.value = String(number(editing.progressTotal));
-  modal.classList.remove("hidden");
-}
-
-function closeEditPassModal() {
-  const modal = document.getElementById("edit-pass-modal");
-  modal.classList.add("hidden");
+function bindEditSessionGlobalActions() {
+  if (editSessionGlobalActionsBound) return;
+  editSessionGlobalActionsBound = true;
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!target?.closest) return;
+    if (target.closest("#end-edit-session-btn")) {
+      event.preventDefault();
+      openEndEditSessionConfirmModal();
+      return;
+    }
+    if (target.closest("#cancel-end-edit-session-btn")) {
+      event.preventDefault();
+      closeEndEditSessionConfirmModal();
+      return;
+    }
+    if (target.closest("#confirm-end-edit-session-btn")) {
+      event.preventDefault();
+      closeEndEditSessionConfirmModal();
+      finishActiveEditingSession(false);
+    }
+  });
 }
 
 function openEditSessionModal(sessionId = null) {
   const modal = document.getElementById("edit-session-modal");
   const form = document.getElementById("edit-session-form");
   const bundle = currentBundle();
-  const passCopy = document.getElementById("edit-session-pass-copy");
+  const focusCopy = document.getElementById("edit-session-focus-copy");
   const title = document.getElementById("edit-session-title");
   const copy = document.getElementById("edit-session-copy");
+  const contextCopy = document.getElementById("edit-session-context-copy");
   const submit = document.getElementById("edit-session-submit-btn");
   const sectionLabel = document.getElementById("edit-session-section-label");
   const sectionInput = document.getElementById("edit-session-section-input");
   const existingSession = sessionId ? bundle?.sessions.find((item) => item.id === sessionId) : null;
+  const existingSnapshot = sessionId ? getSnapshotForSession(bundle, sessionId) : null;
+  const pendingSnapshot = getPendingSessionSnapshotContext();
   const unitLabel = getStructureUnitLabel(bundle);
+  const activeFocusKey = bundle?.editing?.focusKey || "revision";
 
   editingEditSessionId = sessionId;
   form.reset();
-  passCopy.textContent = `Active pass: ${bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage)}`;
+  populateStructureUnitDatalist("edit-session-structure-unit-options", bundle);
+  if (focusCopy) {
+    focusCopy.textContent = "Capture only the handoff details that will help you restart quickly.";
+  }
   if (sectionLabel) sectionLabel.textContent = `${unitLabel} worked on`;
   if (sectionInput) sectionInput.placeholder = `Example: ${unitLabel} 12`;
 
   if (existingSession) {
     title.textContent = "Edit Editing Session";
-    copy.textContent = "Update the revision log for this session.";
+    copy.textContent = "Update the handoff for this editing session.";
     form.elements.sessionDate.value = toInputDate(existingSession.date);
     form.elements.durationMinutes.value = String(Math.max(1, number(existingSession.durationMinutes)));
-    form.elements.sectionLabel.value = existingSession.sectionLabel || "";
+    form.elements.sectionLabel.value = existingSnapshot?.structureUnitName || existingSession.sectionLabel || "";
     form.elements.wordsEdited.value = String(number(existingSession.wordsEdited));
-    form.elements.sessionNotes.value = existingSession.notes || "";
+    form.elements.sessionEndWordCount.value = existingSnapshot?.endWordCount ?? "";
+    form.querySelector(`input[name="sessionOutcomeStatus"][value="${existingSnapshot?.outcomeStatus || "partial"}"]`)?.click();
+    form.elements.sessionAccomplished.value = existingSnapshot?.accomplished || "";
+    form.elements.sessionNextStep.value = existingSnapshot?.nextStep || "";
+    form.elements.sessionBlocker.value = existingSnapshot?.blocker || "";
+    form.elements.sessionConfidenceLevel.value = existingSnapshot?.confidenceLevel || "";
+    form.elements.sessionExcerpt.value = existingSnapshot?.excerpt || "";
+    form.elements.sessionNotes.value = existingSnapshot?.notes || existingSession.notes || "";
+    renderSessionIssueLinks("edit-session-issue-links-field", bundle, form.elements.sectionLabel.value, existingSnapshot?.issueIds || []);
+    if (contextCopy) {
+      contextCopy.textContent = "Goal: Revise. Update only what would help you pick the work back up quickly.";
+    }
     submit.textContent = "Save changes";
   } else {
     title.textContent = "Editing Session Complete";
     copy.textContent = pendingCompletedEditSession
-      ? `You edited for ${describeMinutes(pendingCompletedEditSession.durationMinutes)}. Add what you worked on before you move on.`
-      : "Capture what you worked on, how much you edited, and anything you want to remember.";
+      ? `You edited for ${describeMinutes(pendingCompletedEditSession.durationMinutes)}. Close the loop with a quick handoff.`
+      : "Capture what matters for the restart and leave the rest behind.";
     form.elements.sessionDate.value = toInputDate(pendingCompletedEditSession?.endedAt || new Date().toISOString());
     form.elements.durationMinutes.value = String(Math.max(1, number(pendingCompletedEditSession?.durationMinutes || editSessionDraftMinutes)));
-    form.elements.sectionLabel.value = "";
+    form.elements.sectionLabel.value = pendingSnapshot?.structureUnitName || "";
     form.elements.wordsEdited.value = "0";
+    form.elements.sessionEndWordCount.value = "";
+    form.querySelector('input[name="sessionOutcomeStatus"][value="partial"]')?.click();
+    form.elements.sessionAccomplished.value = "";
+    form.elements.sessionNextStep.value = "";
+    form.elements.sessionBlocker.value = "";
+    form.elements.sessionConfidenceLevel.value = "";
+    form.elements.sessionExcerpt.value = "";
     form.elements.sessionNotes.value = "";
-    submit.textContent = "Save editing session";
+    renderSessionIssueLinks("edit-session-issue-links-field", bundle, form.elements.sectionLabel.value, pendingSnapshot?.issueIds || []);
+    if (contextCopy) {
+      contextCopy.textContent = pendingSnapshot?.structureUnitName
+        ? `Goal: Revise. Resuming ${pendingSnapshot.structureUnitName}.`
+        : "Goal: Revise. Save only the context you will actually use next time.";
+    }
+    submit.textContent = "Save handoff";
   }
+
+  form.elements.sectionLabel.oninput = () => {
+    renderSessionIssueLinks("edit-session-issue-links-field", bundle, form.elements.sectionLabel.value);
+  };
 
   modal.classList.remove("hidden");
 }
@@ -940,6 +1292,7 @@ function closeEditSessionModal() {
   form.reset();
   editingEditSessionId = null;
   pendingCompletedEditSession = null;
+  clearPendingSessionSnapshotContext();
   modal.classList.add("hidden");
 }
 
@@ -947,8 +1300,11 @@ function openEditSessionStartModal() {
   const modal = document.getElementById("edit-session-start-modal");
   const title = document.getElementById("edit-session-start-title");
   const copy = document.getElementById("edit-session-start-copy");
+  const pendingSnapshot = getPendingSessionSnapshotContext();
   title.textContent = "Start Editing Session";
-  copy.textContent = "Choose how long you want to edit, then begin.";
+  copy.textContent = pendingSnapshot?.structureUnitName
+    ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
+    : "Choose how long you want to edit, then begin.";
   syncEditSessionDial(editSessionDraftMinutes);
   modal.classList.remove("hidden");
 }
@@ -1099,10 +1455,13 @@ function updateEditingSessionScreen() {
 }
 
 function startEditingSession() {
+  const startedAt = Date.now();
+  const pendingSnapshot = getPendingSessionSnapshotContext();
   activeEditingSession = {
-    startedAt: Date.now(),
+    startedAt,
+    focusKey: pendingSnapshot?.focusKey || currentBundle()?.editing?.focusKey || "revision",
     plannedMinutes: editSessionDraftMinutes,
-    endsAt: Date.now() + (editSessionDraftMinutes * 60000)
+    endsAt: startedAt + (editSessionDraftMinutes * 60000)
   };
   editingSessionInFocusMode = true;
   closeEndEditSessionConfirmModal();
@@ -1119,6 +1478,8 @@ function finishActiveEditingSession(autoCompleted = false) {
   const elapsedMinutes = Math.max(1, Math.round((endedAt - activeEditingSession.startedAt) / 60000));
   pendingCompletedEditSession = {
     durationMinutes: autoCompleted ? activeEditingSession.plannedMinutes : elapsedMinutes,
+    focusKey: activeEditingSession.focusKey || currentBundle()?.editing?.focusKey || "revision",
+    startedAt: new Date(activeEditingSession.startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString()
   };
   activeEditingSession = null;
@@ -1143,7 +1504,11 @@ function closeEndEditSessionConfirmModal() {
 function openIssueModal(issueId = null) {
   const modal = document.getElementById("issue-modal");
   const form = document.getElementById("issue-form");
-  const passCopy = document.getElementById("issue-pass-copy");
+  const focusCopy = document.getElementById("issue-focus-copy");
+  const preview = document.getElementById("issue-derived-preview");
+  const noteLabel = document.getElementById("issue-note-label");
+  const noteInput = document.getElementById("issue-note-input");
+  const snippetInput = document.getElementById("issue-snippet-input");
   const sectionSelect = document.getElementById("issue-section-select");
   const title = document.getElementById("issue-modal-title");
   const copy = document.getElementById("issue-modal-copy");
@@ -1152,10 +1517,16 @@ function openIssueModal(issueId = null) {
   const bundle = currentBundle();
   const unitLabel = getStructureUnitLabel(bundle);
   const unitLower = getStructureUnitLower(bundle);
-  const currentPassName = bundle?.editing?.passName || defaultPassName(bundle?.editing?.passStage);
   const currentChapterLabel = getCurrentEdit2ChapterLabel(bundle);
   const issue = issueId ? bundle?.issues.find((item) => item.id === issueId) : null;
   const sectionLabels = getEditIssueSectionOptions(bundle);
+  const structuredFieldIds = [
+    "issue-title-field",
+    "issue-section-field",
+    "issue-type-field",
+    "issue-priority-field",
+    "issue-status-field"
+  ];
 
   editingIssueId = issueId;
   form.reset();
@@ -1163,64 +1534,87 @@ function openIssueModal(issueId = null) {
   form.dataset.priorityTouched = "false";
   if (sectionLabel) sectionLabel.textContent = unitLabel;
   if (form.elements.title) form.elements.title.placeholder = `Example: ${unitLabel} 8 stalls after the reveal`;
+  if (form.elements.title) form.elements.title.required = Boolean(issue);
+  if (form.elements.sectionLabel) form.elements.sectionLabel.required = Boolean(issue);
+  if (noteInput) noteInput.required = !issue;
+  if (preview) preview.classList.add("hidden");
+  structuredFieldIds.forEach((fieldId) => {
+    document.getElementById(fieldId)?.classList.toggle("hidden", !issue);
+  });
 
-  if (!issue && !sectionLabels.length) {
-    showToast(`Create a ${unitLower} first`, `Add a ${unitLower} to the manuscript structure before logging an issue.`);
-    openEdit2ChapterModal?.();
-    return;
+  if (focusCopy) {
+    focusCopy.textContent = "";
+    focusCopy.classList.add("hidden");
   }
-
-  passCopy.textContent = currentChapterLabel
-    ? `This issue will start in ${currentChapterLabel}. Choose the pass it belongs to, then keep the note lightweight enough to capture while reading.`
-    : `Choose the pass this issue belongs to and place it inside one of your existing ${getStructureUnitPlural(bundle).toLowerCase()} so the manuscript map can surface it correctly.`;
   if (sectionSelect) {
-    sectionSelect.innerHTML = sectionLabels
+    const availableSections = sectionLabels.length ? sectionLabels : ["Unassigned"];
+    sectionSelect.innerHTML = availableSections
       .map((sectionLabel) => `<option value="${escapeAttr(sectionLabel)}">${escapeHtml(sectionLabel)}</option>`)
       .join("");
   }
 
   if (issue) {
-    const issuePassKey = normalizeEdit2PassKey(issue.passName, bundle?.editing?.passStage);
+    if (noteLabel) noteLabel.textContent = "Jot a quick note (short is fine)";
     title.textContent = "Edit Issue";
-    copy.textContent = `Update the issue so it stays easy to place in the right ${unitLower} and pass.`;
+    copy.textContent = `Update the issue details if you want. The quick note can stay short.`;
+    form.elements.note.value = issue.notes || "";
+    if (snippetInput) snippetInput.value = issue.snippet || "";
     form.elements.title.value = issue.title || "";
-    form.elements.issuePassKey.value = issuePassKey;
     form.elements.type.value = issue.type || "General";
     form.elements.sectionLabel.value = issue.sectionLabel || "";
-    form.elements.priority.value = issue.priority || getEditIssueDefaultPriority(issuePassKey);
+    form.elements.priority.value = issue.priority || getEditIssueDefaultPriority();
     form.elements.issueStatus.value = issue.status === "Resolved"
       ? "resolved"
       : issue.workflowStatus === "in_progress"
         ? "in_progress"
         : "open";
-    form.elements.textLocation.value = issue.textLocation || "";
-    form.elements.notes.value = issue.notes || "";
-    form.dataset.lastPassKey = issuePassKey;
     submit.textContent = "Save changes";
+    if (noteInput) {
+      noteInput.placeholder = "chapter 3 slow\ndialogue stiff\nmotivation unclear\nconfusing here";
+      noteInput.oninput = null;
+    }
+    syncIssueDraftPreview("", bundle);
   } else {
-    const issuePassKey = normalizeEdit2PassKey(currentPassName, bundle?.editing?.passStage);
+    if (noteLabel) noteLabel.textContent = "Jot a quick note (short is fine)";
     title.textContent = "Add Open Issue";
-    copy.textContent = `Capture a problem now, assign it to the right pass, and drop it into the right ${unitLower} before you move on.`;
-    form.elements.issuePassKey.value = issuePassKey;
-    form.elements.type.value = "Pacing";
-    form.elements.sectionLabel.value = sectionLabels.includes(currentChapterLabel) ? currentChapterLabel : (sectionLabels[0] || "");
-    form.elements.priority.value = getEditIssueDefaultPriority(issuePassKey);
+    copy.textContent = "Capture it quickly. A short note is enough—we’ll place it for you. Paste the exact text if you want to return to it faster later.";
+    form.elements.note.value = "";
+    if (snippetInput) snippetInput.value = "";
+    form.elements.type.value = "General";
+    form.elements.sectionLabel.value = sectionLabels.includes(currentChapterLabel) ? currentChapterLabel : (sectionLabels[0] || "Unassigned");
+    form.elements.priority.value = getEditIssueDefaultPriority();
     form.elements.issueStatus.value = "open";
-    form.elements.textLocation.value = "";
-    form.dataset.lastPassKey = issuePassKey;
     submit.textContent = "Save issue";
+    if (noteInput) {
+      noteInput.placeholder = "chapter 3 slow\ndialogue stiff\nmotivation unclear\nconfusing here";
+      noteInput.oninput = () => {
+        syncIssueDraftPreview(noteInput.value, bundle);
+      };
+    }
+    syncIssueDraftPreview("", bundle);
   }
 
   modal.classList.remove("hidden");
+  if (issue) {
+    form.elements.title?.focus();
+  } else {
+    noteInput?.focus();
+  }
 }
 
 function closeIssueModal() {
   const modal = document.getElementById("issue-modal");
   const form = document.getElementById("issue-form");
+  const noteInput = document.getElementById("issue-note-input");
+  const preview = document.getElementById("issue-derived-preview");
   form.reset();
   delete form.dataset.mode;
   delete form.dataset.priorityTouched;
-  delete form.dataset.lastPassKey;
+  if (noteInput) noteInput.oninput = null;
+  if (preview) {
+    preview.textContent = "";
+    preview.classList.add("hidden");
+  }
   editingIssueId = null;
   modal.classList.add("hidden");
 }
@@ -1237,7 +1631,6 @@ function renderIssueCard(issue, options = {}) {
         <div>
           <p class="session-kind">${issueLabel}</p>
           <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
-          <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
         </div>
         <div class="goal-actions">
           <button class="icon-btn" type="button" data-action="edit-issue" data-id="${issue.id}" aria-label="Edit issue">
@@ -1267,6 +1660,7 @@ function renderIssueCard(issue, options = {}) {
         ${archived && issue.resolvedAt ? `<span class="pill">Resolved ${escapeHtml(formatDate(issue.resolvedAt))}</span>` : ""}
         ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
       </div>
+      ${issue.snippet ? `<blockquote class="issue-snippet">${escapeHtml(issue.snippet)}</blockquote>` : ""}
       ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
     </div>
   `;

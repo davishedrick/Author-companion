@@ -1,3 +1,5 @@
+let loggingPastWritingSession = false;
+
 function renderDashboard(bundle) {
   if (!bundle) {
     document.getElementById("view-dashboard").innerHTML = renderWorkspaceEmptyState("Write");
@@ -32,6 +34,7 @@ function renderDashboard(bundle) {
   const todaySessions = [...getWriteSessions(bundle)]
     .filter((session) => dateKey(session.date) === todayKey)
     .sort((a, b) => new Date(b.date) - new Date(a.date));
+  const todayCommandStats = getTodayWritingCommandStats(bundle, stats, todayKey, currentWordCount, targetWordCount);
 
   document.getElementById("view-dashboard").innerHTML = `
     <section class="grid dashboard-grid">
@@ -42,6 +45,7 @@ function renderDashboard(bundle) {
             bundle,
             stats,
             todaySessions,
+            todayCommandStats,
             momentumState,
             deadlineLabel,
             completionCheckpoints,
@@ -55,23 +59,152 @@ function renderDashboard(bundle) {
   bindDashboardEvents(bundle);
 }
 
-function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumState, deadlineLabel, completionCheckpoints, currentWordCount, targetWordCount) {
-  return `
-    <section class="card">
-      <div class="writing-launch">
-        <div class="writing-launch-copy">
+function getTodayWritingCommandStats(bundle, stats, todayKey, currentWordCount, targetWordCount) {
+  const wordGoals = activeGoalsForBundle(bundle)
+    .filter((goal) => goal.type === "write_words")
+    .map((goal) => evaluateGoal(bundle, goal))
+    .filter((goal) => goal.trackedToday);
+  const goalTarget = wordGoals.reduce((sum, goal) => sum + number(goal.targetValueToday), 0);
+  const goalProgress = wordGoals.reduce((sum, goal) => sum + number(goal.liveValue), 0);
+  const targetWords = goalTarget > 0 ? goalTarget : Math.max(0, number(bundle.project.dailyTarget));
+  const wordsToday = goalTarget > 0 ? goalProgress : number(stats.wordsToday);
+  const wordsLeftToday = Math.max(0, targetWords - wordsToday);
+  const goalLabel = wordGoals.length
+    ? `${formatNumber(wordGoals.length)} writing goal${wordGoals.length === 1 ? "" : "s"} from Goals`
+    : "Project daily target";
+  const streakLabel = number(stats.wordsToday) > 0
+    ? `${formatNumber(Math.max(1, stats.currentStreak))} day${Math.max(1, stats.currentStreak) === 1 ? "" : "s"} active`
+    : stats.currentStreak > 0
+      ? `${formatNumber(stats.currentStreak)} day streak waiting on today`
+      : "Ready to start";
+  const manuscriptProgress = targetWordCount > 0 ? Math.min(999, (currentWordCount / targetWordCount) * 100) : 0;
+
+  return {
+    todayKey,
+    todayLabel: formatDate(`${todayKey}T12:00:00`),
+    targetWords,
+    wordsToday,
+    wordsLeftToday,
+    goalLabel,
+    goalCount: wordGoals.length,
+    streakLabel,
+    manuscriptProgress
+  };
+}
+
+function buildResumeCard(snapshot, bundle = currentBundle()) {
+  if (!bundle) return "";
+  if (!snapshot) {
+    return `
+      <section class="card resume-card resume-card-empty">
+        <div class="section-head resume-card-head">
           <div>
-            <h3>Get writing</h3>
-            <p>Start a focused session, let the timer run, then record your words when you finish.</p>
+            <p class="small-copy">No handoff yet</p>
+            <h2 class="hero-title">Resume</h2>
+            <p class="muted">End a writing or editing session with a short handoff so your next restart has somewhere to begin.</p>
           </div>
-          <div class="writing-launch-meta">
-            <span class="pill">${formatNumber(todaySessions.length)} session${todaySessions.length === 1 ? "" : "s"} today</span>
-            <span class="pill">${formatNumber(stats.wordsToday)} words written today</span>
+          <div class="resume-card-actions">
+            <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
+            <button class="ghost-btn" id="log-past-session-btn" type="button">Log past session</button>
+            <button class="ghost-btn" id="resume-view-history-btn" type="button">View full history</button>
           </div>
         </div>
-        <button class="primary-btn writing-launch-cta" id="open-session-modal-btn" type="button">Start writing session</button>
+      </section>
+    `;
+  }
+
+  const structureUnitType = snapshot.structureUnitType || getStructureUnitLower(bundle);
+  const structureUnitLabel = snapshot.structureUnitName || `Last ${sessionSnapshotTypeLabel(snapshot.sessionType).toLowerCase()} session`;
+  const accomplished = snapshot.accomplished
+    || (snapshot.outcomeStatus === "blocked"
+      ? "Stopped with something unresolved."
+      : `Closed a ${sessionSnapshotTypeLabel(snapshot.sessionType).toLowerCase()} session.`);
+  const nextStep = defaultSnapshotNextStep(snapshot);
+  const linkedIssues = (snapshot.issueIds || [])
+    .map((issueId) => bundle.issues.find((issue) => issue.id === issueId))
+    .filter(Boolean);
+  const statusKey = normalizeSessionSnapshotOutcome(snapshot.outcomeStatus);
+
+  return `
+    <section class="card resume-card">
+      <div class="section-head resume-card-head">
+        <div>
+          <p class="small-copy">Last session ${escapeHtml(formatRelativeTime(snapshot.endedAt || snapshot.startedAt))}</p>
+          <h2 class="hero-title">Resume</h2>
+          <p class="muted">${escapeHtml(sessionSnapshotTypeLabel(snapshot.sessionType))} handoff${snapshot.endedAt ? ` from ${escapeHtml(formatDate(snapshot.endedAt))}` : ""}.</p>
+        </div>
+        <div class="resume-card-actions">
+          <button class="primary-btn writing-launch-cta" id="resume-session-btn" data-snapshot-id="${escapeAttr(snapshot.id)}" type="button">Resume this section</button>
+          <button class="ghost-btn" id="open-session-modal-btn" type="button">Start writing session</button>
+          <button class="ghost-btn" id="log-past-session-btn" type="button">Log past session</button>
+          <button class="ghost-btn" id="resume-view-history-btn" type="button">View full history</button>
+        </div>
       </div>
+      <div class="resume-card-meta">
+        <span class="pill">${escapeHtml(sessionSnapshotTypeLabel(snapshot.sessionType))}</span>
+        <span class="pill">${escapeHtml(structureUnitType)}${snapshot.structureUnitName ? `: ${escapeHtml(snapshot.structureUnitName)}` : ""}</span>
+        <span class="pill resume-status-pill status-${escapeAttr(statusKey)}">${escapeHtml(sessionSnapshotOutcomeLabel(snapshot.outcomeStatus))}</span>
+        <span class="pill">${escapeHtml(formatSnapshotWordChange(snapshot))}</span>
+      </div>
+      <div class="resume-card-summary">
+        <article class="resume-card-row">
+          <span>You worked on</span>
+          <strong>${escapeHtml(structureUnitLabel)}</strong>
+        </article>
+        <article class="resume-card-row">
+          <span>You</span>
+          <strong>${escapeHtml(accomplished)}</strong>
+        </article>
+        <article class="resume-card-row">
+          <span>Next</span>
+          <strong>${escapeHtml(nextStep)}</strong>
+        </article>
+      </div>
+      ${statusKey === "blocked" && snapshot.blocker ? `
+        <div class="resume-card-blocker">
+          <span>Blocked by</span>
+          <strong>${escapeHtml(snapshot.blocker)}</strong>
+        </div>
+      ` : ""}
+      ${(snapshot.excerpt || linkedIssues.length) ? `
+        <details class="resume-card-details">
+          <summary>More context</summary>
+          ${snapshot.excerpt ? `<p class="resume-card-excerpt">${escapeHtml(snapshot.excerpt)}</p>` : ""}
+          ${linkedIssues.length ? `
+            <div class="resume-card-issues">
+              ${linkedIssues.map((issue) => `<span class="pill">${escapeHtml(issue.title)}</span>`).join("")}
+            </div>
+          ` : ""}
+        </details>
+      ` : ""}
     </section>
+  `;
+}
+
+function isManuscriptCompletionAvailable(bundle) {
+  return number(bundle?.project?.currentWordCount) >= Math.max(1, number(bundle?.project?.targetWordCount));
+}
+
+function renderManuscriptCompleteAction(bundle) {
+  const isAvailable = isManuscriptCompletionAvailable(bundle);
+  const button = `<button class="ghost-btn manuscript-complete-btn ${isAvailable ? "" : "is-disabled"}" id="open-manuscript-complete-modal-btn" type="button" ${isAvailable ? "" : 'disabled aria-disabled="true"'}>Manuscript complete</button>`;
+  if (isAvailable) return button;
+  return `
+    <span
+      class="disabled-action-tooltip"
+      data-tooltip="available when word count is met"
+      title="available when word count is met"
+      tabindex="0"
+    >
+      ${button}
+    </span>
+  `;
+}
+
+function renderActiveManuscriptDashboard(bundle, stats, todaySessions, todayCommandStats, momentumState, deadlineLabel, completionCheckpoints, currentWordCount, targetWordCount) {
+  const latestSnapshot = getLatestSnapshot(bundle);
+  return `
+    ${buildResumeCard(latestSnapshot, bundle)}
 
     <section class="card hero">
       <div class="hero-panel">
@@ -80,7 +213,6 @@ function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumS
             <p class="small-copy">Current manuscript</p>
             <h2 class="hero-title">${escapeHtml(bundle.project.bookTitle || "Untitled Manuscript")}</h2>
           </div>
-          <button class="ghost-btn manuscript-complete-btn" id="open-manuscript-complete-modal-btn" type="button">Manuscript complete</button>
         </div>
         <div class="hero-meta">
           <span class="pill">Target ${formatNumber(bundle.project.targetWordCount)} words</span>
@@ -132,6 +264,13 @@ function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumS
             </div>
           </div>
         </div>
+        <div class="manuscript-completion-panel">
+          <div>
+            <strong>Manuscript complete</strong>
+            <p>Mark the draft complete once the manuscript has reached its target word count. This remains reversible.</p>
+          </div>
+          ${renderManuscriptCompleteAction(bundle)}
+        </div>
       </div>
     </section>
 
@@ -141,7 +280,6 @@ function renderActiveManuscriptDashboard(bundle, stats, todaySessions, momentumS
           <h3>History</h3>
           <p>All writing sessions logged today.</p>
         </div>
-        <button class="ghost-btn" id="view-all-sessions-btn" type="button">Open history</button>
       </div>
       <div class="list">
         ${todaySessions.length ? todaySessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged today.</div>`}
@@ -276,15 +414,14 @@ function getPublishedProjectSnapshot(bundle, stats = getStats(bundle), editStats
     : completionDifference < 0
       ? `${formatNumber(Math.abs(completionDifference))} words under the original target`
       : "Exactly on the original target";
-  const progressCurrent = number(bundle.editing.progressCurrent);
-  const progressTotal = number(bundle.editing.progressTotal);
-  const unitLower = getStructureUnitLower(bundle);
-  const unitPlural = getStructureUnitPlural(bundle);
-  const unitPluralLower = unitPlural.toLowerCase();
   const bestDayLabel = stats.bestDay.key
     ? `${formatNumber(stats.bestDay.words)} words on ${formatDate(stats.bestDay.key)}`
     : "No writing day was logged.";
   const outstandingIssueCount = getOutstandingIssueCount(bundle);
+  const lastEditingSession = editingSessions[0] || null;
+  const revisionSummary = lastEditingSession
+    ? `Last revised ${formatDate(lastEditingSession.date)}`
+    : "No editing session was logged.";
 
   return {
     completion,
@@ -299,16 +436,11 @@ function getPublishedProjectSnapshot(bundle, stats = getStats(bundle), editStats
     draftSpanDays,
     completionDifference,
     targetSummary,
-    progressCurrent,
-    progressTotal,
     bestDayLabel,
     outstandingIssueCount,
     issueSummary: `${formatNumber(editStats.resolvedIssueCount)} resolved / ${formatNumber(outstandingIssueCount)} open`,
-    currentPassLabel: bundle.editing.passName || defaultPassName(bundle.editing.passStage),
-    structureUnitPlural: unitPlural,
-    sectionsSummary: progressTotal > 0
-      ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} ${unitPluralLower} logged in the final pass`
-      : `No ${unitLower} target was logged in the editing pass`,
+    revisionSummary,
+    lastEditingSession,
     finalProgressPercent: targetWordCount > 0 ? Math.min(999, (finalWordCount / targetWordCount) * 100) : 0
   };
 }
@@ -349,9 +481,9 @@ function renderPublishedProjectDashboard(bundle) {
           <span>${formatNumber(summary.draftSpanDays)} tracked days from project start to publication</span>
         </article>
         <article class="published-highlight">
-          <p class="small-copy">Editing closed out</p>
-          <strong>${escapeHtml(bundle.editing.passStage)}</strong>
-          <span>${escapeHtml(summary.sectionsSummary)}</span>
+          <p class="small-copy">Revision tracked</p>
+          <strong>${formatHours(editStats.totalMinutes)}</strong>
+          <span>${escapeHtml(summary.revisionSummary)}</span>
         </article>
       </div>
     </section>
@@ -398,9 +530,9 @@ function renderPublishedProjectDashboard(bundle) {
           </div>
         </div>
         <div class="published-stat-list">
-          <div class="published-stat-row"><strong>Final pass</strong><span>${escapeHtml(summary.currentPassLabel)}</span></div>
-          <div class="published-stat-row"><strong>Stage</strong><span>${escapeHtml(bundle.editing.passStage)} (${escapeHtml(bundle.editing.passStatus)})</span></div>
-          <div class="published-stat-row"><strong>${escapeHtml(summary.structureUnitPlural)} logged</strong><span>${escapeHtml(summary.sectionsSummary)}</span></div>
+          <div class="published-stat-row"><strong>Editing time</strong><span>${formatHours(editStats.totalMinutes)}</span></div>
+          <div class="published-stat-row"><strong>Editing sessions</strong><span>${formatNumber(summary.editingSessions.length)}</span></div>
+          <div class="published-stat-row"><strong>Last revision</strong><span>${escapeHtml(summary.revisionSummary)}</span></div>
           <div class="published-stat-row"><strong>Words edited</strong><span>${formatNumber(editStats.totalWordsEdited)} words</span></div>
           <div class="published-stat-row"><strong>Issue board</strong><span>${escapeHtml(summary.issueSummary)}</span></div>
         </div>
@@ -428,6 +560,54 @@ function renderPublishedProjectDashboard(bundle) {
 function getWeekdayName(index) {
   const safeIndex = Number.isInteger(index) && index >= 0 && index <= 6 ? index : 0;
   return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][safeIndex];
+}
+
+function getSessionStructureUnitOptions(bundle = currentBundle()) {
+  if (!bundle) return [];
+  return (bundle.editing?.chapters || [])
+    .map((chapter) => String(chapter.label || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+function populateStructureUnitDatalist(datalistId, bundle = currentBundle()) {
+  const datalist = document.getElementById(datalistId);
+  if (!datalist) return;
+  datalist.innerHTML = getSessionStructureUnitOptions(bundle)
+    .map((label) => `<option value="${escapeAttr(label)}"></option>`)
+    .join("");
+}
+
+function renderSessionIssueLinks(containerId, bundle, structureUnitName = "", selectedIds = []) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const issues = getSnapshotIssueOptions(bundle, structureUnitName);
+  if (!issues.length) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  container.classList.remove("hidden");
+  const selected = new Set((selectedIds || []).map((value) => String(value || "")));
+  container.innerHTML = `
+    <span class="session-issue-links-label">Linked issues</span>
+    <div class="session-issue-links-list">
+      ${issues.map((issue) => `
+        <label class="session-issue-link">
+          <input type="checkbox" name="sessionIssueIds" value="${escapeAttr(issue.id)}" ${selected.has(issue.id) ? "checked" : ""} />
+          <span>${escapeHtml(issue.title)}</span>
+        </label>
+      `).join("")}
+    </div>
+  `;
+}
+
+function readSelectedSessionIssueIds(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return [];
+  return [...container.querySelectorAll("input[name='sessionIssueIds']:checked")]
+    .map((input) => String(input.value || "").trim())
+    .filter(Boolean);
 }
 
 function getProjectCompletionCheckpoints(targetWordCount) {
@@ -461,6 +641,9 @@ function bindDashboardEvents(bundle) {
   const sessionCompleteModal = document.getElementById("session-complete-modal");
   const endSessionConfirmModal = document.getElementById("end-session-confirm-modal");
   const openSessionButton = document.getElementById("open-session-modal-btn");
+  const resumeSessionButton = document.getElementById("resume-session-btn");
+  const resumeViewHistoryButton = document.getElementById("resume-view-history-btn");
+  const logPastSessionButton = document.getElementById("log-past-session-btn");
   const closeSessionButton = document.getElementById("close-session-modal-btn");
   const closeSessionCompleteButton = document.getElementById("close-session-complete-btn");
   const startSessionButton = document.getElementById("start-session-btn");
@@ -484,7 +667,42 @@ function bindDashboardEvents(bundle) {
         showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
         return;
       }
+      clearPendingSessionSnapshotContext();
       openSessionModal();
+    };
+  }
+
+  if (resumeSessionButton) {
+    resumeSessionButton.onclick = () => {
+      if (getActiveFocusSession()) {
+        showToast("Session already running", "Return to focus mode from the timer chip or end the current session before starting another.");
+        return;
+      }
+      const snapshot = getLatestSnapshot(bundle);
+      if (!snapshot) {
+        clearPendingSessionSnapshotContext();
+        openSessionModal();
+        return;
+      }
+      setPendingSessionSnapshotContext(snapshot);
+      if (snapshot.sessionType === "editing") {
+        activeView = "edit";
+        render();
+        window.requestAnimationFrame(() => openEditSessionStartModal());
+        return;
+      }
+      openSessionModal();
+    };
+  }
+
+  if (logPastSessionButton) {
+    logPastSessionButton.onclick = () => {
+      if (getActiveFocusSession()) {
+        showToast("Session already running", "Finish or end the active session before logging a past writing session.");
+        return;
+      }
+      clearPendingSessionSnapshotContext();
+      openPastWritingSessionModal();
     };
   }
 
@@ -528,6 +746,10 @@ function bindDashboardEvents(bundle) {
 
   if (openManuscriptCompleteButton) {
     openManuscriptCompleteButton.onclick = () => {
+      if (!isManuscriptCompletionAvailable(bundle)) {
+        showToast("Manuscript complete is locked", "Available when word count is met.");
+        return;
+      }
       if (getActiveFocusSession()) {
         showToast("Session already running", "Finish or end the active session before marking the manuscript complete.");
         return;
@@ -603,6 +825,14 @@ function bindDashboardEvents(bundle) {
     };
   }
 
+  if (resumeViewHistoryButton) {
+    resumeViewHistoryButton.onclick = () => {
+      sessionsReturnView = "dashboard";
+      activeView = "sessions";
+      render();
+    };
+  }
+
   if (viewAllSessionsButton) {
     viewAllSessionsButton.onclick = () => {
       sessionsReturnView = "dashboard";
@@ -617,11 +847,20 @@ function bindDashboardEvents(bundle) {
     const durationMinutes = Math.max(1, number(formData.get("durationMinutes")));
     const sessionDate = formData.get("sessionDate") || toInputDate(new Date().toISOString());
     const sessionNotes = String(formData.get("sessionNotes") || "").trim();
+    const structureUnitName = String(formData.get("structureUnitName") || "").trim();
+    const outcomeStatus = String(formData.get("sessionOutcomeStatus") || "partial");
+    const accomplished = String(formData.get("sessionAccomplished") || "").trim();
+    const nextStep = String(formData.get("sessionNextStep") || "").trim();
+    const blocker = String(formData.get("sessionBlocker") || "").trim();
+    const confidenceLevel = String(formData.get("sessionConfidenceLevel") || "").trim();
+    const excerpt = String(formData.get("sessionExcerpt") || "").trim();
+    const issueIds = readSelectedSessionIssueIds("session-issue-links-field");
 
     if (editingSessionId) {
       const wordsWritten = Math.max(0, number(formData.get("sessionWordsWritten")));
       updateCurrentBundle((projectBundle) => {
         const existingSession = projectBundle.sessions.find((item) => item.id === editingSessionId);
+        const existingSnapshot = getSnapshotForSession(projectBundle, editingSessionId);
         if (!existingSession) return projectBundle;
 
         const updatedSession = {
@@ -629,10 +868,11 @@ function bindDashboardEvents(bundle) {
           wordsWritten,
           durationMinutes,
           date: new Date(`${sessionDate}T12:00:00`).toISOString(),
-          notes: sessionNotes
+          notes: sessionNotes,
+          sectionLabel: structureUnitName
         };
 
-        return {
+        const updatedBundle = {
           ...projectBundle,
           sessions: projectBundle.sessions.map((item) => item.id === editingSessionId ? updatedSession : item),
           project: {
@@ -645,26 +885,66 @@ function bindDashboardEvents(bundle) {
             )
           }
         };
+        return upsertSessionSnapshot(updatedBundle, createSessionSnapshot({
+          id: updatedSession.id,
+          projectId: projectBundle.id,
+          sessionType: "writing",
+          startedAt: existingSnapshot?.startedAt || (
+            updatedSession.date
+              ? new Date(new Date(updatedSession.date).getTime() - (durationMinutes * 60000)).toISOString()
+              : ""
+          ),
+          endedAt: updatedSession.date,
+          durationMinutes,
+          structureUnitId: existingSnapshot?.structureUnitId || "",
+          structureUnitName,
+          structureUnitType: existingSnapshot?.structureUnitType || getStructureUnitLower(projectBundle),
+          startWordCount: existingSnapshot?.startWordCount,
+          endWordCount: existingSnapshot?.endWordCount,
+          wordsAdded: wordsWritten,
+          wordsRemoved: existingSnapshot?.wordsRemoved,
+          netWords: wordsWritten,
+          intendedGoal: existingSnapshot?.intendedGoal || "draft",
+          outcomeStatus,
+          accomplished,
+          nextStep,
+          blocker,
+          confidenceLevel,
+          excerpt,
+          notes: sessionNotes,
+          issueIds
+        }, projectBundle));
       });
 
       showToast("Session updated", "Your edits have been saved and the manuscript total was reconciled.");
     } else {
-      if (!pendingCompletedSession) return;
-      const endWordCount = number(formData.get("sessionEndWordCount"));
-      const startWordCount = number(pendingCompletedSession.startWordCount);
-      const wordsWritten = Math.max(0, endWordCount - startWordCount);
+      if (!pendingCompletedSession && !loggingPastWritingSession) return;
+      const endWordCountValue = nullableNumber(formData.get("sessionEndWordCount"));
+      const startWordCountValue = pendingCompletedSession?.startWordCount ?? null;
+      const wordsWritten = loggingPastWritingSession
+        ? Math.max(0, number(formData.get("sessionWordsWritten")))
+        : endWordCountValue !== null && startWordCountValue !== null
+          ? Math.max(0, endWordCountValue - startWordCountValue)
+          : 0;
+      const endedAt = loggingPastWritingSession
+        ? new Date(`${sessionDate}T12:00:00`).toISOString()
+        : (pendingCompletedSession?.endedAt || new Date(`${sessionDate}T12:00:00`).toISOString());
+      const startedAt = loggingPastWritingSession
+        ? new Date(new Date(`${sessionDate}T12:00:00`).getTime() - (durationMinutes * 60000)).toISOString()
+        : (pendingCompletedSession?.startedAt || new Date(new Date(endedAt).getTime() - (durationMinutes * 60000)).toISOString());
       const session = {
         id: createId(),
         wordsWritten,
         wordsEdited: 0,
         notes: sessionNotes,
         durationMinutes,
-        date: new Date(`${sessionDate}T12:00:00`).toISOString()
+        date: endedAt,
+        sectionLabel: structureUnitName
       };
 
       updateCurrentBundle((projectBundle) => {
         const sessions = [...projectBundle.sessions, session];
-        const updatedBundle = {
+        let updatedBundle = {
           ...projectBundle,
           sessions,
           project: {
@@ -676,6 +956,30 @@ function bindDashboardEvents(bundle) {
             )
           }
         };
+        updatedBundle = upsertSessionSnapshot(updatedBundle, createSessionSnapshot({
+          id: session.id,
+          projectId: projectBundle.id,
+          sessionType: "writing",
+          startedAt,
+          endedAt,
+          durationMinutes,
+          structureUnitName,
+          structureUnitType: getStructureUnitLower(projectBundle),
+          startWordCount: startWordCountValue,
+          endWordCount: endWordCountValue,
+          wordsAdded: wordsWritten,
+          wordsRemoved: 0,
+          netWords: wordsWritten,
+          intendedGoal: "draft",
+          outcomeStatus,
+          accomplished,
+          nextStep,
+          blocker,
+          confidenceLevel,
+          excerpt,
+          notes: sessionNotes,
+          issueIds
+        }, projectBundle));
         const unlockedMilestones = milestoneTargets.filter((target) =>
           number(updatedBundle.project.currentWordCount) >= target && !updatedBundle.milestones.includes(target)
         );
@@ -739,7 +1043,8 @@ function renderGoalsDashboard(bundle) {
   const archivedGoals = archivedGoalsForBundle(bundle);
   const wordGoals = activeGoals.filter((goal) => goal.type === "write_words");
   const minuteGoals = activeGoals.filter((goal) => goal.type === "write_minutes");
-  const totalLiveProgress = activeGoals.reduce((sum, goal) => sum + goal.liveValue, 0);
+  const structureGoals = activeGoals.filter((goal) => goal.type === "structure_units_completed");
+  const issueGoals = activeGoals.filter((goal) => goal.type === "issues_resolved");
 
   view.innerHTML = `
     <section class="stack">
@@ -755,9 +1060,10 @@ function renderGoalsDashboard(bundle) {
         <div class="metrics">
           <div class="metric"><div class="label">Active goals</div><div class="value">${formatNumber(activeGoals.length)}</div></div>
           <div class="metric"><div class="label">Archived goals</div><div class="value">${formatNumber(archivedGoals.length)}</div></div>
-          <div class="metric"><div class="label">Word-count goals</div><div class="value">${formatNumber(wordGoals.length)}</div></div>
+          <div class="metric"><div class="label">Word goals</div><div class="value">${formatNumber(wordGoals.length)}</div></div>
           <div class="metric"><div class="label">Time goals</div><div class="value">${formatNumber(minuteGoals.length)}</div></div>
-          <div class="metric"><div class="label">Tracked effort today</div><div class="value">${formatNumber(totalLiveProgress)}</div><div class="hint">Across all active goals</div></div>
+          <div class="metric"><div class="label">Structure goals</div><div class="value">${formatNumber(structureGoals.length)}</div></div>
+          <div class="metric"><div class="label">Issue goals</div><div class="value">${formatNumber(issueGoals.length)}</div></div>
         </div>
       </section>
 
@@ -984,13 +1290,23 @@ function openSessionModal() {
   const copy = document.getElementById("session-modal-copy");
   const bundle = currentBundle();
   const startCountInput = document.getElementById("session-start-word-count");
+  const pendingSnapshot = getPendingSessionSnapshotContext();
   title.textContent = "Start Writing Session";
-  copy.textContent = "Choose how long you want to write, add your current word count, then begin.";
+  copy.textContent = pendingSnapshot?.structureUnitName
+    ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
+    : "Choose how long you want to write, add your current word count, then begin.";
   if (startCountInput) {
     startCountInput.value = String(number(bundle?.project?.currentWordCount));
   }
   syncSessionDial(sessionDraftMinutes);
   modal.classList.remove("hidden");
+}
+
+function openPastWritingSessionModal() {
+  loggingPastWritingSession = true;
+  pendingCompletedSession = null;
+  editingSessionId = null;
+  openSessionCompleteModal();
 }
 
 function closeSessionModal() {
@@ -1004,6 +1320,7 @@ function openSessionCompleteModal() {
   const title = document.getElementById("session-complete-title");
   const copy = document.getElementById("session-complete-copy");
   const startCountCopy = document.getElementById("session-start-count-copy");
+  const contextCopy = document.getElementById("session-handoff-context-copy");
   const submit = document.getElementById("session-submit-btn");
   const endWordCountField = document.getElementById("session-end-word-count-field");
   const wordsWrittenField = document.getElementById("session-words-written-field");
@@ -1011,50 +1328,100 @@ function openSessionCompleteModal() {
   const wordsWrittenInput = form.elements.sessionWordsWritten;
   const durationInput = form.elements.durationMinutes;
   const sessionDateInput = form.elements.sessionDate;
+  const structureUnitInput = form.elements.structureUnitName;
+  const outcomeInputs = form.elements.sessionOutcomeStatus;
+  const accomplishedInput = form.elements.sessionAccomplished;
+  const nextStepInput = form.elements.sessionNextStep;
+  const blockerInput = form.elements.sessionBlocker;
+  const confidenceInput = form.elements.sessionConfidenceLevel;
+  const excerptInput = form.elements.sessionExcerpt;
   const sessionNotesInput = form.elements.sessionNotes;
+  const bundle = currentBundle();
+  const pendingSnapshot = getPendingSessionSnapshotContext();
 
   form.reset();
+  populateStructureUnitDatalist("session-structure-unit-options", bundle);
+  renderSessionIssueLinks("session-issue-links-field", bundle, pendingSnapshot?.structureUnitName || "", pendingSnapshot?.issueIds || []);
+  if (contextCopy) {
+    contextCopy.textContent = "Goal: Draft. Save only what helps you restart cleanly.";
+  }
 
   if (editingSessionId) {
-    const session = currentBundle()?.sessions.find((item) => item.id === editingSessionId);
+    const session = bundle?.sessions.find((item) => item.id === editingSessionId);
+    const snapshot = getSnapshotForSession(bundle, editingSessionId);
     if (!session) {
       editingSessionId = null;
       return;
     }
 
     title.textContent = "Edit session";
-    copy.textContent = "Update the logged session details and save your changes.";
+    copy.textContent = "Update the handoff for this writing session.";
     if (startCountCopy) {
       startCountCopy.textContent = "Editing a past session will automatically reconcile your manuscript word count.";
     }
     endWordCountField.classList.add("hidden");
     wordsWrittenField.classList.remove("hidden");
     endWordCountInput.required = false;
-    wordsWrittenInput.required = true;
+    wordsWrittenInput.required = false;
     wordsWrittenInput.value = String(number(session.wordsWritten));
     durationInput.value = String(Math.max(1, number(session.durationMinutes)));
     sessionDateInput.value = toInputDate(session.date);
+    structureUnitInput.value = snapshot?.structureUnitName || session.sectionLabel || "";
+    if (outcomeInputs?.value !== undefined) {
+      form.querySelector(`input[name="sessionOutcomeStatus"][value="${snapshot?.outcomeStatus || "partial"}"]`)?.click();
+    }
+    accomplishedInput.value = snapshot?.accomplished || "";
+    nextStepInput.value = snapshot?.nextStep || "";
+    blockerInput.value = snapshot?.blocker || "";
+    confidenceInput.value = snapshot?.confidenceLevel || "";
+    excerptInput.value = snapshot?.excerpt || "";
     sessionNotesInput.value = session.notes || "";
+    renderSessionIssueLinks("session-issue-links-field", bundle, structureUnitInput.value, snapshot?.issueIds || []);
+    if (contextCopy) {
+      contextCopy.textContent = "Goal: Draft. Update only what still matters for the restart.";
+    }
     submit.textContent = "Save changes";
   } else {
-    title.textContent = "Session complete";
-    copy.textContent = pendingCompletedSession
-      ? `You wrote for ${describeMinutes(pendingCompletedSession.durationMinutes)}. Add your current manuscript word count to calculate words written.`
-      : "Add your current manuscript word count to calculate words written.";
+    title.textContent = loggingPastWritingSession ? "Log past session" : "Session complete";
+    copy.textContent = loggingPastWritingSession
+      ? "Capture the essentials from a writing session you already finished elsewhere."
+      : pendingCompletedSession
+      ? `You wrote for ${describeMinutes(pendingCompletedSession.durationMinutes)}. Close the loop with a quick handoff.`
+      : "Close the loop with a quick handoff.";
     if (startCountCopy) {
-      startCountCopy.textContent = pendingCompletedSession
+      startCountCopy.textContent = loggingPastWritingSession
+        ? "Word count is optional here. Leave it blank if you only want the restart context."
+        : pendingCompletedSession
         ? `Starting manuscript count: ${formatNumber(number(pendingCompletedSession.startWordCount))} words.`
         : "";
     }
-    endWordCountField.classList.remove("hidden");
-    wordsWrittenField.classList.add("hidden");
-    endWordCountInput.required = true;
+    endWordCountField.classList.toggle("hidden", loggingPastWritingSession);
+    wordsWrittenField.classList.toggle("hidden", !loggingPastWritingSession);
+    endWordCountInput.required = false;
     wordsWrittenInput.required = false;
+    wordsWrittenInput.value = loggingPastWritingSession ? "" : wordsWrittenInput.value;
     durationInput.value = String(Math.max(1, number(pendingCompletedSession?.durationMinutes || sessionDraftMinutes)));
     sessionDateInput.value = toInputDate(pendingCompletedSession?.endedAt || new Date().toISOString());
+    structureUnitInput.value = pendingSnapshot?.structureUnitName || "";
+    form.querySelector('input[name="sessionOutcomeStatus"][value="partial"]')?.click();
+    accomplishedInput.value = "";
+    nextStepInput.value = "";
+    blockerInput.value = "";
+    confidenceInput.value = "";
+    excerptInput.value = "";
     sessionNotesInput.value = "";
-    submit.textContent = "Save session";
+    renderSessionIssueLinks("session-issue-links-field", bundle, structureUnitInput.value, pendingSnapshot?.issueIds || []);
+    if (contextCopy) {
+      contextCopy.textContent = pendingSnapshot?.structureUnitName
+        ? `Goal: Draft. Resuming ${pendingSnapshot.structureUnitName}.`
+        : "Goal: Draft. Leave only the context your future self will need.";
+    }
+    submit.textContent = loggingPastWritingSession ? "Save handoff" : "Save handoff";
   }
+
+  structureUnitInput.oninput = () => {
+    renderSessionIssueLinks("session-issue-links-field", bundle, structureUnitInput.value);
+  };
 
   modal.classList.remove("hidden");
 }
@@ -1075,6 +1442,8 @@ function closeSessionCompleteModal() {
   form.reset();
   pendingCompletedSession = null;
   editingSessionId = null;
+  loggingPastWritingSession = false;
+  clearPendingSessionSnapshotContext();
   modal.classList.add("hidden");
 }
 
@@ -1247,10 +1616,9 @@ function buildPublishedProjectPdf(bundle) {
 
   addParagraph("Editing Summary", { font: "F2", size: 15, gapAfter: 6, maxChars: 60 });
   [
-    `Final pass: ${summary.currentPassLabel}`,
-    `Stage and status: ${bundle.editing.passStage} (${bundle.editing.passStatus})`,
-    `${summary.structureUnitPlural} logged in final pass: ${summary.sectionsSummary}`,
+    `Editing time: ${formatHours(editStats.totalMinutes)}`,
     `Editing sessions: ${formatNumber(summary.editingSessions.length)}`,
+    `Last revision: ${summary.revisionSummary}`,
     `Words edited: ${formatNumber(editStats.totalWordsEdited)} words`,
     `Resolved issues: ${formatNumber(editStats.resolvedIssueCount)}`
   ].forEach((line) => addParagraph(line, { gapAfter: 4 }));
@@ -1347,7 +1715,7 @@ function syncSessionDial(minutes = sessionDraftMinutes) {
 
 function bindSessionDial() {
   const dial = document.getElementById("session-dial");
-  const dialWrap = document.querySelector("#session-start-modal .session-dial-wrap");
+  const dialWrap = document.querySelector("#session-modal .session-dial-wrap");
   if (!dial || !dialWrap || dial.dataset.bound === "true") return;
   dial.dataset.bound = "true";
 
@@ -1473,10 +1841,11 @@ function updateWritingSessionScreen() {
 }
 
 function startWritingSession(startWordCount) {
+  const startedAt = Date.now();
   activeWritingSession = {
-    startedAt: Date.now(),
+    startedAt,
     plannedMinutes: sessionDraftMinutes,
-    endsAt: Date.now() + (sessionDraftMinutes * 60000),
+    endsAt: startedAt + (sessionDraftMinutes * 60000),
     startWordCount: number(startWordCount)
   };
   writingSessionInFocusMode = true;
@@ -1495,6 +1864,7 @@ function finishActiveWritingSession(autoCompleted = false) {
   const elapsedMinutes = Math.max(1, Math.round((endedAt - activeWritingSession.startedAt) / 60000));
   pendingCompletedSession = {
     durationMinutes: autoCompleted ? activeWritingSession.plannedMinutes : elapsedMinutes,
+    startedAt: new Date(activeWritingSession.startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     startWordCount: number(activeWritingSession.startWordCount)
   };
@@ -1538,8 +1908,11 @@ function syncGoalFormState(form) {
   if (!form?.elements) return;
   const trackingMode = form.elements.trackingMode?.value === "date_range" ? "date_range" : "ongoing";
   const scheduleMode = form.elements.scheduleMode?.value === "custom_days" ? "custom_days" : "daily";
+  const goalType = normalizeGoalType(form.elements.type?.value);
   const endDateField = document.getElementById("goal-end-date-field");
   const customScheduleFields = document.getElementById("goal-custom-schedule-fields");
+  const customScheduleTitle = document.getElementById("goal-custom-schedule-title");
+  const customScheduleCopy = document.getElementById("goal-custom-schedule-copy");
   const sharedTargetField = document.getElementById("goal-target-field");
 
   if (endDateField) {
@@ -1550,6 +1923,18 @@ function syncGoalFormState(form) {
   }
   if (customScheduleFields) {
     customScheduleFields.classList.toggle("hidden", scheduleMode !== "custom_days");
+    customScheduleFields.classList.toggle("time-goal-weekly-plan", goalType === "write_minutes");
+  }
+  if (customScheduleTitle) {
+    customScheduleTitle.textContent = goalType === "write_minutes" ? "Weekly time plan" : "Custom daily targets";
+  }
+  if (customScheduleCopy) {
+    const unitPlural = getStructureUnitPlural(currentBundle()).toLowerCase();
+    customScheduleCopy.textContent = {
+      write_minutes: "Weekly time plan: set focused writing or editing minutes for each day. Use 0 for true rest days.",
+      structure_units_completed: `Set completed ${unitPlural} for each day. Use 0 when structure completion is not expected.`,
+      issues_resolved: "Set issues resolved for each day. Use 0 when you are not planning an issue-resolution push."
+    }[goalType] || "Set any day to 0 to make it an off day. This lets you do patterns like lower weekday targets or bigger weekend pushes.";
   }
   if (sharedTargetField) {
     sharedTargetField.classList.toggle("hidden", scheduleMode === "custom_days");
@@ -1582,14 +1967,14 @@ function bindSessionActions() {
         const nextWordCount = session?.type === "edit"
           ? number(projectBundle.project.currentWordCount)
           : Math.max(0, number(projectBundle.project.currentWordCount) - number(session?.wordsWritten));
-        return {
+        return removeSessionSnapshot({
           ...projectBundle,
           sessions: projectBundle.sessions.filter((item) => item.id !== sessionId),
           project: {
             ...projectBundle.project,
             currentWordCount: nextWordCount
           }
-        };
+        }, sessionId);
       });
       persistAndRender();
       showToast("Session deleted", deletedSession?.type === "edit" ? "That editing session was removed from your history." : "That session was removed from your history.");

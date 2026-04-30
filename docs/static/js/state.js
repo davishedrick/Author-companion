@@ -1,7 +1,24 @@
 const STORAGE_KEY = "author-engine-mvp";
 const STATE_API_ENDPOINT = "/api/state";
 const DEFAULT_VIEW = "dashboard";
-const PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
+const DEFAULT_PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
+const PLOT_SECTION_IDS = [
+  ...DEFAULT_PLOT_SECTION_IDS,
+  "premise",
+  "themes",
+  "timeline",
+  "plotThreads",
+  "scenes",
+  "relationships",
+  "cultures",
+  "magicSystems",
+  "technology",
+  "research",
+  "memoirPeople",
+  "memories",
+  "objects",
+  "questions"
+];
 const GOAL_DAY_KEYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const GOAL_DAY_LABELS = {
   monday: "Mon",
@@ -12,6 +29,11 @@ const GOAL_DAY_LABELS = {
   saturday: "Sat",
   sunday: "Sun"
 };
+const GOAL_TYPES = ["write_words", "write_minutes", "structure_units_completed", "issues_resolved"];
+const SESSION_SNAPSHOT_TYPES = ["writing", "editing", "planning", "research"];
+const SESSION_SNAPSHOT_GOALS = ["draft", "revise", "fix", "proofread", "custom"];
+const SESSION_SNAPSHOT_OUTCOMES = ["completed", "partial", "blocked"];
+const SESSION_SNAPSHOT_CONFIDENCE_LEVELS = ["", "low", "medium", "high"];
 const PROJECT_TYPE_OPTIONS = ["Novel", "Short story", "Screenplay", "Essay", "Other"];
 const STRUCTURE_UNIT_OPTIONS = ["Chapter", "Scene", "Section"];
 const PRIMARY_WORKSPACE_VIEWS = ["dashboard", "plot", "edit"];
@@ -79,6 +101,7 @@ const exportColumns = [
   "chapter_label",
   "chapter_summary",
   "chapter_sort_order",
+  "chapter_completed_at",
   "goal_id",
   "goal_type",
   "goal_title",
@@ -104,6 +127,7 @@ const exportColumns = [
   "issue_priority",
   "issue_status",
   "issue_notes",
+  "issue_snippet",
   "issue_created_at",
   "issue_resolved_at",
   "issue_pass_name",
@@ -115,32 +139,73 @@ const exportColumns = [
   "session_words_edited",
   "session_pass_name",
   "session_section_label",
-  "session_notes"
+  "session_notes",
+  "session_started_at",
+  "session_ended_at",
+  "session_structure_unit_id",
+  "session_structure_unit_type",
+  "session_start_word_count",
+  "session_end_word_count",
+  "session_words_added",
+  "session_words_removed",
+  "session_net_words",
+  "session_intended_goal",
+  "session_outcome_status",
+  "session_accomplished",
+  "session_next_step",
+  "session_blocker",
+  "session_confidence_level",
+  "session_excerpt",
+  "session_issue_ids"
 ];
 
-function defaultPassName(stage = "Developmental") {
-  const labels = {
-    Developmental: "Developmental Edit",
-    "Line Edit": "Line Edit",
-    Copyedit: "Copyedit",
-    Proofread: "Proofread"
-  };
-  return labels[stage] || `${stage} Pass`;
-}
-
-function normalizeEditPassStage(stage = "Developmental") {
-  const normalizedStage = String(stage || "").trim();
-  if (normalizedStage === "Structural") return "Developmental";
-  const allowedStages = ["Developmental", "Line Edit", "Copyedit", "Proofread"];
-  return allowedStages.includes(normalizedStage) ? normalizedStage : "Developmental";
-}
-
-function normalizeLegacyEditPassName(passName = "", activeStage = "Developmental") {
-  const normalizedPassName = String(passName || "").trim();
-  if (!normalizedPassName || normalizedPassName === "Structural Pass") {
-    return defaultPassName(activeStage);
+const EDIT_FOCUS_ORDER = ["revision"];
+const EDIT_FOCUS_CONFIG = {
+  revision: {
+    label: "Revision",
+    shortLabel: "Rev",
+    weight: 1,
+    defaultPriority: "Medium",
+    summary: "Big-picture and sentence-level issues all live together here."
   }
-  return normalizedPassName;
+};
+
+function normalizeEditFocusKey(value = "", fallback = "revision") {
+  const source = `${String(value || "").trim()} ${String(fallback || "").trim()}`.toLowerCase();
+  if (!source) return "revision";
+  return "revision";
+}
+
+function getEditFocusConfig(focusKey = "revision") {
+  return EDIT_FOCUS_CONFIG[normalizeEditFocusKey(focusKey)] || EDIT_FOCUS_CONFIG.revision;
+}
+
+function getEditFocusLabel(focusKey = "revision") {
+  return getEditFocusConfig(focusKey).label;
+}
+
+function getEditFocusShortLabel(focusKey = "revision") {
+  return getEditFocusConfig(focusKey).shortLabel;
+}
+
+function getEditFocusSummary(focusKey = "revision") {
+  return getEditFocusConfig(focusKey).summary;
+}
+
+function getEditFocusDefaultPriority(focusKey = "revision") {
+  return getEditFocusConfig(focusKey).defaultPriority;
+}
+
+function defaultPassName(stage = "") {
+  return "";
+}
+
+function normalizeEditPassStage(stage = "") {
+  return "";
+}
+
+function normalizeLegacyEditPassName(passName = "", activeStage = "") {
+  return "";
 }
 
 function normalizeProjectType(type = "Novel") {
@@ -198,7 +263,8 @@ function createEditingChapter(label = "", overrides = {}) {
     id: overrides.id || createId(),
     label: normalizeChapterLabel(label),
     summary: String(overrides.summary || "").trim(),
-    sortOrder: Math.max(0, number(overrides.sortOrder))
+    sortOrder: Math.max(0, number(overrides.sortOrder)),
+    completedAt: String(overrides.completedAt || "")
   };
 }
 
@@ -228,7 +294,10 @@ function normalizeEditingChapters(chapters = [], issues = [], sessions = []) {
       ).trim(),
       sortOrder: Math.max(0, number(
         overrides.sortOrder !== undefined ? overrides.sortOrder : existing.sortOrder
-      ))
+      )),
+      completedAt: String(
+        overrides.completedAt !== undefined ? overrides.completedAt : existing.completedAt || ""
+      )
     });
   }
 
@@ -239,7 +308,8 @@ function normalizeEditingChapters(chapters = [], issues = [], sessions = []) {
     upsertChapter(chapter?.label, {
       id: chapter?.id,
       summary: chapter?.summary,
-      sortOrder: chapter?.sortOrder ?? index
+      sortOrder: chapter?.sortOrder ?? index,
+      completedAt: chapter?.completedAt || chapter?.completed_at || ""
     });
   });
 
@@ -262,10 +332,12 @@ function normalizeEditingChapters(chapters = [], issues = [], sessions = []) {
 }
 
 function createDefaultEditingState() {
+  const focusKey = "revision";
   return {
-    passName: defaultPassName(),
-    passStage: "Developmental",
-    passStatus: "Not started",
+    focusKey,
+    passName: "",
+    passStage: "",
+    passStatus: "",
     passObjective: "",
     progressCurrent: 0,
     progressTotal: 0,
@@ -275,7 +347,8 @@ function createDefaultEditingState() {
 
 function createDefaultPlotState() {
   return {
-    activeSection: PLOT_SECTION_IDS[0],
+    activeSection: DEFAULT_PLOT_SECTION_IDS[0],
+    activeSections: [...DEFAULT_PLOT_SECTION_IDS],
     sections: Object.fromEntries(PLOT_SECTION_IDS.map((sectionId) => [sectionId, []]))
   };
 }
@@ -293,6 +366,35 @@ function createDefaultPublicationState() {
     isPublished: false,
     publishedAt: "",
     publishedWordCount: 0
+  };
+}
+
+function createDefaultSessionSnapshot(projectId = "") {
+  return {
+    id: createId(),
+    projectId: String(projectId || ""),
+    sessionType: "writing",
+    startedAt: "",
+    endedAt: "",
+    durationMinutes: 0,
+    structureUnitId: "",
+    structureUnitName: "",
+    structureUnitType: "",
+    startWordCount: null,
+    endWordCount: null,
+    wordsAdded: null,
+    wordsRemoved: null,
+    netWords: null,
+    intendedGoal: "draft",
+    outcomeStatus: "partial",
+    focusKey: "",
+    accomplished: "",
+    nextStep: "",
+    blocker: "",
+    confidenceLevel: "",
+    excerpt: "",
+    notes: "",
+    issueIds: []
   };
 }
 
@@ -324,6 +426,7 @@ const defaultProjectTemplate = {
   editing: createDefaultEditingState(),
   plot: createDefaultPlotState(),
   goals: [],
+  snapshots: [],
   sessions: [],
   issues: [],
   milestones: []
@@ -356,6 +459,7 @@ let writingSessionInFocusMode = true;
 let pendingCompletedSession = null;
 let sessionTimerHandle = null;
 let sessionsReturnView = "dashboard";
+let pendingSessionSnapshotContext = null;
 
 function isProjectWorkspaceView(view) {
   return WORKSPACE_VIEWS.includes(view);
@@ -388,6 +492,7 @@ function createProjectBundle(title, targetWordCount, currentWordCount, deadline,
     editing: createDefaultEditingState(),
     plot: createDefaultPlotState(),
     goals: [],
+    snapshots: [],
     sessions: [],
     issues: [],
     milestones: []
@@ -429,6 +534,7 @@ function normalizeLoadedState(snapshot) {
       publication: snapshot.publication || createDefaultPublicationState(),
       editing: snapshot.editing || createDefaultEditingState(),
       goals: snapshot.goals || [],
+      snapshots: snapshot.snapshots || [],
       sessions: snapshot.sessions || [],
       issues: snapshot.issues || [],
       milestones: snapshot.milestones || []
@@ -511,6 +617,9 @@ function normalizeProjectBundle(bundle) {
     editing: normalizedEditing,
     plot: normalizePlotState(bundle.plot),
     goals: Array.isArray(bundle.goals) ? bundle.goals.map(normalizeGoal) : [],
+    snapshots: Array.isArray(bundle.snapshots)
+      ? bundle.snapshots.map((snapshot) => normalizeSessionSnapshot(snapshot, bundle))
+      : [],
     sessions: normalizedSessions,
     issues: normalizedIssues,
     milestones: Array.isArray(bundle.milestones) ? bundle.milestones : []
@@ -523,11 +632,15 @@ function isProjectArchived(bundle) {
 
 function normalizeEditingState(editing, issues = [], sessions = []) {
   const mergedEditing = { ...createDefaultEditingState(), ...(editing || {}) };
-  const passStage = normalizeEditPassStage(mergedEditing.passStage);
+  const focusKey = normalizeEditFocusKey(
+    mergedEditing.focusKey,
+    `${mergedEditing.passName || ""} ${mergedEditing.passStage || ""}`
+  );
   return {
     ...mergedEditing,
-    passStage,
-    passName: normalizeLegacyEditPassName(mergedEditing.passName, passStage),
+    focusKey,
+    passStage: "",
+    passName: "",
     chapters: normalizeEditingChapters(mergedEditing.chapters, issues, sessions)
   };
 }
@@ -552,6 +665,150 @@ function normalizePublicationState(publication) {
   };
 }
 
+function nullableNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampText(value, maxLength = 140) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function normalizeSessionSnapshotType(value = "writing") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return SESSION_SNAPSHOT_TYPES.includes(normalized) ? normalized : "writing";
+}
+
+function normalizeSessionSnapshotGoal(value = "draft", sessionType = "writing") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (SESSION_SNAPSHOT_GOALS.includes(normalized)) return normalized;
+  if (sessionType === "editing") return "revise";
+  if (sessionType === "research") return "fix";
+  return "draft";
+}
+
+function normalizeSessionSnapshotOutcome(value = "partial") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return SESSION_SNAPSHOT_OUTCOMES.includes(normalized) ? normalized : "partial";
+}
+
+function normalizeSessionSnapshotConfidence(value = "") {
+  const normalized = String(value || "").trim().toLowerCase();
+  return SESSION_SNAPSHOT_CONFIDENCE_LEVELS.includes(normalized) ? normalized : "";
+}
+
+function computeSnapshotWordProgress(startWordCount, endWordCount, fallbackAdded = null, fallbackRemoved = null, fallbackNet = null) {
+  const start = nullableNumber(startWordCount);
+  const end = nullableNumber(endWordCount);
+  if (start !== null && end !== null) {
+    const delta = end - start;
+    return {
+      startWordCount: start,
+      endWordCount: end,
+      wordsAdded: delta > 0 ? delta : 0,
+      wordsRemoved: delta < 0 ? Math.abs(delta) : 0,
+      netWords: delta
+    };
+  }
+
+  const wordsAdded = nullableNumber(fallbackAdded);
+  const wordsRemoved = nullableNumber(fallbackRemoved);
+  const netWords = nullableNumber(fallbackNet);
+
+  return {
+    startWordCount: start,
+    endWordCount: end,
+    wordsAdded,
+    wordsRemoved,
+    netWords: netWords !== null
+      ? netWords
+      : wordsAdded !== null || wordsRemoved !== null
+        ? number(wordsAdded) - number(wordsRemoved)
+        : null
+  };
+}
+
+function getStructureUnitBySnapshotContext(bundle, structureUnitName = "", structureUnitId = "") {
+  if (!bundle) return null;
+  const units = bundle.editing?.chapters || [];
+  const normalizedId = String(structureUnitId || "").trim();
+  if (normalizedId) {
+    const byId = units.find((unit) => unit.id === normalizedId);
+    if (byId) return byId;
+  }
+  const normalizedName = String(structureUnitName || "").trim().toLowerCase();
+  if (!normalizedName) return null;
+  return units.find((unit) => String(unit.label || "").trim().toLowerCase() === normalizedName) || null;
+}
+
+function createSessionSnapshot(snapshot = {}, bundle = currentBundle()) {
+  const projectBundle = bundle || currentBundle();
+  const projectId = String(snapshot.projectId || projectBundle?.id || state.activeProjectId || "");
+  const sessionType = normalizeSessionSnapshotType(
+    snapshot.sessionType || (snapshot.type === "edit" ? "editing" : snapshot.type === "write" ? "writing" : "writing")
+  );
+  const matchedSession = Array.isArray(projectBundle?.sessions)
+    ? projectBundle.sessions.find((session) => session.id === snapshot.id)
+    : null;
+  const startedAt = String(snapshot.startedAt || "").trim();
+  const endedAt = String(snapshot.endedAt || snapshot.date || "").trim();
+  const structureUnitName = clampText(snapshot.structureUnitName || snapshot.sectionLabel || "", 140);
+  const matchedStructureUnit = getStructureUnitBySnapshotContext(projectBundle, structureUnitName, snapshot.structureUnitId);
+  const focusKey = sessionType === "editing"
+    ? normalizeEditFocusKey(
+        snapshot.focusKey,
+        matchedSession?.focusKey || snapshot.passName || projectBundle?.editing?.focusKey
+      )
+    : "";
+  const wordProgress = computeSnapshotWordProgress(
+    snapshot.startWordCount,
+    snapshot.endWordCount,
+    snapshot.wordsAdded ?? snapshot.wordsWritten,
+    snapshot.wordsRemoved,
+    snapshot.netWords
+  );
+
+  return {
+    ...createDefaultSessionSnapshot(projectId),
+    ...snapshot,
+    id: String(snapshot.id || createId()),
+    projectId,
+    sessionType,
+    startedAt,
+    endedAt,
+    durationMinutes: Math.max(1, number(snapshot.durationMinutes)),
+    structureUnitId: String(snapshot.structureUnitId || matchedStructureUnit?.id || ""),
+    structureUnitName,
+    structureUnitType: clampText(
+      snapshot.structureUnitType || getStructureUnitLower(projectBundle),
+      40
+    ).toLowerCase(),
+    ...wordProgress,
+    intendedGoal: normalizeSessionSnapshotGoal(snapshot.intendedGoal, sessionType),
+    outcomeStatus: normalizeSessionSnapshotOutcome(snapshot.outcomeStatus),
+    focusKey,
+    accomplished: clampText(snapshot.accomplished, 140),
+    nextStep: clampText(snapshot.nextStep, 140),
+    blocker: clampText(snapshot.blocker, 180),
+    confidenceLevel: normalizeSessionSnapshotConfidence(snapshot.confidenceLevel),
+    excerpt: clampText(snapshot.excerpt, 500),
+    notes: clampText(snapshot.notes || snapshot.sessionNotes, 280),
+    issueIds: [...new Set((Array.isArray(snapshot.issueIds) ? snapshot.issueIds : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean))]
+  };
+}
+
+function normalizeSessionSnapshot(snapshot, bundle = currentBundle()) {
+  return createSessionSnapshot(snapshot, bundle);
+}
+
+function normalizeGoalType(type = "write_words") {
+  const normalizedType = String(type || "").trim();
+  return GOAL_TYPES.includes(normalizedType) ? normalizedType : "write_words";
+}
+
 function normalizeGoal(goal) {
   const status = goal?.status === "archived" ? "archived" : "active";
   const archivedAt = status === "archived"
@@ -565,7 +822,7 @@ function normalizeGoal(goal) {
 
   return {
     id: goal?.id || createId(),
-    type: goal?.type === "write_minutes" ? "write_minutes" : "write_words",
+    type: normalizeGoalType(goal?.type),
     title: String(goal?.title || ""),
     targetValue: representativeTarget,
     createdAt,
@@ -602,9 +859,13 @@ function normalizeGoalDateValue(value) {
 
 function normalizePlotState(plot) {
   const defaultPlot = createDefaultPlotState();
-  const activeSection = PLOT_SECTION_IDS.includes(plot?.activeSection)
+  const storedActiveSections = Array.isArray(plot?.activeSections) ? plot.activeSections : defaultPlot.activeSections;
+  const activeSections = [...new Set(storedActiveSections)]
+    .filter((sectionId) => PLOT_SECTION_IDS.includes(sectionId));
+  const normalizedActiveSections = activeSections.length ? activeSections : [...defaultPlot.activeSections];
+  const activeSection = normalizedActiveSections.includes(plot?.activeSection)
     ? plot.activeSection
-    : defaultPlot.activeSection;
+    : normalizedActiveSections[0];
   const sections = Object.fromEntries(PLOT_SECTION_IDS.map((sectionId) => {
     const storedEntries = plot?.sections?.[sectionId] || plot?.[sectionId];
     return [sectionId, Array.isArray(storedEntries) ? storedEntries.map(normalizePlotEntry) : []];
@@ -614,6 +875,7 @@ function normalizePlotState(plot) {
     ...defaultPlot,
     ...plot,
     activeSection,
+    activeSections: normalizedActiveSections,
     sections
   };
 }
@@ -631,16 +893,103 @@ function normalizePlotEntry(entry) {
 }
 
 function normalizeSession(session) {
+  const isEditSession = session?.type === "edit";
+  const focusKey = isEditSession
+    ? normalizeEditFocusKey(session?.focusKey, session?.passName)
+    : "";
   return {
     id: session?.id || createId(),
-    type: session?.type === "edit" ? "edit" : "write",
+    type: isEditSession ? "edit" : "write",
     date: session?.date || new Date().toISOString(),
     durationMinutes: number(session?.durationMinutes),
     wordsWritten: number(session?.wordsWritten),
     wordsEdited: number(session?.wordsEdited),
     notes: String(session?.notes || ""),
-    passName: normalizeLegacyEditPassName(session?.passName, "Developmental"),
+    focusKey,
+    passName: "",
     sectionLabel: String(session?.sectionLabel || "")
+  };
+}
+
+function buildSnapshotFromSession(session, bundle = currentBundle()) {
+  if (!session) return null;
+  const sessionType = session.type === "edit" ? "editing" : "writing";
+  const endedAt = String(session.date || "").trim();
+  const startedAt = endedAt
+    ? new Date(new Date(endedAt).getTime() - (Math.max(1, number(session.durationMinutes)) * 60000)).toISOString()
+    : "";
+  return createSessionSnapshot({
+    id: session.id,
+    projectId: bundle?.id || state.activeProjectId || "",
+    sessionType,
+    startedAt,
+    endedAt,
+    durationMinutes: Math.max(1, number(session.durationMinutes)),
+    structureUnitName: session.sectionLabel || "",
+    structureUnitType: getStructureUnitLower(bundle),
+    wordsAdded: session.type === "edit" ? null : number(session.wordsWritten),
+    wordsRemoved: null,
+    netWords: session.type === "edit" ? null : number(session.wordsWritten),
+    intendedGoal: sessionType === "editing" ? "revise" : "draft",
+    outcomeStatus: "partial",
+    focusKey: session.focusKey || "",
+    notes: session.notes || ""
+  }, bundle);
+}
+
+function getProjectSnapshots(projectId = state.activeProjectId, projects = state.projects) {
+  const bundle = typeof projectId === "string"
+    ? projects.find((project) => project.id === projectId)
+    : projectId;
+  if (!bundle) return [];
+  return [...(bundle.snapshots || [])]
+    .map((snapshot) => normalizeSessionSnapshot(snapshot, bundle))
+    .sort((a, b) => new Date(b.endedAt || b.startedAt || 0) - new Date(a.endedAt || a.startedAt || 0));
+}
+
+function getSnapshotForSession(bundle, sessionId) {
+  if (!bundle || !sessionId) return null;
+  const saved = getProjectSnapshots(bundle).find((snapshot) => snapshot.id === sessionId);
+  if (saved) return saved;
+  const session = bundle.sessions.find((entry) => entry.id === sessionId);
+  return session ? buildSnapshotFromSession(session, bundle) : null;
+}
+
+function getLatestSnapshot(projectId = state.activeProjectId, projects = state.projects) {
+  const bundle = typeof projectId === "string"
+    ? projects.find((project) => project.id === projectId)
+    : projectId;
+  if (!bundle) return null;
+  const latestSaved = getProjectSnapshots(bundle)[0] || null;
+  const latestSession = [...(bundle.sessions || [])]
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0] || null;
+  if (!latestSaved) return latestSession ? buildSnapshotFromSession(latestSession, bundle) : null;
+  if (!latestSession) return latestSaved;
+  const latestSavedDate = new Date(latestSaved.endedAt || latestSaved.startedAt || 0);
+  const latestSessionDate = new Date(latestSession.date || 0);
+  if (latestSessionDate > latestSavedDate) {
+    return buildSnapshotFromSession(latestSession, bundle);
+  }
+  return latestSaved;
+}
+
+function upsertSessionSnapshot(bundle, snapshot) {
+  if (!bundle || !snapshot) return bundle;
+  const normalizedSnapshot = normalizeSessionSnapshot(snapshot, bundle);
+  return {
+    ...bundle,
+    snapshots: [
+      ...(bundle.snapshots || []).filter((entry) => entry.id !== normalizedSnapshot.id),
+      normalizedSnapshot
+    ].sort((a, b) => new Date(b.endedAt || b.startedAt || 0) - new Date(a.endedAt || a.startedAt || 0))
+  };
+}
+
+function removeSessionSnapshot(bundle, snapshotId) {
+  if (!bundle || !snapshotId) return bundle;
+  return {
+    ...bundle,
+    snapshots: (bundle.snapshots || []).filter((snapshot) => snapshot.id !== snapshotId)
   };
 }
 
@@ -651,6 +1000,7 @@ function normalizeIssue(issue) {
     : issue?.workflowStatus === "in_progress"
       ? "in_progress"
       : "open";
+  const focusKey = normalizeEditFocusKey(issue?.focusKey, issue?.passName);
   return {
     id: issue?.id || createId(),
     title: String(issue?.title || ""),
@@ -659,9 +1009,11 @@ function normalizeIssue(issue) {
     priority: String(issue?.priority || "Medium"),
     status,
     notes: String(issue?.notes || ""),
+    snippet: String(issue?.snippet || ""),
     createdAt: issue?.createdAt || new Date().toISOString(),
     resolvedAt: status === "Resolved" ? (issue?.resolvedAt || issue?.createdAt || new Date().toISOString()) : "",
-    passName: normalizeLegacyEditPassName(issue?.passName, "Developmental"),
+    focusKey,
+    passName: "",
     workflowStatus,
     textLocation: String(issue?.textLocation || "")
   };
@@ -747,6 +1099,18 @@ function currentBundle() {
   return state.projects.find((project) => project.id === state.activeProjectId) || null;
 }
 
+function setPendingSessionSnapshotContext(snapshot) {
+  pendingSessionSnapshotContext = snapshot ? cloneValue(snapshot) : null;
+}
+
+function getPendingSessionSnapshotContext() {
+  return pendingSessionSnapshotContext ? cloneValue(pendingSessionSnapshotContext) : null;
+}
+
+function clearPendingSessionSnapshotContext() {
+  pendingSessionSnapshotContext = null;
+}
+
 function updateCurrentBundle(updater) {
   state.projects = state.projects.map((project) => {
     if (project.id !== state.activeProjectId) return project;
@@ -773,6 +1137,25 @@ function formatDate(dateString) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatRelativeTime(dateString, now = new Date()) {
+  if (!dateString) return "recently";
+  const date = new Date(dateString);
+  const deltaMs = now.getTime() - date.getTime();
+  const deltaMinutes = Math.max(0, Math.round(deltaMs / 60000));
+  if (deltaMinutes < 1) return "just now";
+  if (deltaMinutes < 60) return `${formatNumber(deltaMinutes)} minute${deltaMinutes === 1 ? "" : "s"} ago`;
+  const deltaHours = Math.round(deltaMinutes / 60);
+  if (deltaHours < 24) return `${formatNumber(deltaHours)} hour${deltaHours === 1 ? "" : "s"} ago`;
+  const deltaDays = Math.round(deltaHours / 24);
+  if (deltaDays < 7) return `${formatNumber(deltaDays)} day${deltaDays === 1 ? "" : "s"} ago`;
+  const deltaWeeks = Math.round(deltaDays / 7);
+  if (deltaWeeks < 5) return `${formatNumber(deltaWeeks)} week${deltaWeeks === 1 ? "" : "s"} ago`;
+  const deltaMonths = Math.round(deltaDays / 30);
+  if (deltaMonths < 12) return `${formatNumber(deltaMonths)} month${deltaMonths === 1 ? "" : "s"} ago`;
+  const deltaYears = Math.round(deltaDays / 365);
+  return `${formatNumber(deltaYears)} year${deltaYears === 1 ? "" : "s"} ago`;
+}
+
 function toInputDate(dateString) {
   const fallback = new Date();
   const date = dateString ? new Date(dateString) : fallback;
@@ -792,6 +1175,62 @@ function formatClock(totalSeconds) {
 
 function describeMinutes(minutes) {
   return `${formatNumber(minutes)} minute${number(minutes) === 1 ? "" : "s"}`;
+}
+
+function sessionSnapshotTypeLabel(sessionType = "writing") {
+  const normalized = normalizeSessionSnapshotType(sessionType);
+  return {
+    writing: "Writing",
+    editing: "Editing",
+    planning: "Planning",
+    research: "Research"
+  }[normalized] || "Writing";
+}
+
+function sessionSnapshotGoalLabel(goal = "draft") {
+  const normalized = normalizeSessionSnapshotGoal(goal);
+  return {
+    draft: "Draft",
+    revise: "Revise",
+    fix: "Fix",
+    proofread: "Proofread",
+    custom: "Custom"
+  }[normalized] || "Draft";
+}
+
+function sessionSnapshotOutcomeLabel(status = "partial") {
+  const normalized = normalizeSessionSnapshotOutcome(status);
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function defaultSnapshotNextStep(snapshot) {
+  if (snapshot?.nextStep) return snapshot.nextStep;
+  if (snapshot?.intendedGoal && snapshot.intendedGoal !== "custom") {
+    const unitName = snapshot.structureUnitName ? ` on ${snapshot.structureUnitName}` : "";
+    return {
+      draft: `Continue drafting${unitName}`,
+      revise: `Continue revising${unitName}`,
+      fix: `Continue fixing the problem${unitName}`,
+      proofread: `Continue proofreading${unitName}`
+    }[snapshot.intendedGoal] || "";
+  }
+  if (snapshot?.structureUnitName) return `Continue work on ${snapshot.structureUnitName}`;
+  return "Continue where you left off";
+}
+
+function formatSnapshotWordChange(snapshot) {
+  if (!snapshot) return "No word change logged";
+  const netWords = nullableNumber(snapshot.netWords);
+  if (netWords !== null) {
+    if (netWords > 0) return `+${formatNumber(netWords)} words`;
+    if (netWords < 0) return `-${formatNumber(Math.abs(netWords))} words`;
+    return "No net word change";
+  }
+  const wordsAdded = nullableNumber(snapshot.wordsAdded);
+  const wordsRemoved = nullableNumber(snapshot.wordsRemoved);
+  if (wordsAdded !== null && wordsAdded > 0) return `+${formatNumber(wordsAdded)} words`;
+  if (wordsRemoved !== null && wordsRemoved > 0) return `-${formatNumber(wordsRemoved)} words`;
+  return "No word change logged";
 }
 
 function slugifyFilePart(value) {
@@ -955,12 +1394,13 @@ function getEditStats(bundle) {
   const now = new Date();
   const weekStart = startOfDay(new Date(now));
   weekStart.setDate(weekStart.getDate() - 6);
+  const activeFocusKey = bundle?.editing?.focusKey || "revision";
 
   let minutesToday = 0;
   let minutesWeek = 0;
   let totalMinutes = 0;
   let totalWordsEdited = 0;
-  let currentPassMinutes = 0;
+  let activeFocusMinutes = 0;
 
   sessions.forEach((session) => {
     const key = dateKey(session.date);
@@ -969,11 +1409,11 @@ function getEditStats(bundle) {
     totalWordsEdited += number(session.wordsEdited);
     if (key === todayKey) minutesToday += duration;
     if (startOfDay(new Date(session.date)) >= weekStart) minutesWeek += duration;
-    if (session.passName === bundle.editing.passName) currentPassMinutes += duration;
+    if (normalizeEditFocusKey(session.focusKey, session.passName) === activeFocusKey) activeFocusMinutes += duration;
   });
 
   const openIssues = bundle.issues.filter((issue) => issue.status !== "Resolved");
-  const currentPassIssues = openIssues.filter((issue) => !issue.passName || issue.passName === bundle.editing.passName);
+  const activeFocusIssues = openIssues.filter((issue) => normalizeEditFocusKey(issue.focusKey, issue.passName) === activeFocusKey);
   const resolvedIssues = bundle.issues.filter((issue) => issue.status === "Resolved");
 
   return {
@@ -981,10 +1421,10 @@ function getEditStats(bundle) {
     minutesWeek,
     totalMinutes,
     totalWordsEdited,
-    currentPassMinutes,
+    activeFocusMinutes,
     averageSessionMinutes: totalMinutes / Math.max(1, sessions.length),
     sessionCount: sessions.length,
-    currentPassIssueCount: currentPassIssues.length,
+    activeFocusIssueCount: activeFocusIssues.length,
     resolvedIssueCount: resolvedIssues.length,
     lastSession: sessions[0] || null
   };
@@ -997,6 +1437,22 @@ function isProjectPublished(bundle) {
 function getOutstandingIssueCount(bundle) {
   if (!bundle) return 0;
   return bundle.issues.filter((issue) => issue.status !== "Resolved").length;
+}
+
+function getSnapshotIssueOptions(bundle, structureUnitName = "") {
+  if (!bundle) return [];
+  const priorityRank = { High: 0, Medium: 1, Low: 2 };
+  const normalizedName = String(structureUnitName || "").trim().toLowerCase();
+  const openIssues = [...(bundle.issues || [])]
+    .filter((issue) => issue.status !== "Resolved")
+    .sort((a, b) => {
+      const priorityDelta = (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
+      if (priorityDelta !== 0) return priorityDelta;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
+  if (!normalizedName) return openIssues.slice(0, 6);
+  const sectionMatches = openIssues.filter((issue) => String(issue.sectionLabel || "").trim().toLowerCase() === normalizedName);
+  return (sectionMatches.length ? sectionMatches : openIssues).slice(0, 6);
 }
 
 function getPublishEligibility(bundle) {
@@ -1012,24 +1468,12 @@ function getPublishEligibility(bundle) {
   }
 
   const manuscriptComplete = Boolean(bundle.completion?.isManuscriptComplete);
-  const editingComplete = String(bundle.editing?.passStage || "").toLowerCase() === "proofread"
-    && String(bundle.editing?.passStatus || "").toLowerCase() === "complete";
   const outstandingIssueCount = getOutstandingIssueCount(bundle);
-  const progressTotal = number(bundle.editing?.progressTotal);
-  const progressCurrent = number(bundle.editing?.progressCurrent);
-  const remainingSections = progressTotal > 0 ? Math.max(progressTotal - progressCurrent, 0) : 0;
-  const unitLower = getStructureUnitLower(bundle);
-  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
+  const editingComplete = outstandingIssueCount === 0;
   const reasons = [];
 
   if (!manuscriptComplete) {
     reasons.push("Mark the manuscript complete in Write first.");
-  }
-  if (!editingComplete) {
-    reasons.push("Finish the editing workflow by setting the Proofread pass to Complete.");
-  }
-  if (remainingSections > 0) {
-    reasons.push(`Complete the remaining ${formatNumber(remainingSections)} proofread ${remainingSections === 1 ? unitLower : unitPluralLower}.`);
   }
   if (outstandingIssueCount > 0) {
     reasons.push(`Resolve the remaining ${formatNumber(outstandingIssueCount)} open or deferred issue${outstandingIssueCount === 1 ? "" : "s"} first.`);
@@ -1040,7 +1484,7 @@ function getPublishEligibility(bundle) {
     manuscriptComplete,
     editingComplete,
     outstandingIssueCount,
-    remainingSections,
+    remainingSections: 0,
     reasons
   };
 }
@@ -1052,6 +1496,16 @@ function goalValueForSession(goalType, session) {
 }
 
 function goalValueForDate(bundle, goal, key) {
+  if (goal.type === "structure_units_completed") {
+    return (bundle.editing?.chapters || [])
+      .filter((chapter) => chapter.completedAt && dateKey(chapter.completedAt) === key)
+      .length;
+  }
+  if (goal.type === "issues_resolved") {
+    return (bundle.issues || [])
+      .filter((issue) => issue.status === "Resolved" && issue.resolvedAt && dateKey(issue.resolvedAt) === key)
+      .length;
+  }
   return bundle.sessions
     .filter((session) => dateKey(session.date) === key)
     .reduce((sum, session) => sum + goalValueForSession(goal.type, session), 0);
@@ -1067,12 +1521,31 @@ function archivedGoalsForBundle(bundle) {
     .sort((a, b) => new Date(b.archivedAt || b.createdAt) - new Date(a.archivedAt || a.createdAt));
 }
 
-function goalUnit(goalType) {
-  return goalType === "write_minutes" ? "minutes" : "words";
+function goalUnit(goalType, bundle = currentBundle()) {
+  if (goalType === "write_minutes") return "minutes";
+  if (goalType === "structure_units_completed") return getStructureUnitPlural(bundle).toLowerCase();
+  if (goalType === "issues_resolved") return "issues";
+  return "words";
 }
 
-function goalHistoryLabel(goalType) {
-  return goalType === "write_minutes" ? "minutes" : "written";
+function goalProgressText(goal, bundle = currentBundle()) {
+  if (!goal.trackedToday) return "Not scheduled today";
+  const value = formatNumber(goal.liveValue);
+  const target = formatNumber(goal.targetValueToday);
+  if (goal.type === "structure_units_completed") {
+    return `${value} / ${target} ${goalUnit(goal.type, bundle)} completed`;
+  }
+  if (goal.type === "issues_resolved") {
+    return `${value} / ${target} issues resolved`;
+  }
+  return `${value} / ${target} ${goalUnit(goal.type, bundle)}`;
+}
+
+function goalHistoryLabel(goalType, bundle = currentBundle()) {
+  if (goalType === "write_minutes") return "minutes";
+  if (goalType === "structure_units_completed") return `${goalUnit(goalType, bundle)} completed`;
+  if (goalType === "issues_resolved") return "issues resolved";
+  return "written";
 }
 
 function applyGoalTypePreset(form, goalType) {
@@ -1081,26 +1554,54 @@ function applyGoalTypePreset(form, goalType) {
   const titleInput = form.elements.title;
   const targetLabel = document.getElementById("goal-target-label");
   if (!targetInput || !titleInput || !targetLabel) return;
-  const normalizedType = goalType === "write_minutes" ? "write_minutes" : "write_words";
-  const defaultTarget = normalizedType === "write_minutes" ? 60 : 1000;
+  const normalizedType = normalizeGoalType(goalType);
+  const unitPlural = getStructureUnitPlural(currentBundle()).toLowerCase();
+  const unitSingular = getStructureUnitLower(currentBundle());
+  const presets = {
+    write_words: {
+      defaultTarget: 1000,
+      targetLabel: "Daily target (words)",
+      placeholder: "Example: Write 1,000 words today",
+      title: "Write 1,000 words today"
+    },
+    write_minutes: {
+      defaultTarget: 60,
+      targetLabel: "Daily target (minutes)",
+      placeholder: "Example: Spend 60 focused minutes today",
+      title: "Spend 60 focused minutes writing or editing"
+    },
+    structure_units_completed: {
+      defaultTarget: 1,
+      targetLabel: `Daily target (${unitPlural} completed)`,
+      placeholder: `Example: Complete 1 ${unitSingular} today`,
+      title: `Complete 1 ${unitSingular} today`
+    },
+    issues_resolved: {
+      defaultTarget: 3,
+      targetLabel: "Daily target (issues resolved)",
+      placeholder: "Example: Resolve 3 editing issues today",
+      title: "Resolve 3 editing issues today"
+    }
+  };
+  const preset = presets[normalizedType] || presets.write_words;
+  const defaultTarget = preset.defaultTarget;
   const dailySchedule = form.elements.scheduleMode?.value !== "custom_days";
-  if (goalType === "write_minutes") {
-    targetLabel.textContent = "Daily target (minutes)";
-    if (dailySchedule || targetInput.value === "") targetInput.value = defaultTarget;
-    titleInput.placeholder = "Example: Spend 60 minutes writing or editing today";
-    titleInput.value = titleInput.value || "Spend 60 focused minutes writing or editing";
-  } else {
-    targetLabel.textContent = "Daily target (words)";
-    if (dailySchedule || targetInput.value === "") targetInput.value = defaultTarget;
-    titleInput.placeholder = "Example: Write 1,000 words today";
-    titleInput.value = titleInput.value || "Write 1,000 words today";
+  const previousPresetTitles = Object.values(presets).map((entry) => entry.title);
+  const shouldReplaceTitle = !titleInput.value || previousPresetTitles.includes(titleInput.value);
+  targetLabel.textContent = preset.targetLabel;
+  if (dailySchedule || targetInput.value === "" || targetInput.dataset.goalType !== normalizedType) {
+    targetInput.value = defaultTarget;
   }
+  targetInput.dataset.goalType = normalizedType;
+  titleInput.placeholder = preset.placeholder;
+  if (shouldReplaceTitle) titleInput.value = preset.title;
   GOAL_DAY_KEYS.forEach((dayKey) => {
     const dayInput = form.elements[`target_${dayKey}`];
     if (!dayInput) return;
-    if (dayInput.value === "") {
+    if (dayInput.value === "" || dayInput.dataset.goalType !== normalizedType) {
       dayInput.value = String(defaultTarget);
     }
+    dayInput.dataset.goalType = normalizedType;
   });
 }
 
@@ -1122,7 +1623,10 @@ function evaluateGoal(bundle, goal) {
 }
 
 function goalTypeContext(type) {
-  return type === "write_minutes" ? "FOCUS TIME" : "WRITE";
+  if (type === "write_minutes") return "FOCUS TIME";
+  if (type === "structure_units_completed") return "STRUCTURE";
+  if (type === "issues_resolved") return "ISSUES";
+  return "WRITE";
 }
 
 function isGoalTrackedOnDate(goal, cursor) {
@@ -1149,9 +1653,10 @@ function goalTargetForDate(goal, dateValue) {
   return Math.max(0, number(goal.dayTargets?.[dayKey]));
 }
 
-function goalScheduleSummary(goal) {
+function goalScheduleSummary(goal, bundle = currentBundle()) {
+  const unit = goalUnit(goal.type, bundle);
   if (goal.scheduleMode !== "custom_days") {
-    return `Every day: ${formatNumber(goal.targetValue)} ${goalUnit(goal.type)}`;
+    return `Every day: ${formatNumber(goal.targetValue)} ${unit}`;
   }
 
   const weekdayTargets = GOAL_DAY_KEYS.slice(0, 5).map((dayKey) => number(goal.dayTargets?.[dayKey]));
@@ -1160,12 +1665,12 @@ function goalScheduleSummary(goal) {
   const uniqueWeekendTargets = [...new Set(weekendTargets)];
 
   if (uniqueWeekdayTargets.length === 1 && uniqueWeekendTargets.length === 1) {
-    return `Weekdays ${formatNumber(uniqueWeekdayTargets[0])}, weekends ${formatNumber(uniqueWeekendTargets[0])} ${goalUnit(goal.type)}`;
+    return `Weekdays ${formatNumber(uniqueWeekdayTargets[0])}, weekends ${formatNumber(uniqueWeekendTargets[0])} ${unit}`;
   }
 
   return GOAL_DAY_KEYS
     .map((dayKey) => `${GOAL_DAY_LABELS[dayKey]} ${formatNumber(goal.dayTargets?.[dayKey])}`)
-    .join(" • ");
+    .join(" • ") + ` ${unit}`;
 }
 
 function goalWindowSummary(goal) {
@@ -1178,15 +1683,25 @@ function goalWindowSummary(goal) {
 function buildGoalSnapshotForDate(bundle, goal, key) {
   const value = goalValueForDate(bundle, goal, key);
   const target = Math.max(1, goalTargetForDate(goal, key));
+  const evaluatedGoal = {
+    ...goal,
+    liveValue: value,
+    targetValueToday: target,
+    trackedToday: true
+  };
   return {
     id: goal.id,
-    title: goal.title || (goal.type === "write_minutes" ? "Spend time writing or editing" : "Write words"),
+    title: goal.title || {
+      write_minutes: "Spend time writing or editing",
+      structure_units_completed: `Complete ${getStructureUnitPlural(bundle).toLowerCase()}`,
+      issues_resolved: "Resolve issues"
+    }[goal.type] || "Write words",
     type: goal.type,
     status: goal.status === "archived" ? "archived" : "active",
     value,
     target,
-    unit: goalUnit(goal.type),
-    metricText: `${formatNumber(value)} / ${formatNumber(target)} ${goalHistoryLabel(goal.type)}`,
+    unit: goalUnit(goal.type, bundle),
+    metricText: goalProgressText(evaluatedGoal, bundle),
     ratio: value / target
   };
 }
@@ -1260,10 +1775,7 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
       continue;
     }
     const daySessions = getWriteSessions(bundle).filter((session) => dateKey(session.date) === key);
-    const trackedGoals = bundle.goals.filter((goal) =>
-      (goal.type === "write_words" || goal.type === "write_minutes") &&
-      isGoalTrackedOnDate(goal, cursor)
-    );
+    const trackedGoals = bundle.goals.filter((goal) => isGoalTrackedOnDate(goal, cursor));
     if (!trackedGoals.length) {
       const noGoalLines = [longDate, "No goals set", `${daySessions.length} ${daySessions.length === 1 ? "session" : "sessions"}`];
       days.push({
@@ -1273,7 +1785,7 @@ function getHeatmapMonth(bundle, monthOffset = 0) {
         dayNumber: cursor.getDate(),
         longDate,
         detailSummary: "No goals set",
-        detailCopy: "No writing goals were active on this date.",
+        detailCopy: "No goals were active on this date.",
         sessionCount: daySessions.length,
         goalSummaries: [],
         fillPercent: 0,
@@ -1515,8 +2027,8 @@ function projectExportBaseRow(bundle) {
     project_is_published: bundle.publication?.isPublished ? "true" : "false",
     project_published_at: bundle.publication?.publishedAt || "",
     project_published_word_count: number(bundle.publication?.publishedWordCount),
-    project_edit_pass_name: bundle.editing.passName || "",
-    project_edit_pass_stage: bundle.editing.passStage || "",
+    project_edit_pass_name: "",
+    project_edit_pass_stage: "",
     project_edit_pass_status: bundle.editing.passStatus || "",
     project_edit_pass_objective: bundle.editing.passObjective || "",
     project_edit_progress_current: number(bundle.editing.progressCurrent),
@@ -1525,6 +2037,7 @@ function projectExportBaseRow(bundle) {
       chapter_label: "",
       chapter_summary: "",
       chapter_sort_order: "",
+      chapter_completed_at: "",
       goal_id: "",
       goal_type: "",
       goal_title: "",
@@ -1550,6 +2063,7 @@ function projectExportBaseRow(bundle) {
     issue_priority: "",
     issue_status: "",
     issue_notes: "",
+    issue_snippet: "",
     issue_created_at: "",
     issue_resolved_at: "",
     issue_pass_name: "",
@@ -1561,7 +2075,24 @@ function projectExportBaseRow(bundle) {
     session_words_edited: "",
     session_pass_name: "",
     session_section_label: "",
-    session_notes: ""
+    session_notes: "",
+    session_started_at: "",
+    session_ended_at: "",
+    session_structure_unit_id: "",
+    session_structure_unit_type: "",
+    session_start_word_count: "",
+    session_end_word_count: "",
+    session_words_added: "",
+    session_words_removed: "",
+    session_net_words: "",
+    session_intended_goal: "",
+    session_outcome_status: "",
+    session_accomplished: "",
+    session_next_step: "",
+    session_blocker: "",
+    session_confidence_level: "",
+    session_excerpt: "",
+    session_issue_ids: ""
   };
 }
 
@@ -1606,7 +2137,8 @@ function buildProjectExportRows(bundle, mode = "all") {
         chapter_id: chapter.id || "",
         chapter_label: chapter.label || "",
         chapter_summary: chapter.summary || "",
-        chapter_sort_order: number(chapter.sortOrder)
+        chapter_sort_order: number(chapter.sortOrder),
+        chapter_completed_at: chapter.completedAt || ""
       });
     });
 
@@ -1621,6 +2153,7 @@ function buildProjectExportRows(bundle, mode = "all") {
         issue_priority: issue.priority || "",
         issue_status: issue.status || "",
         issue_notes: issue.notes || "",
+        issue_snippet: issue.snippet || "",
         issue_created_at: issue.createdAt || "",
         issue_resolved_at: issue.resolvedAt || "",
         issue_pass_name: issue.passName || ""
@@ -1631,6 +2164,7 @@ function buildProjectExportRows(bundle, mode = "all") {
   bundle.sessions.forEach((session) => {
     if (mode === "write" && session.type === "edit") return;
     if (mode === "edit" && session.type !== "edit") return;
+    const snapshot = getSnapshotForSession(bundle, session.id);
     rows.push({
       ...base,
       row_type: "session",
@@ -1640,9 +2174,28 @@ function buildProjectExportRows(bundle, mode = "all") {
       session_duration_minutes: number(session.durationMinutes),
       session_words_written: number(session.wordsWritten),
       session_words_edited: number(session.wordsEdited),
-      session_pass_name: session.passName || "",
+      session_pass_name: session.type === "edit"
+        ? (session.passName || "")
+        : "",
       session_section_label: session.sectionLabel || "",
-      session_notes: session.notes || ""
+      session_notes: session.notes || snapshot?.notes || "",
+      session_started_at: snapshot?.startedAt || "",
+      session_ended_at: snapshot?.endedAt || session.date || "",
+      session_structure_unit_id: snapshot?.structureUnitId || "",
+      session_structure_unit_type: snapshot?.structureUnitType || "",
+      session_start_word_count: snapshot?.startWordCount ?? "",
+      session_end_word_count: snapshot?.endWordCount ?? "",
+      session_words_added: snapshot?.wordsAdded ?? "",
+      session_words_removed: snapshot?.wordsRemoved ?? "",
+      session_net_words: snapshot?.netWords ?? "",
+      session_intended_goal: snapshot?.intendedGoal || "",
+      session_outcome_status: snapshot?.outcomeStatus || "",
+      session_accomplished: snapshot?.accomplished || "",
+      session_next_step: snapshot?.nextStep || "",
+      session_blocker: snapshot?.blocker || "",
+      session_confidence_level: snapshot?.confidenceLevel || "",
+      session_excerpt: snapshot?.excerpt || "",
+      session_issue_ids: snapshot?.issueIds?.join("|") || ""
     });
   });
 
@@ -1740,9 +2293,13 @@ function buildBundleFromImportedRows(rows) {
       publishedWordCount: number(projectRow.project_published_word_count)
     },
     editing: {
-      passName: projectRow.project_edit_pass_name || defaultPassName(projectRow.project_edit_pass_stage || "Developmental"),
-      passStage: projectRow.project_edit_pass_stage || "Developmental",
-      passStatus: projectRow.project_edit_pass_status || "Not started",
+      focusKey: normalizeEditFocusKey(
+        projectRow.project_edit_pass_name || projectRow.project_edit_pass_stage,
+        "revision"
+      ),
+      passName: "",
+      passStage: "",
+      passStatus: projectRow.project_edit_pass_status || "",
       passObjective: projectRow.project_edit_pass_objective || "",
       progressCurrent: number(projectRow.project_edit_progress_current),
       progressTotal: number(projectRow.project_edit_progress_total),
@@ -1752,7 +2309,8 @@ function buildBundleFromImportedRows(rows) {
           id: row.chapter_id || createId(),
           label: row.chapter_label || "",
           summary: row.chapter_summary || "",
-          sortOrder: number(row.chapter_sort_order || index)
+          sortOrder: number(row.chapter_sort_order || index),
+          completedAt: row.chapter_completed_at || ""
         }))
     },
     goals: rows
@@ -1789,9 +2347,48 @@ function buildBundleFromImportedRows(rows) {
         priority: row.issue_priority || "Medium",
         status: row.issue_status || "Open",
         notes: row.issue_notes || "",
+        snippet: row.issue_snippet || "",
         createdAt: row.issue_created_at || new Date().toISOString(),
         resolvedAt: row.issue_resolved_at || "",
+        focusKey: normalizeEditFocusKey(row.issue_pass_name, projectRow.project_edit_pass_name || projectRow.project_edit_pass_stage),
         passName: row.issue_pass_name || ""
+      })),
+    snapshots: rows
+      .filter((row) => row.row_type === "session")
+      .map((row) => createSessionSnapshot({
+        id: row.session_id || createId(),
+        projectId: projectRow.project_id || "",
+        sessionType: row.session_type === "edit" ? "editing" : "writing",
+        startedAt: row.session_started_at || (
+          row.session_date
+            ? new Date(new Date(row.session_date).getTime() - (Math.max(1, number(row.session_duration_minutes)) * 60000)).toISOString()
+            : ""
+        ),
+        endedAt: row.session_ended_at || row.session_date || "",
+        durationMinutes: number(row.session_duration_minutes),
+        structureUnitId: row.session_structure_unit_id || "",
+        structureUnitName: row.session_section_label || "",
+        structureUnitType: row.session_structure_unit_type || "",
+        startWordCount: row.session_start_word_count,
+        endWordCount: row.session_end_word_count,
+        wordsAdded: row.session_words_added,
+        wordsRemoved: row.session_words_removed,
+        netWords: row.session_net_words,
+        intendedGoal: row.session_intended_goal || "",
+        outcomeStatus: row.session_outcome_status || "",
+        focusKey: row.session_type === "edit"
+          ? normalizeEditFocusKey(row.session_pass_name, projectRow.project_edit_pass_name || projectRow.project_edit_pass_stage)
+          : "",
+        accomplished: row.session_accomplished || "",
+        nextStep: row.session_next_step || "",
+        blocker: row.session_blocker || "",
+        confidenceLevel: row.session_confidence_level || "",
+        excerpt: row.session_excerpt || "",
+        notes: row.session_notes || "",
+        issueIds: String(row.session_issue_ids || "")
+          .split("|")
+          .map((value) => value.trim())
+          .filter(Boolean)
       })),
     sessions: rows
       .filter((row) => row.row_type === "session")
@@ -1802,6 +2399,9 @@ function buildBundleFromImportedRows(rows) {
         durationMinutes: number(row.session_duration_minutes),
         wordsWritten: number(row.session_words_written),
         wordsEdited: number(row.session_words_edited),
+        focusKey: row.session_type === "edit"
+          ? normalizeEditFocusKey(row.session_pass_name, projectRow.project_edit_pass_name || projectRow.project_edit_pass_stage)
+          : "",
         passName: row.session_pass_name || "",
         sectionLabel: row.session_section_label || "",
         notes: row.session_notes || ""
@@ -1810,6 +2410,7 @@ function buildBundleFromImportedRows(rows) {
   });
 
   bundle.goals = dedupeById(bundle.goals);
+  bundle.snapshots = dedupeById(bundle.snapshots);
   bundle.issues = dedupeById(bundle.issues);
   bundle.sessions = dedupeById(bundle.sessions);
   return normalizeProjectBundle(bundle);

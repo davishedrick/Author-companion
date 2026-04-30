@@ -86,11 +86,59 @@
         <label>Session date
           <input type="date" name="sessionDate" required />
         </label>
-        <label class="full">Notes
-          <textarea name="sessionNotes" placeholder="Optional notes about the session"></textarea>
+        <label class="full"><span id="session-structure-unit-label">Structure unit</span>
+          <input id="session-structure-unit-input" name="structureUnitName" list="session-structure-unit-options" placeholder="Optional scene, chapter, or section" />
+          <datalist id="session-structure-unit-options"></datalist>
         </label>
+        <fieldset class="full session-outcome-field">
+          <legend>Outcome</legend>
+          <div class="session-outcome-control" role="radiogroup" aria-label="Session outcome">
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="completed" required />
+              <span>Completed</span>
+            </label>
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="partial" />
+              <span>Partial</span>
+            </label>
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="blocked" />
+              <span>Blocked</span>
+            </label>
+          </div>
+        </fieldset>
+        <label class="full">What got done
+          <input name="sessionAccomplished" maxlength="140" placeholder="Optional short summary" />
+        </label>
+        <label class="full">Next step
+          <input name="sessionNextStep" maxlength="140" placeholder="Optional short next move" />
+        </label>
+        <details class="full session-handoff-more">
+          <summary>More context</summary>
+          <div class="session-handoff-secondary">
+            <label>Blocker
+              <input name="sessionBlocker" maxlength="180" placeholder="Optional reason you got stuck" />
+            </label>
+            <label>Confidence
+              <select name="sessionConfidenceLevel">
+                <option value="">Not set</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label class="full">Excerpt
+              <textarea name="sessionExcerpt" maxlength="500" placeholder="Optional pasted line or paragraph for fast re-entry"></textarea>
+            </label>
+            <div class="full session-issue-links hidden" id="session-issue-links-field"></div>
+            <label class="full">Note
+              <textarea name="sessionNotes" maxlength="280" placeholder="Optional extra note"></textarea>
+            </label>
+          </div>
+        </details>
+        <p class="small-copy full" id="session-handoff-context-copy"></p>
         <div class="full">
-          <button class="primary-btn" id="session-submit-btn" type="submit">Save session</button>
+          <button class="primary-btn" id="session-submit-btn" type="submit">Save handoff</button>
         </div>
       </form>
     </div>
@@ -227,6 +275,8 @@
           <select name="type">
             <option value="write_words">Write words</option>
             <option value="write_minutes">Spend time writing or editing</option>
+            <option value="structure_units_completed">Complete structure units</option>
+            <option value="issues_resolved">Resolve issues</option>
           </select>
         </label>
         <label>Timeframe
@@ -241,7 +291,7 @@
         <label class="hidden" id="goal-end-date-field">End date
           <input type="date" name="endDate" />
         </label>
-        <label>Schedule
+        <label><span id="goal-schedule-label">Schedule</span>
           <select name="scheduleMode" id="goal-schedule-mode">
             <option value="daily">Same target every day</option>
             <option value="custom_days">Custom by day</option>
@@ -254,6 +304,7 @@
           <input name="title" placeholder="Example: Write 1,000 words today" required />
         </label>
         <div class="full hidden" id="goal-custom-schedule-fields">
+          <div class="small-copy" id="goal-custom-schedule-title">Custom daily targets</div>
           <div class="goal-day-grid">
             <label>Mon
               <input type="number" min="0" name="target_monday" value="1000" />
@@ -277,7 +328,7 @@
               <input type="number" min="0" name="target_sunday" value="1000" />
             </label>
           </div>
-          <p class="small-copy">Set any day to 0 to make it an off day. This lets you do patterns like lower weekday targets or bigger weekend pushes.</p>
+          <p class="small-copy" id="goal-custom-schedule-copy">Set any day to 0 to make it an off day. This lets you do patterns like lower weekday targets or bigger weekend pushes.</p>
         </div>
         <div class="full">
           <button class="primary-btn" id="goal-submit-btn" type="submit">Add goal</button>
@@ -290,7 +341,7 @@
       <div class="section-head">
         <div>
           <h3>Settings</h3>
-          <p>Manage data actions now, with room to add more project settings later.</p>
+          <p>Manage appearance, import, and export actions for this workspace.</p>
         </div>
         <button class="ghost-btn" id="close-settings-modal-btn" type="button">Close</button>
       </div>
@@ -325,55 +376,7 @@
             <button class="ghost-btn" id="export-all-modal-btn" type="button">Export All</button>
           </div>
         </section>
-        <section class="settings-section">
-          <h4>More Settings</h4>
-          <p class="muted">This area is reserved for future settings like backup options and project-level controls.</p>
-        </section>
       </div>
-    </div>
-  </div>
-  <div class="modal-backdrop hidden" id="edit-pass-modal">
-    <div class="modal-card">
-      <div class="section-head">
-        <div>
-          <h3 id="edit-pass-title">Current Pass</h3>
-          <p id="edit-pass-copy">Define the editing pass this workspace should revolve around.</p>
-        </div>
-        <button class="ghost-btn" id="close-edit-pass-btn" type="button">Close</button>
-      </div>
-      <form id="edit-pass-form" class="form-grid">
-        <label>Stage of process
-          <select name="passStage">
-            <option value="Developmental">Developmental</option>
-            <option value="Line Edit">Line Edit</option>
-            <option value="Copyedit">Copyedit</option>
-            <option value="Proofread">Proofread</option>
-          </select>
-        </label>
-        <label>Status
-          <select name="passStatus">
-            <option value="Not started">Not started</option>
-            <option value="In progress">In progress</option>
-            <option value="Paused">Paused</option>
-            <option value="Complete">Complete</option>
-          </select>
-        </label>
-        <label class="full">Pass label
-          <input name="passName" placeholder="Example: Dialogue polish pass" />
-        </label>
-        <label class="full">Pass objective
-          <textarea name="passObjective" placeholder="What is this pass trying to improve?"></textarea>
-        </label>
-        <label><span id="edit-pass-progress-current-label">Structure units reviewed</span>
-          <input type="number" min="0" name="progressCurrent" value="0" />
-        </label>
-        <label><span id="edit-pass-progress-total-label">Total structure units</span>
-          <input type="number" min="0" name="progressTotal" value="0" />
-        </label>
-        <div class="full">
-          <button class="primary-btn" type="submit">Save pass</button>
-        </div>
-      </form>
     </div>
   </div>
   <div class="modal-backdrop hidden" id="edit-session-start-modal">
@@ -445,7 +448,7 @@
         <button class="ghost-btn" id="close-edit-session-btn" type="button">Close</button>
       </div>
       <form id="edit-session-form" class="form-grid">
-        <p class="small-copy full" id="edit-session-pass-copy"></p>
+        <p class="small-copy full" id="edit-session-focus-copy"></p>
         <label>Session date
           <input type="date" name="sessionDate" required />
         </label>
@@ -453,16 +456,64 @@
           <input type="number" min="1" name="durationMinutes" value="45" required />
         </label>
         <label><span id="edit-session-section-label">Structure unit worked on</span>
-          <input id="edit-session-section-input" name="sectionLabel" placeholder="Example: Scene 12" />
+          <input id="edit-session-section-input" name="sectionLabel" list="edit-session-structure-unit-options" placeholder="Example: Scene 12" />
+          <datalist id="edit-session-structure-unit-options"></datalist>
         </label>
-        <label>Words edited
-          <input type="number" min="0" name="wordsEdited" value="0" required />
+        <fieldset class="full session-outcome-field">
+          <legend>Outcome</legend>
+          <div class="session-outcome-control" role="radiogroup" aria-label="Editing session outcome">
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="completed" required />
+              <span>Completed</span>
+            </label>
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="partial" />
+              <span>Partial</span>
+            </label>
+            <label class="session-outcome-option">
+              <input type="radio" name="sessionOutcomeStatus" value="blocked" />
+              <span>Blocked</span>
+            </label>
+          </div>
+        </fieldset>
+        <label class="full">What got done
+          <input name="sessionAccomplished" maxlength="140" placeholder="Optional short summary" />
         </label>
-        <label class="full">Session notes
-          <textarea name="sessionNotes" placeholder="Optional note about what changed or what still feels off"></textarea>
+        <label class="full">Next step
+          <input name="sessionNextStep" maxlength="140" placeholder="Optional short next move" />
         </label>
+        <details class="full session-handoff-more">
+          <summary>More context</summary>
+          <div class="session-handoff-secondary">
+            <label>Words edited
+              <input type="number" min="0" name="wordsEdited" value="0" />
+            </label>
+            <label>Current manuscript word count
+              <input type="number" min="0" name="sessionEndWordCount" />
+            </label>
+            <label>Blocker
+              <input name="sessionBlocker" maxlength="180" placeholder="Optional reason you got stuck" />
+            </label>
+            <label>Confidence
+              <select name="sessionConfidenceLevel">
+                <option value="">Not set</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label class="full">Excerpt
+              <textarea name="sessionExcerpt" maxlength="500" placeholder="Optional pasted line or paragraph for fast re-entry"></textarea>
+            </label>
+            <div class="full session-issue-links hidden" id="edit-session-issue-links-field"></div>
+            <label class="full">Note
+              <textarea name="sessionNotes" maxlength="280" placeholder="Optional extra note"></textarea>
+            </label>
+          </div>
+        </details>
+        <p class="small-copy full" id="edit-session-context-copy"></p>
         <div class="full">
-          <button class="primary-btn" id="edit-session-submit-btn" type="submit">Save editing session</button>
+          <button class="primary-btn" id="edit-session-submit-btn" type="submit">Save handoff</button>
         </div>
       </form>
     </div>
@@ -472,26 +523,26 @@
       <div class="section-head">
         <div>
           <h3 id="issue-modal-title">Add Open Issue</h3>
-          <p id="issue-modal-copy">Capture a problem now so you can come back to it during the pass.</p>
+          <p id="issue-modal-copy">Capture it quickly. A short note is enough—we’ll place it for you. Paste the exact text if you want to return to it faster later.</p>
         </div>
         <button class="ghost-btn" id="close-issue-modal-btn" type="button">Close</button>
       </div>
       <form id="issue-form" class="form-grid">
-        <p class="small-copy full" id="issue-pass-copy"></p>
-        <label class="full">Problem title
+        <p class="small-copy full" id="issue-focus-copy"></p>
+        <label class="full"><span id="issue-note-label">Jot a quick note (short is fine)</span>
+          <textarea id="issue-note-input" name="note" placeholder="chapter 3 slow&#10;dialogue stiff&#10;motivation unclear&#10;confusing here"></textarea>
+        </label>
+        <label class="full"><span id="issue-snippet-label">Paste the exact text (optional, fastest)</span>
+          <textarea id="issue-snippet-input" name="snippet" placeholder="Paste line or paragraph for context"></textarea>
+        </label>
+        <p class="small-copy full hidden" id="issue-derived-preview" aria-live="polite"></p>
+        <label class="full issue-structured-field hidden" id="issue-title-field">Problem title
           <input name="title" placeholder="Example: This scene stalls after the reveal" required />
         </label>
-        <label>Pass
-          <select name="issuePassKey">
-            <option value="developmental">Developmental</option>
-            <option value="clarity">Clarity</option>
-            <option value="polish">Polish</option>
-          </select>
-        </label>
-        <label><span id="issue-section-label">Structure unit</span>
+        <label class="issue-structured-field hidden" id="issue-section-field"><span id="issue-section-label">Structure unit</span>
           <select name="sectionLabel" id="issue-section-select" required></select>
         </label>
-        <label>Issue type
+        <label class="issue-structured-field hidden" id="issue-type-field">Issue type
           <select name="type">
             <option value="Pacing">Pacing</option>
             <option value="Dialogue">Dialogue</option>
@@ -505,25 +556,19 @@
             <option value="General">General</option>
           </select>
         </label>
-        <label>Priority
+        <label class="issue-structured-field hidden" id="issue-priority-field">Priority
           <select name="priority">
             <option value="High">High</option>
             <option value="Medium">Medium</option>
             <option value="Low">Low</option>
           </select>
         </label>
-        <label>Status
+        <label class="issue-structured-field hidden" id="issue-status-field">Status
           <select name="issueStatus">
             <option value="open">Open</option>
             <option value="in_progress">In progress</option>
             <option value="resolved">Resolved</option>
           </select>
-        </label>
-        <label>Location in text
-          <input name="textLocation" placeholder="Optional: opening scene, midpoint, final page" />
-        </label>
-        <label class="full">Context
-          <textarea name="notes" placeholder="Optional context for when you return to this issue"></textarea>
         </label>
         <div class="full">
           <button class="primary-btn" id="issue-submit-btn" type="submit">Save issue</button>
@@ -581,6 +626,26 @@
         </label>
         <div class="full">
           <button class="primary-btn" id="plot-entry-submit-btn" type="submit">Save entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="modal-backdrop hidden" id="plot-tab-modal">
+    <div class="modal-card">
+      <div class="section-head">
+        <div>
+          <h3>Add Story Tab</h3>
+          <p>Choose a category to add to this manuscript's Story workspace. Hidden tabs keep their saved entries.</p>
+        </div>
+        <button class="ghost-btn" id="close-plot-tab-modal-btn" type="button">Close</button>
+      </div>
+      <form id="plot-tab-form" class="form-grid">
+        <div class="full plot-tab-picker-field">
+          <div class="plot-tab-picker" id="plot-tab-picker" role="group" aria-label="Story categories to add"></div>
+        </div>
+        <p class="small-copy full" id="plot-tab-saved-copy"></p>
+        <div class="full">
+          <button class="primary-btn" id="plot-tab-submit-btn" type="submit">Add tabs</button>
         </div>
       </form>
     </div>

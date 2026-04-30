@@ -1,27 +1,5 @@
-const EDIT2_PASS_ORDER = ["developmental", "clarity", "polish"];
-const EDIT2_PASS_CONFIG = {
-  developmental: {
-    label: "Developmental",
-    shortLabel: "Dev",
-    weight: 5,
-    defaultPriority: "High",
-    summary: "Structure, pacing, story shape, and the clarity of big ideas."
-  },
-  clarity: {
-    label: "Clarity",
-    shortLabel: "Clarity",
-    weight: 3,
-    defaultPriority: "Medium",
-    summary: "Sentence flow, readability, voice, and line-level improvements."
-  },
-  polish: {
-    label: "Polish",
-    shortLabel: "Polish",
-    weight: 1,
-    defaultPriority: "Low",
-    summary: "Grammar, copyediting, proofreading, and final cleanup."
-  }
-};
+const EDIT2_PASS_ORDER = EDIT_FOCUS_ORDER;
+const EDIT2_PASS_CONFIG = EDIT_FOCUS_CONFIG;
 const EDIT2_DEFAULT_TYPES = [
   "Pacing",
   "Dialogue",
@@ -37,12 +15,17 @@ let edit2SelectedChapterKey = "";
 let edit2ViewMode = "overview";
 let edit2OverviewBoardView = "chapters";
 let edit2SummaryEditMode = false;
+const EDIT2_MOMENTUM_WINDOW_DAYS = 7;
+const EDIT2_STALE_RECOMMENDATION_THRESHOLD = 2;
+const EDIT2_STALE_RECOMMENDATION_STEP = 12;
+const EDIT2_STALE_RECOMMENDATION_CAP = 24;
+let edit2PrimaryRecommendationState = {
+  key: "",
+  streak: 0
+};
 
 function normalizeEdit2PassKey(value = "", fallback = "") {
-  const source = `${String(value || "").trim()} ${String(fallback || "").trim()}`.toLowerCase();
-  if (/clarity|line/.test(source)) return "clarity";
-  if (/polish|copy|proof|grammar/.test(source)) return "polish";
-  return "developmental";
+  return normalizeEditFocusKey(value, fallback);
 }
 
 function getEdit2WorkflowStatus(issue) {
@@ -75,6 +58,7 @@ function createEdit2Chapter(label, overrides = {}) {
     label: normalizedLabel,
     summary: String(overrides.summary || "").trim(),
     sortOrder: Math.max(0, number(overrides.sortOrder)),
+    completedAt: String(overrides.completedAt || ""),
     issues: [],
     sessions: [],
     passSummaries: Object.fromEntries(EDIT2_PASS_ORDER.map((passKey) => [passKey, createEdit2PassSummary()])),
@@ -90,16 +74,7 @@ function touchEdit2Chapter(chapter, dateValue) {
   }
 }
 
-function getEdit2PassSummaryStatus(summary) {
-  if (!summary.total && !summary.sessions) return "Not Started";
-  if (!summary.open && !summary.inProgress && (summary.resolved || summary.sessions)) return "Done";
-  return "In Progress";
-}
-
 function finalizeEdit2Chapter(chapter) {
-  const passStatuses = Object.fromEntries(
-    EDIT2_PASS_ORDER.map((passKey) => [passKey, getEdit2PassSummaryStatus(chapter.passSummaries[passKey])])
-  );
   const heatByPass = Object.fromEntries(
     EDIT2_PASS_ORDER.map((passKey) => {
       const summary = chapter.passSummaries[passKey];
@@ -118,18 +93,15 @@ function finalizeEdit2Chapter(chapter) {
     return counts;
   }, { high: 0, medium: 0, low: 0 });
   const resolvedIssueCount = chapter.issues.length - openIssueCount;
-  const donePassCount = Object.values(passStatuses).filter((status) => status === "Done").length;
   const totalHeat = Object.values(heatByPass).reduce((sum, value) => sum + value, 0);
 
   return {
     ...chapter,
-    passStatuses,
     heatByPass,
     totalHeat,
     openIssueCount,
     priorityCounts,
-    resolvedIssueCount,
-    donePassCount
+    resolvedIssueCount
   };
 }
 
@@ -157,7 +129,8 @@ function buildEdit2Chapters(bundle) {
       ...existing,
       id: overrides.id || existing.id,
       summary: String(overrides.summary !== undefined ? overrides.summary : existing.summary).trim(),
-      sortOrder: Math.max(0, number(overrides.sortOrder !== undefined ? overrides.sortOrder : existing.sortOrder))
+      sortOrder: Math.max(0, number(overrides.sortOrder !== undefined ? overrides.sortOrder : existing.sortOrder)),
+      completedAt: String(overrides.completedAt !== undefined ? overrides.completedAt : existing.completedAt || "")
     });
     return chapters.get(key);
   }
@@ -169,13 +142,14 @@ function buildEdit2Chapters(bundle) {
     ensureChapter(chapter.label, {
       id: chapter.id,
       summary: chapter.summary,
-      sortOrder: chapter.sortOrder ?? index
+      sortOrder: chapter.sortOrder ?? index,
+      completedAt: chapter.completedAt || ""
     });
   });
 
   bundle.issues.forEach((issue) => {
     const chapter = ensureChapter(issue.sectionLabel);
-    const passKey = normalizeEdit2PassKey(issue.passName, bundle.editing.passStage);
+    const passKey = normalizeEdit2PassKey(issue.focusKey, issue.passName || bundle.editing.focusKey);
     const workflowStatus = getEdit2WorkflowStatus(issue);
     const normalizedIssue = {
       ...issue,
@@ -194,7 +168,7 @@ function buildEdit2Chapters(bundle) {
 
   getEditSessions(bundle).forEach((session) => {
     const chapter = ensureChapter(session.sectionLabel);
-    const passKey = normalizeEdit2PassKey(session.passName, bundle.editing.passStage);
+    const passKey = normalizeEdit2PassKey(session.focusKey, session.passName || bundle.editing.focusKey);
     chapter.sessions.push({
       ...session,
       passKey
@@ -247,12 +221,76 @@ function getEdit2FocusIssues(chapter) {
 }
 
 function getEdit2IssuePriorityLabel(issue) {
-  return String(issue?.priority || EDIT2_PASS_CONFIG[issue?.passKey || "developmental"]?.defaultPriority || "Medium");
+  return String(issue?.priority || getEditFocusDefaultPriority(issue?.passKey || "revision"));
 }
 
 function getEdit2IssuePriorityRank(priorityLabel = "Medium") {
   const priorityRank = { High: 3, Medium: 2, Low: 1 };
   return priorityRank[String(priorityLabel || "Medium")] || 0;
+}
+
+function getEdit2RecommendationKey(recommendation = {}) {
+  if (recommendation.issueId) return `issue:${recommendation.issueId}`;
+  if (recommendation.chapterKey) return `chapter:${recommendation.chapterKey}`;
+  if (recommendation.title) return `title:${recommendation.title}`;
+  return "";
+}
+
+function clearEdit2NextFocusDisplayState() {
+  edit2PrimaryRecommendationState = {
+    key: "",
+    streak: 0
+  };
+}
+
+function noteEdit2PrimaryRecommendation(recommendation = null) {
+  const key = getEdit2RecommendationKey(recommendation || {});
+  if (!key) {
+    clearEdit2NextFocusDisplayState();
+    return;
+  }
+  if (edit2PrimaryRecommendationState.key === key) {
+    edit2PrimaryRecommendationState.streak += 1;
+    return;
+  }
+  edit2PrimaryRecommendationState = {
+    key,
+    streak: 1
+  };
+}
+
+function getEdit2StaleRecommendationPenalty(recommendationKey = "") {
+  if (!recommendationKey || edit2PrimaryRecommendationState.key !== recommendationKey) return 0;
+  const extraRepeats = Math.max(0, edit2PrimaryRecommendationState.streak - EDIT2_STALE_RECOMMENDATION_THRESHOLD);
+  return Math.min(EDIT2_STALE_RECOMMENDATION_CAP, extraRepeats * EDIT2_STALE_RECOMMENDATION_STEP);
+}
+
+function isEdit2RecentDate(dateValue = "", windowDays = EDIT2_MOMENTUM_WINDOW_DAYS) {
+  if (!dateValue) return false;
+  const timestamp = new Date(dateValue).getTime();
+  if (Number.isNaN(timestamp)) return false;
+  return timestamp >= (Date.now() - (windowDays * 86400000));
+}
+
+function createEdit2RecommendationContext(bundle, chapters) {
+  const openIssues = chapters.flatMap((chapter) => getEdit2FocusIssues(chapter));
+  const unresolvedCounts = chapters.map((chapter) => getEdit2FocusIssues(chapter).length);
+  return {
+    bundle,
+    unitLabel: getStructureUnitLabel(bundle),
+    unitLower: getStructureUnitLower(bundle),
+    lastSessionLabel: normalizeChapterLabel(getEditStats(bundle).lastSession?.sectionLabel || ""),
+    maxPriorityRank: Math.max(0, ...openIssues.map((issue) => getEdit2IssuePriorityRank(getEdit2IssuePriorityLabel(issue)))),
+    maxUnresolvedInChapter: Math.max(0, ...unresolvedCounts)
+  };
+}
+
+function getEdit2RecentSessionCount(chapter, windowDays = EDIT2_MOMENTUM_WINDOW_DAYS) {
+  return chapter.sessions.filter((session) => isEdit2RecentDate(session.date, windowDays)).length;
+}
+
+function getEdit2RecentResolvedCount(chapter, windowDays = EDIT2_MOMENTUM_WINDOW_DAYS) {
+  return chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) === "resolved" && isEdit2RecentDate(issue.resolvedAt, windowDays)).length;
 }
 
 function getEdit2ChapterOpenStageCount(chapter, passKey) {
@@ -297,13 +335,37 @@ function getEdit2PriorityRingStyle(chapter) {
   return `--priority-high:${highDegrees.toFixed(2)}deg; --priority-medium:${mediumDegrees.toFixed(2)}deg;`;
 }
 
-function getEdit2RecommendationSignals(issue, chapter) {
+function getEdit2RecommendationSignals(issue, chapter, recommendationContext) {
+  const priorityRank = getEdit2IssuePriorityRank(getEdit2IssuePriorityLabel(issue));
+  const unresolvedInChapter = getEdit2FocusIssues(chapter).length;
+  const recentSessionCount = getEdit2RecentSessionCount(chapter);
+  const recentResolvedCount = getEdit2RecentResolvedCount(chapter);
+  const sameAsLastSession = recommendationContext.lastSessionLabel && recommendationContext.lastSessionLabel === chapter.label;
+  const recommendationKey = getEdit2RecommendationKey({
+    issueId: issue.id,
+    chapterKey: chapter.key,
+    title: issue.title
+  });
   return {
-    priorityRank: getEdit2IssuePriorityRank(getEdit2IssuePriorityLabel(issue)),
-    unresolvedInChapter: getEdit2FocusIssues(chapter).length,
+    priorityRank,
+    unresolvedInChapter,
     chapterHeat: getEdit2FilteredHeat(chapter),
-    lastTouchedAt: chapter.lastTouchedAt
+    lastTouchedAt: chapter.lastTouchedAt,
+    recentSessionCount,
+    recentResolvedCount,
+    sameAsLastSession,
+    chapterHasMostUnresolved: unresolvedInChapter > 0 && unresolvedInChapter === recommendationContext.maxUnresolvedInChapter,
+    isHighestPriority: priorityRank > 0 && priorityRank === recommendationContext.maxPriorityRank,
+    stalePenalty: getEdit2StaleRecommendationPenalty(recommendationKey)
   };
+}
+
+function getEdit2MomentumBoost(signals) {
+  return Math.min(16,
+    (signals.sameAsLastSession ? 6 : 0)
+    + Math.min(6, signals.recentSessionCount * 3)
+    + Math.min(4, signals.recentResolvedCount * 2)
+  );
 }
 
 function scoreEdit2NextFocusIssue(issue, signals) {
@@ -312,62 +374,106 @@ function scoreEdit2NextFocusIssue(issue, signals) {
     + (signals.unresolvedInChapter * 12)
     + Math.round(signals.chapterHeat * 10)
     + (issue.workflowStatus === "in_progress" ? 18 : 0)
+    + getEdit2MomentumBoost(signals)
+    - signals.stalePenalty
   );
 }
 
-function getEdit2NextFocusReasons(issue, chapter, signals, unitLabel = "Chapter") {
-  const priorityLabel = getEdit2IssuePriorityLabel(issue);
-  const passLabel = EDIT2_PASS_CONFIG[issue.passKey]?.label || "Editing";
-  const reasons = [`${priorityLabel} priority issue in structure`];
-
-  if (signals.unresolvedInChapter >= 2) {
-    reasons.push(`Multiple unresolved issues in this ${unitLabel.toLowerCase()}`);
-  } else if (signals.unresolvedInChapter === 1) {
-    reasons.push(`Only unresolved issue in this ${unitLabel.toLowerCase()}`);
-  }
-
+function getEdit2RecommendationReason(issue, chapter, signals, recommendationContext) {
   if (issue.workflowStatus === "in_progress") {
-    reasons.push("Already in progress with active context");
-  } else {
-    reasons.push(`${passLabel} pass needs attention next`);
+    return "You have already started here, so finishing it will build momentum.";
   }
+  if (signals.sameAsLastSession || signals.recentSessionCount > 0) {
+    return `You worked in ${chapter.label} recently, so context should still be warm.`;
+  }
+  if (signals.isHighestPriority) {
+    return "This is the highest priority open issue.";
+  }
+  if (signals.chapterHasMostUnresolved) {
+    return `This ${recommendationContext.unitLower} has the most unresolved issues.`;
+  }
+  if (signals.recentResolvedCount > 0) {
+    return `You have already been clearing issues in ${chapter.label}, so momentum is building here.`;
+  }
+  return "This is the clearest next move on the board right now.";
+}
 
-  return reasons.slice(0, 3);
+function getEdit2RecommendationProgressContext(chapter, recommendationContext) {
+  const openCount = number(chapter.openIssueCount);
+  const resolvedCount = number(chapter.resolvedIssueCount);
+  const unitLower = recommendationContext.unitLower;
+  if (openCount && resolvedCount) {
+    return `${formatNumber(openCount)} issue${openCount === 1 ? "" : "s"} remain in this ${unitLower} · ${formatNumber(resolvedCount)} resolved here already`;
+  }
+  if (openCount) {
+    return `${formatNumber(openCount)} issue${openCount === 1 ? "" : "s"} remain in this ${unitLower}`;
+  }
+  if (resolvedCount) {
+    return `You have resolved ${formatNumber(resolvedCount)} issue${resolvedCount === 1 ? "" : "s"} here already.`;
+  }
+  if (chapter.sessions.length) {
+    return `${formatNumber(chapter.sessions.length)} editing session${chapter.sessions.length === 1 ? "" : "s"} logged here`;
+  }
+  return `No ${unitLower} activity logged here yet.`;
+}
+
+function buildEdit2IssueRecommendation(issue, chapter, signals, recommendationContext) {
+  const priorityLabel = getEdit2IssuePriorityLabel(issue);
+  return {
+    key: getEdit2RecommendationKey({
+      issueId: issue.id,
+      chapterKey: chapter.key,
+      title: issue.title
+    }),
+    title: issue.title,
+    reason: getEdit2RecommendationReason(issue, chapter, signals, recommendationContext),
+    progressContext: getEdit2RecommendationProgressContext(chapter, recommendationContext),
+    meta: `${chapter.label} · ${priorityLabel} priority`,
+    primaryAction: "review-issue",
+    primaryLabel: "Open next step",
+    issueId: issue.id,
+    chapterKey: chapter.key
+  };
 }
 
 function buildEdit2ChapterFallbackRecommendation(chapter, label = "Scan structure", unitLabel = "Chapter") {
-  const hasMixedPasses = EDIT2_PASS_ORDER
-    .filter((passKey) => getEdit2ChapterOpenStageCount(chapter, passKey) > 0)
-    .length >= 2;
+  const activeFocusCount = getEdit2ChapterOpenStageCount(chapter, EDIT2_PASS_ORDER[0]);
+  const fallbackMeta = chapter.lastTouchedAt
+    ? `Last touched ${formatDate(chapter.lastTouchedAt)}`
+    : `No ${unitLabel.toLowerCase()} activity yet`;
+  const reason = chapter.openIssueCount
+    ? (activeFocusCount > 1
+      ? "Several unresolved notes are clustered here."
+      : `${unitLabel} still has unresolved issues.`)
+    : `A fresh scan could uncover the next useful note here.`;
 
   return {
-    label,
+    key: getEdit2RecommendationKey({
+      chapterKey: chapter.key,
+      title: chapter.label
+    }),
     title: chapter.label,
-    reasons: chapter.openIssueCount
-      ? [
-        `${unitLabel} still has unresolved issues`,
-        hasMixedPasses ? "Issue mix spans several editing passes" : "One editing pass needs attention"
-      ]
-      : [
-        "Fresh scan can reveal missing issues",
-        `${unitLabel} context needs a clean review`
-      ],
-    meta: `${chapter.openIssueCount} open · ${formatNumber(chapter.donePassCount)} / ${EDIT2_PASS_ORDER.length} passes done`,
+    reason,
+    progressContext: chapter.openIssueCount
+      ? `${chapter.openIssueCount} issue${chapter.openIssueCount === 1 ? "" : "s"} remain in this ${unitLabel.toLowerCase()}`
+      : getEdit2RecommendationProgressContext(chapter, { unitLower: unitLabel.toLowerCase() }),
+    meta: chapter.openIssueCount
+      ? `${chapter.openIssueCount} open issue${chapter.openIssueCount === 1 ? "" : "s"} · ${formatNumber(chapter.sessions.length)} session${chapter.sessions.length === 1 ? "" : "s"} logged`
+      : fallbackMeta,
     primaryAction: "open-chapter",
-    primaryLabel: `Open ${unitLabel.toLowerCase()}`,
-    secondaryAction: "add-issue",
-    secondaryLabel: "Add issue",
+    primaryLabel: label,
     chapterKey: chapter.key
   };
 }
 
 function buildEdit2NextFocusRecommendations(bundle, chapters) {
-  const unitLabel = getStructureUnitLabel(bundle);
+  const recommendationContext = createEdit2RecommendationContext(bundle, chapters);
+  const unitLabel = recommendationContext.unitLabel;
   const rankedCandidates = chapters
     .flatMap((chapter) => getEdit2FocusIssues(chapter).map((issue) => ({
       issue,
       chapter,
-      signals: getEdit2RecommendationSignals(issue, chapter)
+      signals: getEdit2RecommendationSignals(issue, chapter, recommendationContext)
     })))
     .sort((a, b) => {
       const scoreDelta = scoreEdit2NextFocusIssue(b.issue, b.signals) - scoreEdit2NextFocusIssue(a.issue, a.signals);
@@ -378,23 +484,9 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
     });
 
   if (rankedCandidates.length) {
-    const labels = ["Highest pressure", "Strong next move", "Keep moving"];
-    const recommendations = rankedCandidates.slice(0, 3).map(({ issue, chapter, signals }, index) => {
-      const priorityLabel = getEdit2IssuePriorityLabel(issue);
-      const passLabel = EDIT2_PASS_CONFIG[issue.passKey].label;
-      return {
-        label: labels[index] || "Next move",
-        title: issue.title,
-        reasons: getEdit2NextFocusReasons(issue, chapter, signals, unitLabel),
-        meta: `${chapter.label} · ${passLabel} · ${priorityLabel} priority`,
-        primaryAction: "review-issue",
-        primaryLabel: "Review issue",
-        secondaryAction: "open-chapter",
-        secondaryLabel: `Open ${unitLabel.toLowerCase()}`,
-        issueId: issue.id,
-        chapterKey: chapter.key
-      };
-    });
+    const recommendations = rankedCandidates
+      .slice(0, 3)
+      .map(({ issue, chapter, signals }) => buildEdit2IssueRecommendation(issue, chapter, signals, recommendationContext));
 
     if (recommendations.length < 3) {
       const usedChapterKeys = new Set(recommendations.map((recommendation) => recommendation.chapterKey).filter(Boolean));
@@ -408,14 +500,21 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
         .slice(0, 3 - recommendations.length)
         .map((chapter) => buildEdit2ChapterFallbackRecommendation(chapter, `Scan ${unitLabel.toLowerCase()}`, unitLabel));
 
-      return [...recommendations, ...fallbackChapters];
+      const combinedRecommendations = [...recommendations, ...fallbackChapters];
+      return {
+        primary: combinedRecommendations[0],
+        secondary: combinedRecommendations.slice(1, 3)
+      };
     }
 
-    return recommendations;
+    return {
+      primary: recommendations[0],
+      secondary: recommendations.slice(1, 3)
+    };
   }
 
   if (chapters.length) {
-    return [...chapters]
+    const fallbackRecommendations = [...chapters]
       .sort((a, b) => {
         const heatDelta = getEdit2FilteredHeat(b) - getEdit2FilteredHeat(a);
         if (heatDelta !== 0) return heatDelta;
@@ -427,23 +526,33 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
         index === 0 ? "Scan first" : index === 1 ? "Rebuild context" : "Fresh audit",
         unitLabel
       ));
+    return {
+      primary: fallbackRecommendations[0],
+      secondary: fallbackRecommendations.slice(1, 3)
+    };
   }
 
-  return [
-    {
-      label: "Best next move",
+  return {
+    primary: {
+      key: "add-anchor",
       title: `Create the first ${unitLabel.toLowerCase()} anchor`,
-      reasons: [
-        `${unitLabel} structure needs its first anchor`,
-        "Issues need a clear home first"
-      ],
-      meta: `${bundle.editing?.passName || "All stages"} · No ${getStructureUnitPlural(bundle).toLowerCase()} tracked`,
+      reason: `${unitLabel} structure needs its first anchor before issue recommendations can stay useful.`,
+      progressContext: `No ${getStructureUnitPlural(bundle).toLowerCase()} are mapped yet`,
+      meta: `No ${getStructureUnitPlural(bundle).toLowerCase()} tracked yet`,
       primaryAction: "add-chapter",
       primaryLabel: `Add ${unitLabel.toLowerCase()}`,
-      secondaryAction: "start-session",
-      secondaryLabel: "Start editing session"
-    }
-  ];
+    },
+    secondary: [
+      {
+        key: "start-edit-session",
+        title: "Start editing session",
+        reason: "A short session will create fresh context for the first next step.",
+        meta: "No edit history yet",
+        primaryAction: "start-session",
+        primaryLabel: "Start editing session"
+      }
+    ]
+  };
 }
 
 function renderEdit2LaunchCard(bundle, manuscript, chapters) {
@@ -453,7 +562,6 @@ function renderEdit2LaunchCard(bundle, manuscript, chapters) {
   const todayKey = new Date().toISOString().slice(0, 10);
   const todayEditSessions = [...getEditSessions(bundle)]
     .filter((session) => dateKey(session.date) === todayKey);
-  const currentPassName = bundle.editing?.passName || defaultPassName(bundle.editing?.passStage);
   const lastSession = editStats.lastSession;
   const lastAnchor = lastSession?.sectionLabel || chapters.find((chapter) => chapter.lastTouchedAt)?.label || `No ${unitLower} touched yet`;
 
@@ -462,11 +570,11 @@ function renderEdit2LaunchCard(bundle, manuscript, chapters) {
       <div class="writing-launch edit2-launch">
         <div class="writing-launch-copy">
           <div>
-            <h3>Get editing</h3>
-            <p>Jump into the current revision pass, log what you touched, and keep the ${unitLower} map honest as you move through the manuscript.</p>
+            <h3>Editing Workspace</h3>
+            <p>Log what you touched so the ${unitLower} map stays honest and the next restart is obvious.</p>
           </div>
           <p class="edit2-launch-meta">
-            Current pass: ${escapeHtml(currentPassName)}. ${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today, ${formatHours(editStats.minutesToday)} edited today, and ${formatNumber(manuscript.totalOpenIssues)} unresolved issue${manuscript.totalOpenIssues === 1 ? "" : "s"} still on the board.
+            ${formatNumber(todayEditSessions.length)} session${todayEditSessions.length === 1 ? "" : "s"} today, ${formatHours(editStats.minutesToday)} edited today, and ${formatNumber(manuscript.totalOpenIssues)} unresolved issue${manuscript.totalOpenIssues === 1 ? "" : "s"} still on the board.
           </p>
           <p class="edit2-launch-note">
             Last worked on: <strong>${escapeHtml(lastAnchor)}</strong>${lastSession?.date ? ` on ${escapeHtml(formatDate(lastSession.date))}` : ""}.
@@ -479,52 +587,66 @@ function renderEdit2LaunchCard(bundle, manuscript, chapters) {
 }
 
 function renderEdit2NextFocusCards(recommendations) {
+  const primaryRecommendation = recommendations?.primary || null;
+  const secondaryRecommendations = Array.isArray(recommendations?.secondary)
+    ? recommendations.secondary.filter(Boolean).slice(0, 2)
+    : [];
+  if (!primaryRecommendation) return "";
   return `
     <section class="card next-focus-card">
       <div class="section-head">
         <div>
-          <h3>Next Focus</h3>
-          <p>Pick from the strongest open issues first. Priority and issue concentration drive the order.</p>
+          <h3>Next Up</h3>
+          <p>One clear next move now, with backup options only if you need them.</p>
         </div>
       </div>
-      <div class="next-focus-list next-focus-list-${recommendations.length}">
-        ${recommendations.map((recommendation) => `
-          <article class="next-focus-option">
-            <div class="next-focus-copy">
-              <p class="next-focus-kicker">${escapeHtml(recommendation.label)}</p>
-              <h4>${escapeHtml(recommendation.title)}</h4>
-              ${recommendation.description ? `<p>${escapeHtml(recommendation.description)}</p>` : ""}
-            </div>
-            ${recommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(recommendation.meta)}</p>` : ""}
-            <div class="next-focus-reason">
-              <strong>Why this surfaced:</strong>
-              <ul>
-                ${(recommendation.reasons || []).map((reason) => `<li>${escapeHtml(reason)}</li>`).join("")}
-              </ul>
-            </div>
-            <div class="next-focus-actions">
-              ${recommendation.primaryAction ? `
-                <button
-                  class="primary-btn"
-                  type="button"
-                  data-edit2-next-focus-action="${escapeAttr(recommendation.primaryAction)}"
-                  ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
-                  ${recommendation.chapterKey ? `data-chapter-key="${escapeAttr(recommendation.chapterKey)}"` : ""}
-                >${escapeHtml(recommendation.primaryLabel)}</button>
-              ` : ""}
-              ${recommendation.secondaryAction ? `
-                <button
-                  class="ghost-btn"
-                  type="button"
-                  data-edit2-next-focus-action="${escapeAttr(recommendation.secondaryAction)}"
-                  ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
-                  ${recommendation.chapterKey ? `data-chapter-key="${escapeAttr(recommendation.chapterKey)}"` : ""}
-                >${escapeHtml(recommendation.secondaryLabel)}</button>
-              ` : ""}
-            </div>
-          </article>
-        `).join("")}
+      <div class="next-focus-list next-focus-list-1">
+        <article class="next-focus-option next-focus-primary">
+          <div class="next-focus-copy">
+            <p class="next-focus-kicker">Recommended</p>
+            <h4>${escapeHtml(`Next step: ${primaryRecommendation.title}`)}</h4>
+          </div>
+          ${primaryRecommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(primaryRecommendation.meta)}</p>` : ""}
+          ${primaryRecommendation.reason ? `<p class="next-focus-justification">${escapeHtml(primaryRecommendation.reason)}</p>` : ""}
+          ${primaryRecommendation.progressContext ? `<p class="next-focus-support">${escapeHtml(primaryRecommendation.progressContext)}</p>` : ""}
+          <div class="next-focus-actions">
+            ${primaryRecommendation.primaryAction ? `
+              <button
+                class="primary-btn"
+                type="button"
+                data-edit2-next-focus-action="${escapeAttr(primaryRecommendation.primaryAction)}"
+                ${primaryRecommendation.issueId ? `data-issue-id="${escapeAttr(primaryRecommendation.issueId)}"` : ""}
+                ${primaryRecommendation.chapterKey ? `data-chapter-key="${escapeAttr(primaryRecommendation.chapterKey)}"` : ""}
+              >${escapeHtml(primaryRecommendation.primaryLabel)}</button>
+            ` : ""}
+          </div>
+        </article>
       </div>
+      ${secondaryRecommendations.length ? `
+        <details class="next-focus-secondary">
+          <summary>Other options (${formatNumber(secondaryRecommendations.length)})</summary>
+          <div class="next-focus-secondary-list">
+            ${secondaryRecommendations.map((recommendation) => `
+              <article class="next-focus-secondary-item">
+                <div class="next-focus-secondary-copy">
+                  <h4>${escapeHtml(recommendation.title)}</h4>
+                  ${recommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(recommendation.meta)}</p>` : ""}
+                  ${recommendation.reason ? `<p>${escapeHtml(recommendation.reason)}</p>` : ""}
+                </div>
+                ${recommendation.primaryAction ? `
+                  <button
+                    class="ghost-btn"
+                    type="button"
+                    data-edit2-next-focus-action="${escapeAttr(recommendation.primaryAction)}"
+                    ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
+                    ${recommendation.chapterKey ? `data-chapter-key="${escapeAttr(recommendation.chapterKey)}"` : ""}
+                  >${escapeHtml(recommendation.primaryLabel)}</button>
+                ` : ""}
+              </article>
+            `).join("")}
+          </div>
+        </details>
+      ` : ""}
     </section>
   `;
 }
@@ -543,11 +665,12 @@ function getEdit2SelectedChapter(chapters) {
 function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, unitLabel = getStructureUnitLabel(currentBundle())) {
   const heatLevel = getEdit2HeatLevel(chapter, chapters);
   const hasUnassignedContents = chapter.label === "Unassigned" && (chapter.issues.length > 0 || chapter.sessions.length > 0);
-  const openByPass = Object.fromEntries(
-    EDIT2_PASS_ORDER.map((passKey) => [passKey, getEdit2ChapterOpenStageCount(chapter, passKey)])
-  );
+  const unitLower = unitLabel.toLowerCase();
+  const completionLabel = chapter.completedAt ? `Completed ${formatDate(chapter.completedAt)}` : `Mark ${unitLower} complete`;
+  const inProgressCount = chapter.issues.filter((issue) => issue.workflowStatus === "in_progress").length;
   const priorityTotal = number(chapter.priorityCounts.high) + number(chapter.priorityCounts.medium) + number(chapter.priorityCounts.low);
   const priorityEvaluation = getEdit2PriorityEvaluation(chapter, chapters);
+  const activityLabel = chapter.lastTouchedAt ? `Last touched ${formatDate(chapter.lastTouchedAt)}` : "No edit activity yet";
   return `
     <div class="edit2-chapter-row-shell ${chapterIndex === 0 ? "is-first" : ""} ${chapterIndex === chapterCount - 1 ? "is-last" : ""}">
       <div class="edit2-chapter-rail" aria-hidden="true">
@@ -565,17 +688,26 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, u
           <div class="edit2-chapter-identity">
             <h4>${escapeHtml(chapter.label)}</h4>
             <p class="edit2-chapter-summary">${escapeHtml(truncateEdit2Summary(getEdit2OverviewSummary(chapter), 12))}</p>
-            <span class="edit2-pass-pill">${formatNumber(chapter.donePassCount)} / ${EDIT2_PASS_ORDER.length} passes</span>
+            <span class="edit2-pass-pill">${formatNumber(chapter.openIssueCount)} open issue${chapter.openIssueCount === 1 ? "" : "s"}</span>
+            <span class="edit2-pass-pill">${formatNumber(chapter.sessions.length)} session${chapter.sessions.length === 1 ? "" : "s"} logged</span>
+            <span class="edit2-pass-pill">${escapeHtml(activityLabel)}</span>
+            ${chapter.completedAt ? `<span class="edit2-pass-pill">${escapeHtml(completionLabel)}</span>` : ""}
           </div>
           <div class="edit2-chapter-issue-box">
             <p class="edit2-mini-label">Issues</p>
             <div class="edit2-chapter-mix-list">
-              ${EDIT2_PASS_ORDER.map((passKey) => `
-                <div class="edit2-chapter-mix-row">
-                  <span>${escapeHtml(EDIT2_PASS_CONFIG[passKey].shortLabel)}</span>
-                  <strong>${formatNumber(openByPass[passKey])}</strong>
-                </div>
-              `).join("")}
+              <div class="edit2-chapter-mix-row">
+                <span>Open</span>
+                <strong>${formatNumber(chapter.openIssueCount)}</strong>
+              </div>
+              <div class="edit2-chapter-mix-row">
+                <span>Working</span>
+                <strong>${formatNumber(inProgressCount)}</strong>
+              </div>
+              <div class="edit2-chapter-mix-row">
+                <span>Resolved</span>
+                <strong>${formatNumber(chapter.resolvedIssueCount)}</strong>
+              </div>
             </div>
           </div>
           <div class="edit2-chapter-priority-box">
@@ -598,6 +730,9 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, u
           </div>
         </article>
         <div class="edit2-card-controls edit2-chapter-controls" aria-label="${escapeAttr(unitLabel)} controls">
+          <button class="inline-btn edit2-complete-toggle" type="button" data-edit2-toggle-chapter-complete="${escapeAttr(chapter.id)}" aria-label="${escapeAttr(chapter.completedAt ? `Reopen ${chapter.label}` : `Mark ${chapter.label} complete`)}">
+            ${escapeHtml(chapter.completedAt ? `Reopen ${unitLower}` : `Complete ${unitLower}`)}
+          </button>
           <button class="icon-btn" type="button" data-edit2-move-chapter="up" data-chapter-id="${escapeAttr(chapter.id)}" aria-label="Move ${escapeAttr(chapter.label)} earlier" ${chapterIndex === 0 ? "disabled" : ""}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m12 6-5 5" />
@@ -629,26 +764,38 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, u
 
 function renderEdit2IssueGroups(chapter) {
   const unitLower = getStructureUnitLower(currentBundle());
-  return EDIT2_PASS_ORDER
-    .map((passKey) => {
-      const passIssues = chapter.issues.filter((issue) => issue.passKey === passKey);
-      return `
-        <section class="edit2-pass-group">
-          <div class="section-head">
-            <div>
-              <h4>${escapeHtml(EDIT2_PASS_CONFIG[passKey].label)}</h4>
-              <p>${escapeHtml(EDIT2_PASS_CONFIG[passKey].summary)}</p>
-            </div>
-            <span class="pill">${formatNumber(passIssues.length)} issue${passIssues.length === 1 ? "" : "s"}</span>
-          </div>
-          ${passIssues.length ? `
-            <div class="edit2-issue-list">
-              ${passIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
-            </div>
-          ` : `<div class="empty">No matching ${EDIT2_PASS_CONFIG[passKey].label.toLowerCase()} issues for this ${escapeHtml(unitLower)} right now.</div>`}
-        </section>
-      `;
-    }).join("");
+  const currentIssues = chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) !== "resolved");
+  const resolvedIssues = chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) === "resolved");
+  return `
+    <section class="edit2-pass-group">
+      <div class="section-head">
+        <div>
+          <h4>Current Issues</h4>
+          <p>Keep active problems visible while you work through this ${escapeHtml(unitLower)}.</p>
+        </div>
+        <span class="pill">${formatNumber(currentIssues.length)} issue${currentIssues.length === 1 ? "" : "s"}</span>
+      </div>
+      ${currentIssues.length ? `
+        <div class="edit2-issue-list">
+          ${currentIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
+        </div>
+      ` : `<div class="empty">No current issues are attached to this ${escapeHtml(unitLower)} right now.</div>`}
+    </section>
+    <section class="edit2-pass-group">
+      <div class="section-head">
+        <div>
+          <h4>Resolved Issues</h4>
+          <p>Finished notes stay here for context in case anything needs another look.</p>
+        </div>
+        <span class="pill">${formatNumber(resolvedIssues.length)} issue${resolvedIssues.length === 1 ? "" : "s"}</span>
+      </div>
+      ${resolvedIssues.length ? `
+        <div class="edit2-issue-list">
+          ${resolvedIssues.map((issue) => renderEdit2IssueItem(issue)).join("")}
+        </div>
+      ` : `<div class="empty">Resolved issues will collect here once you start closing them out.</div>`}
+    </section>
+  `;
 }
 
 function renderEdit2IssueItem(issue) {
@@ -659,8 +806,7 @@ function renderEdit2IssueItem(issue) {
       <div class="edit2-issue-head">
         <div>
           <p class="edit2-issue-kicker">
-            ${escapeHtml(EDIT2_PASS_CONFIG[issue.passKey].label)}
-            · ${escapeHtml(issue.type || "General")}
+            ${escapeHtml(issue.type || "General")}
             ${issue.textLocation ? ` · ${escapeHtml(issue.textLocation)}` : ""}
           </p>
           <h5>${escapeHtml(issue.title)}</h5>
@@ -670,6 +816,7 @@ function renderEdit2IssueItem(issue) {
           <span class="pill">${escapeHtml(priorityLabel)}</span>
         </div>
       </div>
+      ${issue.snippet ? `<blockquote class="edit2-issue-snippet">${escapeHtml(issue.snippet)}</blockquote>` : ""}
       ${issue.notes ? `<p class="edit2-issue-note">${escapeHtml(issue.notes)}</p>` : ""}
       <div class="edit2-issue-actions">
         ${workflowStatus !== "resolved" ? `
@@ -745,7 +892,7 @@ function renderEdit2IssueBoard(bundle) {
   const resolvedIssueArchive = [...resolvedIssues].sort(compareResolvedEditIssues);
   const issueFilterSummary = describeEditIssueFilterSummary(filteredIssues, editIssueFilters);
   const resolvedIssueSummary = resolvedIssueArchive.length
-    ? `${formatNumber(resolvedIssueArchive.length)} resolved issue${resolvedIssueArchive.length === 1 ? "" : "s"} are tucked here for reference. Reopen anything that needs another pass.`
+    ? `${formatNumber(resolvedIssueArchive.length)} resolved issue${resolvedIssueArchive.length === 1 ? "" : "s"} are tucked here for reference. Reopen anything that needs another look.`
     : "Resolved issues will collect here once you start closing them out.";
 
   return `
@@ -780,12 +927,6 @@ function renderEdit2IssueBoard(bundle) {
       </div>
       ${editIssueBoardView === "current" ? `
         <form class="issue-filter-form" id="edit2-issue-filters-form">
-          <label>Pass
-            <select name="passScope">
-              <option value="current" ${editIssueFilters.passScope === "current" ? "selected" : ""}>Current pass</option>
-              <option value="all" ${editIssueFilters.passScope === "all" ? "selected" : ""}>All passes</option>
-            </select>
-          </label>
           <label>Priority
             <select name="priority">
               <option value="all" ${editIssueFilters.priority === "all" ? "selected" : ""}>All priorities</option>
@@ -834,6 +975,7 @@ function renderEdit2IssueBoard(bundle) {
 
 function renderEdit2Overview(bundle, manuscript, chapters) {
   const nextFocusRecommendations = buildEdit2NextFocusRecommendations(bundle, chapters);
+  noteEdit2PrimaryRecommendation(nextFocusRecommendations.primary);
   const activeBoardView = edit2OverviewBoardView === "issues" ? "issues" : "chapters";
   const isIssueBoard = activeBoardView === "issues";
   const unitLabel = getStructureUnitLabel(bundle);
@@ -875,6 +1017,7 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
 
 function renderEdit2ChapterSummarySection(selectedChapter) {
   const unitLower = getStructureUnitLower(currentBundle());
+  const completionAction = selectedChapter.completedAt ? `Reopen ${unitLower}` : `Mark ${unitLower} complete`;
   if (edit2SummaryEditMode) {
     return `
       <section class="card edit2-structure-section">
@@ -904,10 +1047,14 @@ function renderEdit2ChapterSummarySection(selectedChapter) {
           <h4>Summary</h4>
           <p>Keep this brief and structural. It should explain why this ${escapeHtml(unitLower)} exists in the manuscript.</p>
         </div>
-        <button class="ghost-btn" id="edit2-edit-summary-btn" type="button">Edit summary</button>
+        <div class="edit2-structure-actions">
+          <button class="ghost-btn" id="edit2-edit-summary-btn" type="button">Edit summary</button>
+          <button class="inline-btn" type="button" data-edit2-toggle-chapter-complete="${escapeAttr(selectedChapter.id)}">${escapeHtml(completionAction)}</button>
+        </div>
       </div>
       <div class="edit2-summary-display ${selectedChapter.summary ? "" : "is-empty"}">
         <p>${escapeHtml(selectedChapter.summary || `No summary yet. Add a short purpose note when this ${unitLower} needs clearer context.`)}</p>
+        ${selectedChapter.completedAt ? `<p class="small-copy">${escapeHtml(`Completed ${formatDate(selectedChapter.completedAt)}`)}</p>` : ""}
       </div>
     </section>
   `;
@@ -942,7 +1089,7 @@ function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapt
         <div class="section-head">
           <div>
             <h3>${escapeHtml(unitLabel)} Issues</h3>
-            <p>Review the issues attached to this part of the manuscript across the three editing stages.</p>
+            <p>Review the issues attached to this part of the manuscript without losing the surrounding context.</p>
           </div>
           <button class="ghost-btn" id="edit2-open-issue-modal-btn" type="button">Add issue</button>
         </div>
@@ -1083,6 +1230,35 @@ function saveEdit2ChapterSummary(chapterId, summary) {
   ));
 }
 
+function toggleEdit2ChapterComplete(chapterId) {
+  const bundle = currentBundle();
+  const builtChapter = buildEdit2Chapters(bundle).chapters.find((chapter) => chapter.id === chapterId);
+  if (!builtChapter) return null;
+  const nextCompletedAt = builtChapter.completedAt ? "" : new Date().toISOString();
+  updateEdit2ChapterRecords((chapters) => {
+    const chapterExists = chapters.some((chapter) => chapter.id === chapterId);
+    if (chapterExists) {
+      return chapters.map((chapter) => chapter.id === chapterId
+        ? { ...chapter, completedAt: nextCompletedAt }
+        : chapter
+      );
+    }
+    return [
+      ...chapters,
+      createEditingChapter(builtChapter.label, {
+        id: builtChapter.id,
+        summary: builtChapter.summary,
+        sortOrder: builtChapter.sortOrder,
+        completedAt: nextCompletedAt
+      })
+    ];
+  });
+  return {
+    chapter: builtChapter,
+    completedAt: nextCompletedAt
+  };
+}
+
 function addEdit2Chapter(label, summary = "") {
   const unitLabel = getStructureUnitLabel(currentBundle());
   const unitLower = unitLabel.toLowerCase();
@@ -1191,6 +1367,22 @@ function bindEdit2DashboardEvents(bundle) {
   if (view && view.dataset.edit2Delegated !== "true") {
     view.dataset.edit2Delegated = "true";
     view.addEventListener("click", (event) => {
+      const completeChapterButton = event.target.closest("[data-edit2-toggle-chapter-complete]");
+      if (completeChapterButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        const result = toggleEdit2ChapterComplete(completeChapterButton.dataset.edit2ToggleChapterComplete);
+        if (!result) return;
+        persistAndRender();
+        const unitLabel = getStructureUnitLabel(currentBundle());
+        const unitLower = unitLabel.toLowerCase();
+        showToast(
+          result.completedAt ? `${unitLabel} completed` : `${unitLabel} reopened`,
+          result.completedAt ? `${result.chapter.label} now counts toward ${unitLower} completion goals.` : `${result.chapter.label} no longer counts as completed.`
+        );
+        return;
+      }
+
       const deleteChapterButton = event.target.closest("[data-edit2-delete-chapter]");
       if (deleteChapterButton) {
         event.preventDefault();
@@ -1226,7 +1418,6 @@ function bindEdit2DashboardEvents(bundle) {
   if (edit2IssueFilterForm) {
     edit2IssueFilterForm.onchange = () => {
       editIssueFilters = {
-        passScope: String(edit2IssueFilterForm.elements.passScope?.value || "current"),
         priority: String(edit2IssueFilterForm.elements.priority?.value || "all"),
         type: String(edit2IssueFilterForm.elements.type?.value || "all"),
         section: String(edit2IssueFilterForm.elements.section?.value || "all"),
@@ -1253,6 +1444,7 @@ function bindEdit2DashboardEvents(bundle) {
 
   document.querySelectorAll("[data-edit2-next-focus-action]").forEach((button) => {
     button.onclick = () => {
+      clearEdit2NextFocusDisplayState();
       const action = button.dataset.edit2NextFocusAction;
       if (action === "review-issue" && button.dataset.issueId) {
         openIssueModal(button.dataset.issueId);
@@ -1481,7 +1673,7 @@ function bindEdit2DashboardEvents(bundle) {
         priority: cycleEdit2Priority(issue.priority)
       }));
       persistAndRender();
-      showToast("Priority updated", "That issue was reprioritized for the next pass decision.");
+      showToast("Priority updated", "That issue was reprioritized for the next review decision.");
     };
   });
 }

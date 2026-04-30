@@ -515,18 +515,12 @@ function openPublishProjectModal(bundle = currentBundle()) {
   if (!modal || !title || !copy || !summary || !input || !bundle) return;
 
   const eligibility = getPublishEligibility(bundle);
-  const progressCurrent = number(bundle.editing?.progressCurrent);
-  const progressTotal = number(bundle.editing?.progressTotal);
   const projectTitle = bundle.project.bookTitle || "Untitled project";
-  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
-  const progressSummary = progressTotal > 0
-    ? `${formatNumber(progressCurrent)} of ${formatNumber(progressTotal)} ${unitPluralLower} logged in the final pass`
-    : "the final pass marked complete";
 
   title.textContent = `Publish ${projectTitle}`;
   copy.textContent = "This removes the normal workspace tabs and turns the project into a locked, scrollable final-stats page. It stays reversible from the stats page or the projects view.";
   summary.textContent = eligibility.canPublish
-    ? `${projectTitle} is ready to publish with ${formatNumber(number(bundle.project.currentWordCount))} words, ${progressSummary}, and no remaining open issues.`
+    ? `${projectTitle} is ready to publish with ${formatNumber(number(bundle.project.currentWordCount))} words and no remaining open issues.`
     : eligibility.reasons.join(" ");
   input.value = "";
   modal.classList.remove("hidden");
@@ -892,6 +886,14 @@ function renderCreateProject() {
             <h2>Create New Project</h2>
             <p>Start with the essentials, then refine everything later inside the project workspace.</p>
           </div>
+          <button class="route-chip" id="back-to-projects-from-create-btn" type="button" aria-label="Back to projects">
+            <span class="route-chip-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="m14.5 6-6 6 6 6" />
+              </svg>
+            </span>
+            <span>Back</span>
+          </button>
         </div>
         ${renderCreateProjectForm()}
       </section>
@@ -1132,6 +1134,14 @@ function renderEditProject(bundle) {
 
 function bindCreateProjectEvents() {
   const createForm = document.getElementById("create-project-form");
+  const backButton = document.getElementById("back-to-projects-from-create-btn");
+  if (backButton) {
+    backButton.addEventListener("click", () => {
+      activeView = "projects";
+      saveState();
+      render();
+    });
+  }
   if (!createForm) return;
   bindProjectTypeFields(createForm);
   createForm.addEventListener("submit", (event) => {
@@ -1285,9 +1295,9 @@ function renderGoalCard(goal) {
       </div>
       <div class="progress-block"><div class="progress-rail"><div class="progress-fill" style="width: ${goal.progress}%"></div></div></div>
       <div class="meta-line">
-        <span class="pill">${goalTypeContext(goal.type)} ${goal.trackedToday ? `(${formatNumber(goal.liveValue)} / ${formatNumber(goal.targetValueToday)} ${goalUnit(goal.type)})` : "(Not scheduled today)"}</span>
+        <span class="pill">${goalTypeContext(goal.type)} (${goalProgressText(goal)})</span>
       </div>
-      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal))}</p>
+      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal, currentBundle()))}</p>
       <p class="small-copy">${escapeHtml(goalWindowSummary(goal))}</p>
     </div>
   `;
@@ -1307,7 +1317,7 @@ function renderArchivedGoalCard(goal) {
       <div class="meta-line">
         <span class="pill">${goalTypeContext(goal.type)} target plan</span>
       </div>
-      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal))}</p>
+      <p class="small-copy" style="margin-top: 10px;">${escapeHtml(goalScheduleSummary(goal, currentBundle()))}</p>
       <p class="small-copy">${escapeHtml(goalWindowSummary(goal))}</p>
       <p class="small-copy" style="margin-top: 10px;">This goal is no longer active, but days that were tracked against it will keep showing the right target in the heatmap.</p>
     </div>
@@ -1325,7 +1335,6 @@ function renderIssueCard(issue, options = {}) {
         <div>
           <p class="session-kind">${issueLabel}</p>
           <h4 class="issue-title">${escapeHtml(issue.title)}</h4>
-          <p class="small-copy">${issue.passName ? escapeHtml(issue.passName) : "No pass assigned"}</p>
         </div>
         <div class="goal-actions">
           <button class="icon-btn" type="button" data-action="edit-issue" data-id="${issue.id}" aria-label="Edit issue">
@@ -1354,6 +1363,7 @@ function renderIssueCard(issue, options = {}) {
         <span class="pill ${statusClass}">${escapeHtml(issue.status)}</span>
         ${issue.sectionLabel ? `<span class="pill">${escapeHtml(issue.sectionLabel)}</span>` : ""}
       </div>
+      ${issue.snippet ? `<blockquote class="issue-snippet">${escapeHtml(issue.snippet)}</blockquote>` : ""}
       ${issue.notes ? `<p class="issue-note">${escapeHtml(issue.notes)}</p>` : ""}
     </div>
   `;
@@ -1361,18 +1371,30 @@ function renderIssueCard(issue, options = {}) {
 
 function renderSessionCard(bundle, session) {
   const isEditSession = session.type === "edit";
+  const snapshot = getSnapshotForSession(bundle, session.id);
   const title = isEditSession
     ? `${formatNumber(session.wordsEdited)} words edited`
     : `${formatNumber(session.wordsWritten)} words written`;
   const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
-  const passPill = isEditSession && session.passName ? `<span class="pill">${escapeHtml(session.passName)}</span>` : "";
+  const statusPill = snapshot
+    ? `<span class="pill">${escapeHtml(sessionSnapshotOutcomeLabel(snapshot.outcomeStatus))}</span>`
+    : "";
+  const accomplished = snapshot?.accomplished
+    ? `<p class="small-copy" style="margin-top: 10px;"><strong>You:</strong> ${escapeHtml(snapshot.accomplished)}</p>`
+    : "";
+  const nextStep = snapshot
+    ? `<p class="small-copy" style="margin-top: 6px;"><strong>Next:</strong> ${escapeHtml(defaultSnapshotNextStep(snapshot))}</p>`
+    : "";
+  const blocker = snapshot?.outcomeStatus === "blocked" && snapshot?.blocker
+    ? `<p class="small-copy" style="margin-top: 6px;"><strong>Blocked by:</strong> ${escapeHtml(snapshot.blocker)}</p>`
+    : "";
   return `
     <div class="item">
       <div class="item-top">
         <div>
           <p class="session-kind">${isEditSession ? "Editing session" : "Writing session"}</p>
           <h4>${title}</h4>
-          <p class="small-copy">${formatDate(session.date)}</p>
+          <p class="small-copy">${formatDate(session.date)} (${formatRelativeTime(session.date)})</p>
         </div>
         <div class="goal-actions">
           <button class="icon-btn" type="button" data-action="edit-session" data-id="${session.id}" aria-label="Edit session">
@@ -1394,10 +1416,13 @@ function renderSessionCard(bundle, session) {
       </div>
       <div class="meta-line">
         <span class="pill">${formatNumber(session.durationMinutes)} min</span>
-        ${passPill}
         ${sectionPill}
+        ${statusPill}
       </div>
-      ${session.notes ? `<p class="small-copy" style="margin-top: 10px;">${escapeHtml(session.notes)}</p>` : ""}
+      ${accomplished}
+      ${nextStep}
+      ${blocker}
+      ${session.notes && !snapshot?.notes ? `<p class="small-copy" style="margin-top: 10px;">${escapeHtml(session.notes)}</p>` : ""}
     </div>
   `;
 }
