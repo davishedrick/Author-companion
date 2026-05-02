@@ -767,15 +767,12 @@ function renderEditDashboard(bundle) {
 
 function bindEditDashboardEvents(bundle) {
   bindEditSessionGlobalActions();
-  const editSessionStartModal = document.getElementById("edit-session-start-modal");
   const editSessionModal = document.getElementById("edit-session-modal");
   const issueModal = document.getElementById("issue-modal");
   const editSessionForm = document.getElementById("edit-session-form");
   const issueForm = document.getElementById("issue-form");
   const issueFilterForm = document.getElementById("edit-issue-filters-form");
   const issueViewButtons = document.querySelectorAll("[data-edit-issue-view]");
-  const closeEditSessionStartButton = document.getElementById("close-edit-session-start-btn");
-  const startEditSessionButton = document.getElementById("start-edit-session-btn");
   const endEditSessionButton = document.getElementById("end-edit-session-btn");
   const leaveEditFocusModeButton = document.getElementById("leave-edit-focus-mode-btn");
   const cancelEndEditSessionButton = document.getElementById("cancel-end-edit-session-btn");
@@ -785,12 +782,6 @@ function bindEditDashboardEvents(bundle) {
   const viewAllSessionsButton = document.getElementById("view-all-edit-sessions-btn");
   const closeEditSessionButton = document.getElementById("close-edit-session-btn");
   const closeIssueButton = document.getElementById("close-issue-modal-btn");
-
-  if (startEditSessionButton) {
-    startEditSessionButton.onclick = () => {
-      startEditingSession();
-    };
-  }
 
   if (endEditSessionButton) {
     endEditSessionButton.onclick = (event) => {
@@ -869,12 +860,6 @@ function bindEditDashboardEvents(bundle) {
     };
   }
 
-  if (closeEditSessionStartButton) {
-    closeEditSessionStartButton.onclick = () => {
-      closeEditSessionStartModal();
-    };
-  }
-
   if (closeIssueButton) {
     closeIssueButton.onclick = () => {
       closeIssueModal();
@@ -884,12 +869,6 @@ function bindEditDashboardEvents(bundle) {
   if (editSessionModal) {
     editSessionModal.onclick = (event) => {
       if (event.target === editSessionModal) closeEditSessionModal();
-    };
-  }
-
-  if (editSessionStartModal) {
-    editSessionStartModal.onclick = (event) => {
-      if (event.target === editSessionStartModal) closeEditSessionStartModal();
     };
   }
 
@@ -1292,21 +1271,14 @@ function openPastEditingSessionModal() {
 }
 
 function openEditSessionStartModal() {
-  const modal = document.getElementById("edit-session-start-modal");
-  const title = document.getElementById("edit-session-start-title");
-  const copy = document.getElementById("edit-session-start-copy");
-  const pendingSnapshot = getPendingSessionSnapshotContext();
-  title.textContent = "Start Editing Session";
-  copy.textContent = pendingSnapshot?.structureUnitName
-    ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
-    : "Choose how long you want to edit, then begin.";
-  syncEditSessionDial(editSessionDraftMinutes);
+  const modal = document.getElementById("session-modal");
+  startSessionFlowType = "editing";
+  syncStartSessionFlow("config");
   modal.classList.remove("hidden");
 }
 
 function closeEditSessionStartModal() {
-  const modal = document.getElementById("edit-session-start-modal");
-  modal.classList.add("hidden");
+  closeSessionModal();
 }
 
 function syncEditSessionDial(minutes = editSessionDraftMinutes) {
@@ -1333,7 +1305,7 @@ function syncEditSessionDial(minutes = editSessionDraftMinutes) {
 
 function bindEditSessionDial() {
   const dial = document.getElementById("edit-session-dial");
-  const dialWrap = document.querySelector("#edit-session-start-modal .session-dial-wrap");
+  const dialWrap = document.getElementById("editing-session-dial-wrap");
   if (!dial || !dialWrap || dial.dataset.bound === "true") return;
   dial.dataset.bound = "true";
 

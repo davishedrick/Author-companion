@@ -281,20 +281,30 @@ def test_static_assets_load():
 def test_edit_dashboard_uses_the_same_start_timer_pattern_as_writing_sessions():
     html = get_html()
     js = get_js_asset("edit.js")
+    dashboard_js = get_js_asset("dashboard.js")
 
-    assert 'id="edit-session-start-modal"' in html
+    assert 'id="session-modal"' in html
+    assert 'id="start-session-flow"' in html
+    assert 'id="choose-writing-session-btn"' in html
+    assert 'id="choose-editing-session-btn"' in html
     assert 'id="edit-session-dial"' in html
-    assert 'id="start-edit-session-btn"' in html
+    assert 'id="editing-session-dial-wrap"' in html
     assert 'id="editing-session-screen"' in html
     assert 'id="end-edit-session-btn"' in html
     assert 'id="end-edit-session-confirm-modal"' in html
-    assert "Start Editing Session" in html
-    assert "Start editing session" in html
+    assert "Start Session" in html
+    assert "Log previous session" in html
+    assert 'id="start-edit-session-btn"' not in html
+    assert 'id="edit-session-start-modal"' not in html
     assert "function openEditSessionStartModal()" in js
     assert "function bindEditSessionDial()" in js
     assert "function bindEditSessionGlobalActions()" in js
     assert "function startEditingSession()" in js
     assert "function finishActiveEditingSession(autoCompleted = false)" in js
+    assert "function chooseStartSessionType(sessionType)" in dashboard_js
+    assert "function startSelectedSessionFlow()" in dashboard_js
+    assert 'chooseStartSessionType("editing")' in dashboard_js
+    assert 'startSessionFlowType === "editing"' in dashboard_js
     assert (
         'document.getElementById("editing-session-screen").classList.remove("hidden");'
         in js
@@ -530,35 +540,26 @@ def test_sidebar_can_collapse_to_icon_only_navigation():
 def test_sidebar_start_session_menu_launches_global_session_flows():
     js = get_app_js()
     css = get_css_asset("layout.css")
-    theme_css = get_css_asset("themes.css")
 
     assert 'id="start-session-menu-btn"' in js
-    assert 'id="start-session-menu"' in js
-    assert 'data-session-action="write"' in js
-    assert 'data-session-action="edit"' in js
-    assert 'data-session-action="log-previous-writing"' in js
-    assert 'data-session-action="log-previous-editing"' in js
+    assert 'id="start-session-menu"' not in js
+    assert 'data-session-action="write"' not in js
+    assert 'data-session-action="edit"' not in js
+    assert 'data-session-action="log-previous-writing"' not in js
+    assert 'data-session-action="log-previous-editing"' not in js
+    assert 'aria-haspopup="menu"' not in js
     assert "Open the writing timer" not in js
     assert "Open the editing timer" not in js
     assert "function bindStartSessionMenu()" in js
     assert "function startSidebarSession(action)" in js
+    assert 'startSidebarSession("start")' in js
     assert "openSessionModal();" in js
-    assert "openEditSessionStartModal();" in js
-    assert "openPastWritingSessionModal();" in js
-    assert "openPastEditingSessionModal();" in js
     assert 'nav.querySelectorAll("button[data-view]")' in js
     assert (
         '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>' in js
     )
     assert ".nav-session-shell {" in css
-    assert ".nav-session-menu {" in css
-    assert "background: #fffaf3;" in css
-    session_menu_block = css[
-        css.index(".nav-session-menu {") : css.index(".nav-session-menu.hidden {")
-    ]
-    assert "backdrop-filter" not in session_menu_block
     assert ".nav-session-trigger .nav-session-icon {" in css
-    assert 'html[data-theme="dark"] .nav-session-menu' in theme_css
 
 
 def test_goal_type_dropdown_includes_writing_time():

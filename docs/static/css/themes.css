@@ -216,6 +216,21 @@ html[data-theme="dark"] .nav-session-trigger:hover {
   color: #1c1511;
 }
 
+html[data-theme="dark"] .session-back-btn,
+html[data-theme="dark"] .session-type-card {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="dark"] .session-back-btn:hover,
+html[data-theme="dark"] .session-type-card:hover {
+  background: linear-gradient(180deg, #e2a06e, #ca7f51);
+  color: #1c1511;
+}
+
+html[data-theme="dark"] .session-type-card:hover small {
+  color: rgba(28, 21, 17, 0.72);
+}
+
 html[data-theme="dark"] .project-topbar-nav button.active,
 html[data-theme="dark"] .project-topbar-nav button:hover {
   background: rgba(255, 255, 255, 0.05);

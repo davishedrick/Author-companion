@@ -53,6 +53,19 @@ def get_connection() -> sqlite3.Connection:
         )
         """
     )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
     return connection
 
 
@@ -73,7 +86,9 @@ def normalize_state_payload(payload):
         last_workspace_view = DEFAULT_PERSISTED_STATE["lastWorkspaceView"]
 
     return {
-        "projects": payload.get("projects") if isinstance(payload.get("projects"), list) else [],
+        "projects": payload.get("projects")
+        if isinstance(payload.get("projects"), list)
+        else [],
         "activeProjectId": active_project_id,
         "activeView": active_view,
         "lastWorkspaceView": last_workspace_view,

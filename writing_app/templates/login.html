@@ -16,12 +16,15 @@
         {% if setup_mode %}
         Set up the first account for your hosted writing workspace. After this, the same email and password will get you back into your saved projects.
         {% else %}
-        Your writing and editing dashboards are waiting for you. Sign in to load your saved projects and session history.
+        Your writing and editing workspaces are waiting for you. Sign in to load your saved projects and session history.
         {% endif %}
       </p>
 
       {% if error %}
       <p class="auth-error" role="alert">{{ error }}</p>
+      {% endif %}
+      {% if notice %}
+      <p class="auth-success" role="status">{{ notice }}</p>
       {% endif %}
 
       <form method="post" class="auth-form">
@@ -35,6 +38,12 @@
           {{ "Create account" if setup_mode else "Sign in" }}
         </button>
       </form>
+
+      {% if not setup_mode %}
+      <p class="auth-link-row">
+        <a href="{{ url_for('forgot_password') }}">Forgot password?</a>
+      </p>
+      {% endif %}
 
       <p class="auth-supporting-copy">
         {% if setup_mode %}

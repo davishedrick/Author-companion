@@ -431,9 +431,9 @@ function getNavIcon(view) {
 function closeStartSessionMenu() {
   const trigger = document.getElementById("start-session-menu-btn");
   const menu = document.getElementById("start-session-menu");
-  if (!trigger || !menu) return;
+  if (!trigger) return;
   trigger.setAttribute("aria-expanded", "false");
-  menu.classList.add("hidden");
+  menu?.classList.add("hidden");
 }
 
 function openStartSessionMenu() {
@@ -467,6 +467,10 @@ function startSidebarSession(action) {
   clearPendingSessionSnapshotContext();
   closeStartSessionMenu();
 
+  if (!action || action === "start") {
+    openSessionModal();
+    return;
+  }
   if (action === "write") {
     openSessionModal();
     return;
@@ -488,15 +492,19 @@ function bindStartSessionMenu() {
   const shell = document.getElementById("start-session-menu-shell");
   const trigger = document.getElementById("start-session-menu-btn");
   const menu = document.getElementById("start-session-menu");
-  if (!shell || !trigger || !menu || shell.dataset.bound === "true") return;
+  if (!shell || !trigger || shell.dataset.bound === "true") return;
   shell.dataset.bound = "true";
 
   trigger.addEventListener("click", (event) => {
     event.stopPropagation();
-    toggleStartSessionMenu();
+    if (menu) {
+      toggleStartSessionMenu();
+      return;
+    }
+    startSidebarSession("start");
   });
 
-  menu.querySelectorAll("[data-session-action]").forEach((button) => {
+  menu?.querySelectorAll("[data-session-action]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       startSidebarSession(button.dataset.sessionAction);
@@ -539,29 +547,10 @@ function renderNav(bundle) {
   nav.innerHTML = `
     ${bundle && !isPublishedBundle ? `
       <div class="nav-session-shell" id="start-session-menu-shell">
-        <button class="nav-session-trigger" id="start-session-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="start-session-menu" aria-label="Start a session" title="Start a session">
+        <button class="nav-session-trigger" id="start-session-menu-btn" type="button" aria-label="Start a session" title="Start a session">
           <span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>
           <span class="nav-label">Start a session</span>
-          <span class="nav-session-chevron" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="m7 10 5 5 5-5" />
-            </svg>
-          </span>
         </button>
-        <div class="nav-session-menu hidden" id="start-session-menu" role="menu" aria-label="Session type">
-          <button type="button" role="menuitem" data-session-action="write">
-            <span>Write</span>
-          </button>
-          <button type="button" role="menuitem" data-session-action="edit">
-            <span>Edit</span>
-          </button>
-          <button type="button" role="menuitem" data-session-action="log-previous-writing">
-            <span>Log previous writing session</span>
-          </button>
-          <button type="button" role="menuitem" data-session-action="log-previous-editing">
-            <span>Log previous editing session</span>
-          </button>
-        </div>
       </div>
     ` : ""}
     <div class="nav-main">

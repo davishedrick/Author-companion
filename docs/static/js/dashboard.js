@@ -1,4 +1,6 @@
 let loggingPastWritingSession = false;
+let startSessionFlowType = "writing";
+let startSessionFlowDocumentBound = false;
 
 function renderDashboard(bundle) {
   if (!bundle) {
@@ -655,14 +657,7 @@ function bindDashboardEvents(bundle) {
 
   if (startSessionButton) {
     startSessionButton.onclick = () => {
-      const startCountInput = document.getElementById("session-start-word-count");
-      if (!startCountInput) return;
-      const startWordCount = number(startCountInput.value);
-      if (startCountInput.value === "" || startWordCount < 0) {
-        startCountInput.reportValidity();
-        return;
-      }
-      startWritingSession(startWordCount);
+      startSelectedSessionFlow();
     };
   }
 
@@ -1233,20 +1228,66 @@ function bindHeatmapInteractions(bundle) {
 
 function openSessionModal() {
   const modal = document.getElementById("session-modal");
+  startSessionFlowType = "writing";
+  syncStartSessionFlow("choice");
+  modal.classList.remove("hidden");
+}
+
+function syncStartSessionFlow(step = "choice") {
+  const flow = document.getElementById("start-session-flow");
   const title = document.getElementById("session-modal-title");
   const copy = document.getElementById("session-modal-copy");
   const bundle = currentBundle();
   const startCountInput = document.getElementById("session-start-word-count");
+  const startCountField = document.getElementById("session-start-word-count-field");
+  const writingDialWrap = document.getElementById("writing-session-dial-wrap");
+  const editingDialWrap = document.getElementById("editing-session-dial-wrap");
+  const backButton = document.getElementById("session-flow-back-btn");
+  const previousChoices = document.getElementById("previous-session-choices");
+  const choiceStep = document.getElementById("session-choice-step");
+  const configStep = document.getElementById("session-config-step");
+  const dotOne = document.getElementById("session-flow-dot-1");
+  const dotTwo = document.getElementById("session-flow-dot-2");
   const pendingSnapshot = getPendingSessionSnapshotContext();
-  title.textContent = "Start Writing Session";
-  copy.textContent = pendingSnapshot?.structureUnitName
-    ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
-    : "Choose how long you want to write, add your current word count, then begin.";
+  const isConfigStep = step === "config";
+  const isWriting = startSessionFlowType !== "editing";
+
+  if (flow) flow.dataset.step = isConfigStep ? "config" : "choice";
+  if (choiceStep) choiceStep.setAttribute("aria-hidden", String(isConfigStep));
+  if (configStep) configStep.setAttribute("aria-hidden", String(!isConfigStep));
+  if (backButton) backButton.classList.toggle("hidden", !isConfigStep);
+  if (dotOne) dotOne.classList.toggle("active", !isConfigStep);
+  if (dotTwo) dotTwo.classList.toggle("active", isConfigStep);
+
+  if (!isConfigStep && previousChoices) previousChoices.classList.add("hidden");
+
+  if (title) title.textContent = isConfigStep
+    ? `Start ${isWriting ? "Writing" : "Editing"} Session`
+    : "Start Session";
+  if (copy) {
+    copy.textContent = isConfigStep
+      ? pendingSnapshot?.structureUnitName
+        ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
+        : isWriting
+          ? "Choose how long you want to write, add your current word count, then begin."
+          : "Choose how long you want to edit, then begin."
+      : "Choose the kind of focus you need, then set a timer that fits.";
+  }
+
+  if (writingDialWrap) writingDialWrap.classList.toggle("hidden", !isWriting);
+  if (editingDialWrap) editingDialWrap.classList.toggle("hidden", isWriting);
+  if (startCountField) startCountField.classList.toggle("hidden", !isWriting);
   if (startCountInput) {
     startCountInput.value = String(number(bundle?.project?.currentWordCount));
+    startCountInput.required = isWriting;
   }
   syncSessionDial(sessionDraftMinutes);
-  modal.classList.remove("hidden");
+  if (typeof syncEditSessionDial === "function") syncEditSessionDial(editSessionDraftMinutes);
+}
+
+function chooseStartSessionType(sessionType) {
+  startSessionFlowType = sessionType === "editing" ? "editing" : "writing";
+  syncStartSessionFlow("config");
 }
 
 function openPastWritingSessionModal() {
@@ -1892,6 +1933,8 @@ function syncGoalFormState(form) {
 }
 
 function bindSessionActions() {
+  bindStartSessionFlowActions();
+
   document.querySelectorAll("[data-action='edit-session']").forEach((button) => {
     button.addEventListener("click", () => {
       const session = currentBundle()?.sessions.find((item) => item.id === button.dataset.id);
@@ -1928,4 +1971,73 @@ function bindSessionActions() {
     });
   });
 
+}
+
+function bindStartSessionFlowActions() {
+  bindSessionDial();
+  if (typeof bindEditSessionDial === "function") bindEditSessionDial();
+
+  const startButton = document.getElementById("start-session-btn");
+  const closeButton = document.getElementById("close-session-modal-btn");
+  const backButton = document.getElementById("session-flow-back-btn");
+  const writingButton = document.getElementById("choose-writing-session-btn");
+  const editingButton = document.getElementById("choose-editing-session-btn");
+  const previousLink = document.getElementById("log-previous-session-link");
+  const previousChoices = document.getElementById("previous-session-choices");
+  const previousWritingButton = document.getElementById("log-previous-writing-btn");
+  const previousEditingButton = document.getElementById("log-previous-editing-btn");
+  const sessionModal = document.getElementById("session-modal");
+
+  if (startButton) startButton.onclick = startSelectedSessionFlow;
+  if (closeButton) closeButton.onclick = closeSessionModal;
+  if (backButton) backButton.onclick = () => syncStartSessionFlow("choice");
+  if (writingButton) writingButton.onclick = () => chooseStartSessionType("writing");
+  if (editingButton) editingButton.onclick = () => chooseStartSessionType("editing");
+  if (previousLink) {
+    previousLink.onclick = () => {
+      previousChoices?.classList.toggle("hidden");
+    };
+  }
+  if (previousWritingButton) {
+    previousWritingButton.onclick = () => {
+      closeSessionModal();
+      openPastWritingSessionModal();
+    };
+  }
+  if (previousEditingButton) {
+    previousEditingButton.onclick = () => {
+      closeSessionModal();
+      openPastEditingSessionModal();
+    };
+  }
+  if (sessionModal) {
+    sessionModal.onclick = (event) => {
+      if (event.target === sessionModal) closeSessionModal();
+    };
+  }
+  if (!startSessionFlowDocumentBound) {
+    document.addEventListener("keydown", (event) => {
+      const modal = document.getElementById("session-modal");
+      if (event.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+        closeSessionModal();
+      }
+    });
+    startSessionFlowDocumentBound = true;
+  }
+}
+
+function startSelectedSessionFlow() {
+  if (startSessionFlowType === "editing") {
+    startEditingSession();
+    return;
+  }
+
+  const startCountInput = document.getElementById("session-start-word-count");
+  if (!startCountInput) return;
+  const startWordCount = number(startCountInput.value);
+  if (startCountInput.value === "" || startWordCount < 0) {
+    startCountInput.reportValidity();
+    return;
+  }
+  startWritingSession(startWordCount);
 }
