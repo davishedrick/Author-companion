@@ -29,6 +29,7 @@ from extension_bridge import (
     append_extension_session,
     get_active_projects,
     get_document_binding,
+    preserve_extension_sessions,
     save_document_binding,
 )
 from state_store import load_state, save_state
@@ -324,11 +325,13 @@ def get_state():
 @login_required
 def put_state():
     payload = request.get_json(silent=True)
+    existing_state = load_state(session.get("user_id"))
     if isinstance(payload, dict) and "extensionDocumentBindings" not in payload:
-        existing_state = load_state(session.get("user_id"))
         payload["extensionDocumentBindings"] = existing_state.get(
             "extensionDocumentBindings", {}
         )
+    if isinstance(payload, dict):
+        payload = preserve_extension_sessions(payload, existing_state)
     return jsonify(save_state(payload, session.get("user_id")))
 
 
@@ -380,8 +383,7 @@ def post_extension_session():
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
-    if not duplicate:
-        save_state(state, session.get("user_id"))
+    save_state(state, session.get("user_id"))
     return jsonify(
         {
             "session": created_session,

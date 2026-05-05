@@ -1409,6 +1409,33 @@ def test_extension_duplicate_session_id_does_not_create_duplicate(tmp_path):
     assert project_a["project"]["currentWordCount"] == 148
 
 
+def test_extension_duplicate_session_id_can_repair_empty_word_count(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    first_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=0),
+    )
+    repair_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=148),
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert first_response.status_code == 201
+    assert repair_response.status_code == 200
+    assert repair_response.get_json()["duplicate"] is True
+    assert len(project_a["sessions"]) == 1
+    assert project_a["sessions"][0]["wordsWritten"] == 148
+    assert project_a["project"]["currentWordCount"] == 148
+
+
 def test_extension_writing_session_normalizes_to_write_with_words_written(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
