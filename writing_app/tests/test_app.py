@@ -1315,6 +1315,7 @@ def extension_session_payload(**overrides):
         "startedAt": "2026-05-04T12:00:00.000Z",
         "endedAt": "2026-05-04T12:42:00.000Z",
         "durationMinutes": 42,
+        "wordsWritten": 0,
         "source": "chrome-extension",
         "documentUrl": "https://docs.google.com/document/d/google-doc-a/edit",
         "notes": "",
@@ -1390,7 +1391,7 @@ def test_extension_duplicate_session_id_does_not_create_duplicate(tmp_path):
     client = app.test_client()
     register_and_login(client)
     save_extension_test_state(client)
-    payload = extension_session_payload()
+    payload = extension_session_payload(wordsWritten=148)
 
     first_response = client.post("/api/extension/sessions", json=payload)
     duplicate_response = client.post("/api/extension/sessions", json=payload)
@@ -1403,9 +1404,11 @@ def test_extension_duplicate_session_id_does_not_create_duplicate(tmp_path):
     assert duplicate_response.status_code == 200
     assert duplicate_response.get_json()["duplicate"] is True
     assert len(project_a["sessions"]) == 1
+    assert project_a["sessions"][0]["wordsWritten"] == 148
+    assert project_a["project"]["currentWordCount"] == 148
 
 
-def test_extension_writing_session_normalizes_to_write(tmp_path):
+def test_extension_writing_session_normalizes_to_write_with_words_written(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
     register_and_login(client)
@@ -1413,14 +1416,61 @@ def test_extension_writing_session_normalizes_to_write(tmp_path):
 
     response = client.post(
         "/api/extension/sessions",
-        json=extension_session_payload(sessionType="writing"),
+        json=extension_session_payload(sessionType="writing", wordsWritten=148),
+    )
+    session = response.get_json()["session"]
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert response.status_code == 201
+    assert session["type"] == "write"
+    assert session["wordsWritten"] == 148
+    assert session["wordsEdited"] == 0
+    assert project_a["project"]["currentWordCount"] == 148
+
+
+def test_extension_writing_session_invalid_words_written_normalizes_to_zero(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=-12),
+    )
+    session = response.get_json()["session"]
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert response.status_code == 201
+    assert session["wordsWritten"] == 0
+    assert project_a["project"]["currentWordCount"] == 0
+
+
+def test_extension_writing_session_non_numeric_words_written_normalizes_to_zero(
+    tmp_path,
+):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            extensionSessionId="extension-session-invalid-words",
+            wordsWritten="not-a-number",
+        ),
     )
     session = response.get_json()["session"]
 
     assert response.status_code == 201
-    assert session["type"] == "write"
     assert session["wordsWritten"] == 0
-    assert session["wordsEdited"] == 0
 
 
 def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path):
@@ -1434,12 +1484,14 @@ def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path
         json=extension_session_payload(
             sessionType="editing",
             extensionSessionId="extension-session-edit",
+            wordsWritten=148,
         ),
     )
     session = response.get_json()["session"]
 
     assert response.status_code == 201
     assert session["type"] == "edit"
+    assert session["wordsWritten"] == 0
     assert session["passName"] == "Line edit"
     assert session["sectionLabel"] == ""
 
@@ -1499,7 +1551,7 @@ def test_state_api_preserves_extension_sessions_from_stale_app_save(tmp_path):
     save_extension_test_state(client)
     sync_response = client.post(
         "/api/extension/sessions",
-        json=extension_session_payload(),
+        json=extension_session_payload(wordsWritten=148),
     )
     assert sync_response.status_code == 201
 
@@ -1521,6 +1573,8 @@ def test_state_api_preserves_extension_sessions_from_stale_app_save(tmp_path):
     assert save_response.status_code == 200
     assert len(project_a["sessions"]) == 1
     assert project_a["sessions"][0]["extensionSessionId"] == "extension-session-1"
+    assert project_a["sessions"][0]["wordsWritten"] == 148
+    assert project_a["project"]["currentWordCount"] == 148
 
 
 def test_state_is_isolated_per_signed_in_user(tmp_path):
