@@ -1316,6 +1316,7 @@ def extension_session_payload(**overrides):
         "endedAt": "2026-05-04T12:42:00.000Z",
         "durationMinutes": 42,
         "wordsWritten": 0,
+        "wordsEdited": 0,
         "source": "chrome-extension",
         "documentUrl": "https://docs.google.com/document/d/google-doc-a/edit",
         "notes": "",
@@ -1485,6 +1486,7 @@ def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path
             sessionType="editing",
             extensionSessionId="extension-session-edit",
             wordsWritten=148,
+            wordsEdited=312,
         ),
     )
     session = response.get_json()["session"]
@@ -1492,6 +1494,7 @@ def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path
     assert response.status_code == 201
     assert session["type"] == "edit"
     assert session["wordsWritten"] == 0
+    assert session["wordsEdited"] == 312
     assert session["passName"] == "Line edit"
     assert session["sectionLabel"] == ""
 
