@@ -1455,6 +1455,7 @@ function finishActiveEditingSession(autoCompleted = false) {
   stopEditingSessionTimer();
   document.getElementById("editing-session-screen").classList.add("hidden");
   syncFloatingFocusTimer?.();
+  if (autoCompleted) playSessionCompleteSound?.();
   openEditSessionModal();
 }
 

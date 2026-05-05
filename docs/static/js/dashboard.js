@@ -1863,6 +1863,7 @@ function finishActiveWritingSession(autoCompleted = false) {
   isWritingSessionMinimized = false;
   document.getElementById("writing-session-screen").classList.add("hidden");
   syncFloatingFocusTimer?.();
+  if (autoCompleted) playSessionCompleteSound?.();
   openSessionCompleteModal();
 }
 

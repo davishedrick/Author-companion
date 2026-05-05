@@ -3,7 +3,16 @@ import smtplib
 from email.message import EmailMessage
 from functools import wraps
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from auth_store import (
     PASSWORD_RESET_TOKEN_TTL_SECONDS,
@@ -14,6 +23,13 @@ from auth_store import (
     get_user_by_id,
     has_users,
     reset_password_with_token,
+)
+from extension_bridge import (
+    ExtensionBridgeError,
+    append_extension_session,
+    get_active_projects,
+    get_document_binding,
+    save_document_binding,
 )
 from state_store import load_state, save_state
 
@@ -56,6 +72,47 @@ def login_required(view):
         return view(*args, **kwargs)
 
     return wrapped_view
+
+
+def extension_api_response(payload=None, status=200):
+    response = make_response(jsonify(payload or {}), status)
+    origin = request.headers.get("Origin", "")
+    if origin.startswith("chrome-extension://") or origin.startswith(
+        "http://localhost"
+    ):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, OPTIONS"
+    return response
+
+
+@app.before_request
+def handle_extension_preflight():
+    if request.method == "OPTIONS" and (
+        request.path.startswith("/api/extension/") or request.path == "/api/projects"
+    ):
+        return extension_api_response()
+
+
+@app.after_request
+def add_extension_cors_headers(response):
+    if not (
+        request.path.startswith("/api/extension/") or request.path == "/api/projects"
+    ):
+        return response
+
+    origin = request.headers.get("Origin", "")
+    if origin.startswith("chrome-extension://") or origin.startswith(
+        "http://localhost"
+    ):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, OPTIONS"
+    return response
 
 
 @app.route("/")
@@ -269,7 +326,71 @@ def get_state():
 @login_required
 def put_state():
     payload = request.get_json(silent=True)
+    if isinstance(payload, dict) and "extensionDocumentBindings" not in payload:
+        existing_state = load_state(session.get("user_id"))
+        payload["extensionDocumentBindings"] = existing_state.get(
+            "extensionDocumentBindings", {}
+        )
     return jsonify(save_state(payload, session.get("user_id")))
+
+
+@app.get("/api/projects")
+@login_required
+def get_projects():
+    state = load_state(session.get("user_id"))
+    return jsonify({"projects": get_active_projects(state)})
+
+
+@app.get("/api/extension/document-binding")
+@login_required
+def get_extension_document_binding():
+    state = load_state(session.get("user_id"))
+    document_id = request.args.get("documentId", "")
+    try:
+        project, changed = get_document_binding(state, document_id)
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    if changed:
+        save_state(state, session.get("user_id"))
+    return jsonify({"documentId": document_id, "project": project})
+
+
+@app.put("/api/extension/document-binding")
+@login_required
+def put_extension_document_binding():
+    state = load_state(session.get("user_id"))
+    payload = request.get_json(silent=True) or {}
+    try:
+        project = save_document_binding(
+            state,
+            payload.get("documentId", ""),
+            payload.get("projectId", ""),
+        )
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    save_state(state, session.get("user_id"))
+    return jsonify({"documentId": payload.get("documentId", ""), "project": project})
+
+
+@app.post("/api/extension/sessions")
+@login_required
+def post_extension_session():
+    state = load_state(session.get("user_id"))
+    try:
+        created_session, project, duplicate = append_extension_session(
+            state, request.get_json(silent=True) or {}
+        )
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    if not duplicate:
+        save_state(state, session.get("user_id"))
+    return jsonify(
+        {
+            "session": created_session,
+            "project": project,
+            "duplicate": duplicate,
+        }
+    ), 200 if duplicate else 201
 
 
 if __name__ == "__main__":

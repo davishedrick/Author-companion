@@ -10,6 +10,7 @@ DEFAULT_PERSISTED_STATE = {
     "activeProjectId": None,
     "activeView": "dashboard",
     "lastWorkspaceView": "dashboard",
+    "extensionDocumentBindings": {},
 }
 
 
@@ -85,6 +86,16 @@ def normalize_state_payload(payload):
     if not isinstance(last_workspace_view, str):
         last_workspace_view = DEFAULT_PERSISTED_STATE["lastWorkspaceView"]
 
+    extension_document_bindings = payload.get("extensionDocumentBindings")
+    if not isinstance(extension_document_bindings, dict):
+        extension_document_bindings = {}
+    else:
+        extension_document_bindings = {
+            str(document_id): str(project_id)
+            for document_id, project_id in extension_document_bindings.items()
+            if document_id and project_id
+        }
+
     return {
         "projects": payload.get("projects")
         if isinstance(payload.get("projects"), list)
@@ -92,6 +103,7 @@ def normalize_state_payload(payload):
         "activeProjectId": active_project_id,
         "activeView": active_view,
         "lastWorkspaceView": last_workspace_view,
+        "extensionDocumentBindings": extension_document_bindings,
     }
 
 

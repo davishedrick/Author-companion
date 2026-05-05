@@ -787,7 +787,10 @@ def test_edit2_dashboard_view_and_navigation_are_present():
         in edit2_js
     )
     assert "Next step:" in edit2_js
-    assert "Other options (" in edit2_js
+    assert "Other options (" not in edit2_js
+    assert 'data-edit2-carousel data-active-index="0"' in edit2_js
+    assert 'data-edit2-carousel-shift="1"' in edit2_js
+    assert "function updateEdit2Carousel(carousel, requestedIndex = 0)" in edit2_js
     assert "function getEdit2MomentumBoost(signals)" in edit2_js
     assert "function noteEdit2PrimaryRecommendation(recommendation = null)" in edit2_js
     assert "function clearEdit2NextFocusDisplayState()" in edit2_js
@@ -1043,15 +1046,15 @@ def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
     )
     assert "Why this surfaced:" not in js
     assert "One clear next move now, with backup options only if you need them." in js
-    assert "Other options (" in js
+    assert "Other options (" not in js
+    assert "data-edit2-carousel-track" in js
     assert "function buildEditSectionHotspots(bundle)" in js
     assert ".next-focus-card {" in css
-    assert ".next-focus-list {" in css
+    assert ".next-focus-carousel {" in css
+    assert ".next-focus-track {" in css
     assert ".next-focus-option {" in css
     assert ".next-focus-justification {" in css
     assert ".next-focus-support {" in css
-    assert ".next-focus-secondary {" in css
-    assert ".next-focus-secondary-item {" in css
     assert ".issue-filter-form {" in css
     assert ".issue-board-state-toggle {" in css
     assert ".issue-board-state-btn.active {" in css
@@ -1162,6 +1165,7 @@ def test_state_api_returns_default_state_when_empty(tmp_path):
         "activeProjectId": None,
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
+        "extensionDocumentBindings": {},
     }
 
 
@@ -1211,6 +1215,7 @@ def test_state_api_persists_snapshot_to_sqlite(tmp_path):
         "activeProjectId": "project-1",
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
+        "extensionDocumentBindings": {},
     }
 
     put_response = client.put("/api/state", json=payload)
@@ -1230,6 +1235,237 @@ def test_state_api_requires_login(tmp_path):
 
     assert response.status_code == 401
     assert response.get_json() == {"error": "Authentication required"}
+
+
+def extension_project(project_id, title, pass_name="Revision"):
+    return {
+        "id": project_id,
+        "status": "active",
+        "project": {
+            "bookTitle": title,
+            "manuscriptType": "Novel",
+            "targetWordCount": 80000,
+            "currentWordCount": 0,
+            "deadline": "",
+            "dailyTarget": 1000,
+            "projectStartDate": "2026-04-01",
+        },
+        "editing": {
+            "focusKey": "revision",
+            "passName": pass_name,
+            "passStage": "",
+            "passStatus": "",
+            "passObjective": "",
+            "progressCurrent": 0,
+            "progressTotal": 0,
+        },
+        "goals": [],
+        "sessions": [],
+        "issues": [],
+        "milestones": [],
+    }
+
+
+def save_extension_test_state(client):
+    payload = {
+        "projects": [
+            extension_project("project-a", "Project A", pass_name="Line edit"),
+            extension_project("project-b", "Project B", pass_name="Proofread"),
+        ],
+        "activeProjectId": "project-b",
+        "activeView": "dashboard",
+        "lastWorkspaceView": "dashboard",
+        "extensionDocumentBindings": {},
+    }
+    response = client.put("/api/state", json=payload)
+    assert response.status_code == 200
+    return payload
+
+
+def extension_session_payload(**overrides):
+    payload = {
+        "documentId": "google-doc-a",
+        "projectId": "project-a",
+        "extensionSessionId": "extension-session-1",
+        "sessionType": "writing",
+        "startedAt": "2026-05-04T12:00:00.000Z",
+        "endedAt": "2026-05-04T12:42:00.000Z",
+        "durationMinutes": 42,
+        "source": "chrome-extension",
+        "documentUrl": "https://docs.google.com/document/d/google-doc-a/edit",
+        "notes": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_extension_session_for_project_a_does_not_affect_project_b(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(),
+    )
+    state_response = client.get("/api/state")
+    projects = {
+        project["id"]: project for project in state_response.get_json()["projects"]
+    }
+
+    assert response.status_code == 201
+    assert len(projects["project-a"]["sessions"]) == 1
+    assert projects["project-a"]["sessions"][0]["id"] == "extension-session-1"
+    assert projects["project-b"]["sessions"] == []
+
+
+def test_extension_session_does_not_use_active_project_id(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(projectId="project-a"),
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+    project_b = next(
+        project
+        for project in state["projects"]
+        if project["id"] == state["activeProjectId"]
+    )
+
+    assert response.status_code == 201
+    assert state["activeProjectId"] == "project-b"
+    assert len(project_a["sessions"]) == 1
+    assert project_b["sessions"] == []
+
+
+def test_extension_session_invalid_project_id_returns_404(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(projectId="missing-project"),
+    )
+
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "Project not found."}
+
+
+def test_extension_duplicate_session_id_does_not_create_duplicate(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    payload = extension_session_payload()
+
+    first_response = client.post("/api/extension/sessions", json=payload)
+    duplicate_response = client.post("/api/extension/sessions", json=payload)
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert first_response.status_code == 201
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.get_json()["duplicate"] is True
+    assert len(project_a["sessions"]) == 1
+
+
+def test_extension_writing_session_normalizes_to_write(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(sessionType="writing"),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["type"] == "write"
+    assert session["wordsWritten"] == 0
+    assert session["wordsEdited"] == 0
+
+
+def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit",
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["type"] == "edit"
+    assert session["passName"] == "Line edit"
+    assert session["sectionLabel"] == ""
+
+
+def test_extension_document_binding_returns_same_project_after_save(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    put_response = client.put(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "projectId": "project-a"},
+    )
+    get_response = client.get("/api/extension/document-binding?documentId=google-doc-a")
+
+    assert put_response.status_code == 200
+    assert get_response.status_code == 200
+    assert get_response.get_json()["project"] == {
+        "id": "project-a",
+        "bookTitle": "Project A",
+        "manuscriptType": "Novel",
+        "status": "active",
+    }
+
+
+def test_state_api_preserves_extension_bindings_when_payload_omits_them(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    binding_response = client.put(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "projectId": "project-a"},
+    )
+    assert binding_response.status_code == 200
+
+    response = client.put(
+        "/api/state",
+        json={
+            "projects": [extension_project("project-a", "Project A")],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    assert response.status_code == 200
+    assert state["extensionDocumentBindings"] == {"google-doc-a": "project-a"}
 
 
 def test_state_is_isolated_per_signed_in_user(tmp_path):
@@ -1266,6 +1502,7 @@ def test_state_is_isolated_per_signed_in_user(tmp_path):
         "activeProjectId": None,
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
+        "extensionDocumentBindings": {},
     }
 
 

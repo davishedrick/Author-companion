@@ -561,6 +561,8 @@ function renderEdit2NextFocusCards(recommendations) {
     ? recommendations.secondary.filter(Boolean).slice(0, 2)
     : [];
   if (!primaryRecommendation) return "";
+  const carouselRecommendations = [primaryRecommendation, ...secondaryRecommendations].filter(Boolean);
+  const carouselCount = carouselRecommendations.length;
   return `
     <section class="card next-focus-card">
       <div class="section-head">
@@ -569,55 +571,65 @@ function renderEdit2NextFocusCards(recommendations) {
           <p>One clear next move now, with backup options only if you need them.</p>
         </div>
       </div>
-      <div class="next-focus-list next-focus-list-1">
-        <article class="next-focus-option next-focus-primary">
-          <div class="next-focus-copy">
-            <p class="next-focus-kicker">Recommended</p>
-            <h4>${escapeHtml(`Next step: ${primaryRecommendation.title}`)}</h4>
-          </div>
-          ${primaryRecommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(primaryRecommendation.meta)}</p>` : ""}
-          ${primaryRecommendation.reason ? `<p class="next-focus-justification">${escapeHtml(primaryRecommendation.reason)}</p>` : ""}
-          ${primaryRecommendation.progressContext ? `<p class="next-focus-support">${escapeHtml(primaryRecommendation.progressContext)}</p>` : ""}
-          <div class="next-focus-actions">
-            ${primaryRecommendation.primaryAction ? `
-              <button
-                class="primary-btn"
-                type="button"
-                data-edit2-next-focus-action="${escapeAttr(primaryRecommendation.primaryAction)}"
-                ${primaryRecommendation.issueId ? `data-issue-id="${escapeAttr(primaryRecommendation.issueId)}"` : ""}
-                ${primaryRecommendation.chapterKey ? `data-chapter-key="${escapeAttr(primaryRecommendation.chapterKey)}"` : ""}
-              >${escapeHtml(primaryRecommendation.primaryLabel)}</button>
-            ` : ""}
-          </div>
-        </article>
-      </div>
-      ${secondaryRecommendations.length ? `
-        <details class="next-focus-secondary">
-          <summary>Other options (${formatNumber(secondaryRecommendations.length)})</summary>
-          <div class="next-focus-secondary-list">
-            ${secondaryRecommendations.map((recommendation) => `
-              <article class="next-focus-secondary-item">
-                <div class="next-focus-secondary-copy">
-                  <h4>${escapeHtml(recommendation.title)}</h4>
-                  ${recommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(recommendation.meta)}</p>` : ""}
-                  ${recommendation.reason ? `<p>${escapeHtml(recommendation.reason)}</p>` : ""}
-                </div>
+      <div class="next-focus-carousel ${carouselCount <= 1 ? "is-single" : ""}" data-edit2-carousel data-active-index="0">
+        <button class="icon-btn next-focus-carousel-btn" type="button" data-edit2-carousel-shift="-1" aria-label="Show previous recommendation">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m15 18-6-6 6-6"></path>
+          </svg>
+        </button>
+        <div class="next-focus-track" data-edit2-carousel-track>
+          ${carouselRecommendations.map((recommendation, index) => `
+            <article class="next-focus-option ${getEdit2CarouselItemClass(index, carouselCount)} ${index === 0 ? "next-focus-primary" : ""}" data-edit2-carousel-item>
+              <div class="next-focus-copy">
+                <p class="next-focus-kicker">${index === 0 ? "Recommended" : `Option ${formatNumber(index + 1)}`}</p>
+                <h4>${escapeHtml(index === 0 ? `Next step: ${recommendation.title}` : recommendation.title)}</h4>
+              </div>
+              ${recommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(recommendation.meta)}</p>` : ""}
+              ${recommendation.reason ? `<p class="next-focus-justification">${escapeHtml(recommendation.reason)}</p>` : ""}
+              ${recommendation.progressContext ? `<p class="next-focus-support">${escapeHtml(recommendation.progressContext)}</p>` : ""}
+              <div class="next-focus-actions">
                 ${recommendation.primaryAction ? `
                   <button
-                    class="ghost-btn"
+                    class="${index === 0 ? "primary-btn" : "ghost-btn"}"
                     type="button"
                     data-edit2-next-focus-action="${escapeAttr(recommendation.primaryAction)}"
                     ${recommendation.issueId ? `data-issue-id="${escapeAttr(recommendation.issueId)}"` : ""}
                     ${recommendation.chapterKey ? `data-chapter-key="${escapeAttr(recommendation.chapterKey)}"` : ""}
                   >${escapeHtml(recommendation.primaryLabel)}</button>
                 ` : ""}
-              </article>
-            `).join("")}
-          </div>
-        </details>
-      ` : ""}
+              </div>
+            </article>
+          `).join("")}
+        </div>
+        <button class="icon-btn next-focus-carousel-btn" type="button" data-edit2-carousel-shift="1" aria-label="Show next recommendation">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m9 18 6-6-6-6"></path>
+          </svg>
+        </button>
+      </div>
     </section>
   `;
+}
+
+function getEdit2CarouselItemClass(index, count, activeIndex = 0) {
+  if (count <= 1) return "is-active";
+  const relativeIndex = (index - activeIndex + count) % count;
+  if (relativeIndex === 0) return "is-active";
+  if (relativeIndex === 1) return "is-next";
+  if (relativeIndex === count - 1) return "is-prev";
+  return "is-hidden";
+}
+
+function updateEdit2Carousel(carousel, requestedIndex = 0) {
+  if (!carousel) return;
+  const items = [...carousel.querySelectorAll("[data-edit2-carousel-item]")];
+  if (!items.length) return;
+  const activeIndex = ((requestedIndex % items.length) + items.length) % items.length;
+  carousel.dataset.activeIndex = String(activeIndex);
+  items.forEach((item, index) => {
+    item.classList.remove("is-active", "is-prev", "is-next", "is-hidden");
+    item.classList.add(getEdit2CarouselItemClass(index, items.length, activeIndex));
+  });
 }
 
 function getEdit2SelectedChapter(chapters) {
@@ -635,11 +647,9 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, u
   const heatLevel = getEdit2HeatLevel(chapter, chapters);
   const hasUnassignedContents = chapter.label === "Unassigned" && (chapter.issues.length > 0 || chapter.sessions.length > 0);
   const unitLower = unitLabel.toLowerCase();
-  const completionLabel = chapter.completedAt ? `Completed ${formatDate(chapter.completedAt)}` : `Mark ${unitLower} complete`;
   const inProgressCount = chapter.issues.filter((issue) => issue.workflowStatus === "in_progress").length;
   const priorityTotal = number(chapter.priorityCounts.high) + number(chapter.priorityCounts.medium) + number(chapter.priorityCounts.low);
   const priorityEvaluation = getEdit2PriorityEvaluation(chapter, chapters);
-  const activityLabel = chapter.lastTouchedAt ? `Last touched ${formatDate(chapter.lastTouchedAt)}` : "No edit activity yet";
   return `
     <div class="edit2-chapter-row-shell ${chapterIndex === 0 ? "is-first" : ""} ${chapterIndex === chapterCount - 1 ? "is-last" : ""}">
       <div class="edit2-chapter-rail" aria-hidden="true">
@@ -657,10 +667,6 @@ function renderEdit2ChapterCard(chapter, chapters, chapterIndex, chapterCount, u
           <div class="edit2-chapter-identity">
             <h4>${escapeHtml(chapter.label)}</h4>
             <p class="edit2-chapter-summary">${escapeHtml(truncateEdit2Summary(getEdit2OverviewSummary(chapter), 12))}</p>
-            <span class="edit2-pass-pill">${formatNumber(chapter.openIssueCount)} open issue${chapter.openIssueCount === 1 ? "" : "s"}</span>
-            <span class="edit2-pass-pill">${formatNumber(chapter.sessions.length)} session${chapter.sessions.length === 1 ? "" : "s"} logged</span>
-            <span class="edit2-pass-pill">${escapeHtml(activityLabel)}</span>
-            ${chapter.completedAt ? `<span class="edit2-pass-pill">${escapeHtml(completionLabel)}</span>` : ""}
           </div>
           <div class="edit2-chapter-issue-box">
             <p class="edit2-mini-label">Issues</p>
@@ -1446,6 +1452,16 @@ function bindEdit2DashboardEvents(bundle) {
       if (action === "add-chapter") {
         openEdit2ChapterModal();
       }
+    };
+  });
+
+  view?.querySelectorAll("[data-edit2-carousel-shift]").forEach((button) => {
+    button.onclick = () => {
+      const carousel = button.closest("[data-edit2-carousel]");
+      if (!carousel) return;
+      const direction = number(button.dataset.edit2CarouselShift) || 1;
+      const currentIndex = number(carousel.dataset.activeIndex);
+      updateEdit2Carousel(carousel, currentIndex + direction);
     };
   });
 

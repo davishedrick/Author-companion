@@ -460,6 +460,54 @@ let pendingCompletedSession = null;
 let sessionTimerHandle = null;
 let sessionsReturnView = "dashboard";
 let pendingSessionSnapshotContext = null;
+let sessionCompletionAudioContext = null;
+let lastSessionCompletionSoundAt = 0;
+
+function playSessionCompleteSound() {
+  const now = Date.now();
+  if (now - lastSessionCompletionSoundAt < 1200) return;
+  lastSessionCompletionSoundAt = now;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    sessionCompletionAudioContext = sessionCompletionAudioContext || new AudioContextClass();
+    const context = sessionCompletionAudioContext;
+    const startAt = context.currentTime + 0.01;
+    const masterGain = context.createGain();
+    masterGain.gain.setValueAtTime(0.0001, startAt);
+    masterGain.gain.exponentialRampToValueAtTime(0.08, startAt + 0.03);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, startAt + 1.05);
+    masterGain.connect(context.destination);
+
+    const notes = [
+      { frequency: 523.25, duration: 0.22, offset: 0 },
+      { frequency: 659.25, duration: 0.24, offset: 0.16 },
+      { frequency: 783.99, duration: 0.34, offset: 0.34 }
+    ];
+
+    notes.forEach((note) => {
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+      const noteStart = startAt + note.offset;
+      const noteEnd = noteStart + note.duration;
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(note.frequency, noteStart);
+      gainNode.gain.setValueAtTime(0.0001, noteStart);
+      gainNode.gain.exponentialRampToValueAtTime(0.18, noteStart + 0.04);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(masterGain);
+      oscillator.start(noteStart);
+      oscillator.stop(noteEnd + 0.02);
+    });
+  } catch (error) {
+    console.warn("Unable to play the session completion sound.", error);
+  }
+}
 
 function isProjectWorkspaceView(view) {
   return WORKSPACE_VIEWS.includes(view);
