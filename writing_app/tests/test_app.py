@@ -1237,6 +1237,30 @@ def test_state_api_requires_login(tmp_path):
     assert response.get_json() == {"error": "Authentication required"}
 
 
+def test_extension_api_allows_google_docs_origin(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+
+    response = client.get(
+        "/api/projects",
+        headers={"Origin": "https://docs.google.com"},
+    )
+    preflight = client.options(
+        "/api/extension/sessions",
+        headers={
+            "Origin": "https://docs.google.com",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.headers["Access-Control-Allow-Origin"] == "https://docs.google.com"
+    assert response.headers["Access-Control-Allow-Credentials"] == "true"
+    assert preflight.status_code == 200
+    assert preflight.headers["Access-Control-Allow-Origin"] == "https://docs.google.com"
+
+
 def extension_project(project_id, title, pass_name="Revision"):
     return {
         "id": project_id,

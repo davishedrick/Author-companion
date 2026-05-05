@@ -76,16 +76,16 @@ def login_required(view):
 
 def extension_api_response(payload=None, status=200):
     response = make_response(jsonify(payload or {}), status)
-    origin = request.headers.get("Origin", "")
-    if origin.startswith("chrome-extension://") or origin.startswith(
-        "http://localhost"
-    ):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, OPTIONS"
+    add_extension_cors_headers(response)
     return response
+
+
+def is_allowed_extension_origin(origin):
+    return (
+        origin == "https://docs.google.com"
+        or origin.startswith("chrome-extension://")
+        or origin.startswith("http://localhost")
+    )
 
 
 @app.before_request
@@ -104,9 +104,7 @@ def add_extension_cors_headers(response):
         return response
 
     origin = request.headers.get("Origin", "")
-    if origin.startswith("chrome-extension://") or origin.startswith(
-        "http://localhost"
-    ):
+    if is_allowed_extension_origin(origin):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
