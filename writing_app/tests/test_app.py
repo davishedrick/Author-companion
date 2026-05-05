@@ -1492,6 +1492,37 @@ def test_state_api_preserves_extension_bindings_when_payload_omits_them(tmp_path
     assert state["extensionDocumentBindings"] == {"google-doc-a": "project-a"}
 
 
+def test_state_api_preserves_extension_sessions_from_stale_app_save(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(),
+    )
+    assert sync_response.status_code == 201
+
+    stale_payload = {
+        "projects": [
+            extension_project("project-a", "Project A"),
+            extension_project("project-b", "Project B"),
+        ],
+        "activeProjectId": "project-a",
+        "activeView": "dashboard",
+        "lastWorkspaceView": "dashboard",
+    }
+    save_response = client.put("/api/state", json=stale_payload)
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert save_response.status_code == 200
+    assert len(project_a["sessions"]) == 1
+    assert project_a["sessions"][0]["extensionSessionId"] == "extension-session-1"
+
+
 def test_state_is_isolated_per_signed_in_user(tmp_path):
     use_temp_state_db(tmp_path)
 
