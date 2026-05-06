@@ -1018,6 +1018,9 @@ def test_session_history_cards_surface_handoff_summary():
     js = get_app_js()
 
     assert "function renderSessionCard(bundle, session)" in js
+    assert "function formatEditingSessionWordTitle(session)" in js
+    assert "return `(+${formatNumber(wordsAdded)} words - ${formatNumber(wordsRemoved)})`;" in js
+    assert 'return `${formatNumber(session.wordsEdited)} words edited`;' in js
     assert "getSnapshotForSession(bundle, session.id)" in js
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
     assert "<strong>You:</strong>" in js
@@ -1317,6 +1320,8 @@ def extension_session_payload(**overrides):
         "durationMinutes": 42,
         "wordsWritten": 0,
         "wordsEdited": 0,
+        "wordCountMethod": "event-estimate",
+        "measurementPending": False,
         "source": "chrome-extension",
         "documentUrl": "https://docs.google.com/document/d/google-doc-a/edit",
         "notes": "",
@@ -1436,6 +1441,45 @@ def test_extension_duplicate_session_id_can_repair_empty_word_count(tmp_path):
     assert project_a["project"]["currentWordCount"] == 148
 
 
+def test_extension_duplicate_editing_session_keeps_google_docs_breakdown(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    payload = extension_session_payload(
+        sessionType="editing",
+        extensionSessionId="extension-session-edit-breakdown",
+        wordsAdded=157,
+        wordsRemoved=244,
+        wordsEdited=401,
+        netWordsChanged=-87,
+        wordCountMethod="google-docs-api",
+        startDocumentWordCount=1200,
+        endDocumentWordCount=1113,
+    )
+
+    first_response = client.post("/api/extension/sessions", json=payload)
+    duplicate_response = client.post("/api/extension/sessions", json=payload)
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+    session = project_a["sessions"][0]
+
+    assert first_response.status_code == 201
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.get_json()["duplicate"] is True
+    assert len(project_a["sessions"]) == 1
+    assert session["wordsAdded"] == 157
+    assert session["wordsRemoved"] == 244
+    assert session["wordsEdited"] == 401
+    assert session["netWordsChanged"] == -87
+    assert session["wordCountMethod"] == "google-docs-api"
+    assert session["measurementPending"] is False
+    assert session["startDocumentWordCount"] == 1200
+    assert session["endDocumentWordCount"] == 1113
+
+
 def test_extension_writing_session_normalizes_to_write_with_words_written(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
@@ -1456,7 +1500,33 @@ def test_extension_writing_session_normalizes_to_write_with_words_written(tmp_pa
     assert session["type"] == "write"
     assert session["wordsWritten"] == 148
     assert session["wordsEdited"] == 0
+    assert session["wordCountMethod"] == "event-estimate"
     assert project_a["project"]["currentWordCount"] == 148
+
+
+def test_extension_writing_session_preserves_google_docs_word_count_metadata(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            extensionSessionId="extension-session-google-docs-api",
+            wordsWritten=250,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=1000,
+            endDocumentWordCount=1250,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["wordsWritten"] == 250
+    assert session["wordCountMethod"] == "google-docs-api"
+    assert session["startDocumentWordCount"] == 1000
+    assert session["endDocumentWordCount"] == 1250
 
 
 def test_extension_writing_session_invalid_words_written_normalizes_to_zero(tmp_path):
@@ -1524,6 +1594,64 @@ def test_extension_editing_session_normalizes_to_edit_with_current_pass(tmp_path
     assert session["wordsEdited"] == 312
     assert session["passName"] == "Line edit"
     assert session["sectionLabel"] == ""
+
+
+def test_extension_editing_session_persists_google_docs_word_breakdown(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-google-docs-api",
+            wordsAdded=157,
+            wordsRemoved=244,
+            wordsEdited=999,
+            netWordsChanged=-87,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=1200,
+            endDocumentWordCount=1113,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["type"] == "edit"
+    assert session["wordsWritten"] == 0
+    assert session["wordsAdded"] == 157
+    assert session["wordsRemoved"] == 244
+    assert session["wordsEdited"] == 401
+    assert session["netWordsChanged"] == -87
+    assert session["wordCountMethod"] == "google-docs-api"
+    assert session["measurementPending"] is False
+    assert session["startDocumentWordCount"] == 1200
+    assert session["endDocumentWordCount"] == 1113
+
+
+def test_extension_editing_session_defaults_missing_breakdown_to_zero(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-legacy",
+            wordsEdited=312,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["wordsEdited"] == 312
+    assert session["wordsAdded"] == 0
+    assert session["wordsRemoved"] == 0
+    assert session["netWordsChanged"] == 0
 
 
 def test_extension_document_binding_returns_same_project_after_save(tmp_path):
@@ -1605,6 +1733,64 @@ def test_state_api_preserves_extension_sessions_from_stale_app_save(tmp_path):
     assert project_a["sessions"][0]["extensionSessionId"] == "extension-session-1"
     assert project_a["sessions"][0]["wordsWritten"] == 148
     assert project_a["project"]["currentWordCount"] == 148
+
+
+def test_state_api_preserves_extension_session_breakdown_from_stale_app_save(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-google-docs-api",
+            wordsAdded=157,
+            wordsRemoved=244,
+            wordsEdited=401,
+            netWordsChanged=-87,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=1200,
+            endDocumentWordCount=1113,
+        ),
+    )
+    assert sync_response.status_code == 201
+
+    stale_project = extension_project("project-a", "Project A")
+    stale_project["sessions"] = [
+        {
+            "id": "extension-session-edit-google-docs-api",
+            "type": "edit",
+            "date": "2026-05-04T12:42:00.000Z",
+            "durationMinutes": 42,
+            "wordsWritten": 0,
+            "wordsEdited": 401,
+            "notes": "",
+            "passName": "Line edit",
+            "sectionLabel": "",
+        }
+    ]
+    save_response = client.put(
+        "/api/state",
+        json={
+            "projects": [stale_project],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+    session = project_a["sessions"][0]
+
+    assert save_response.status_code == 200
+    assert session["wordsAdded"] == 157
+    assert session["wordsRemoved"] == 244
+    assert session["netWordsChanged"] == -87
+    assert session["wordCountMethod"] == "google-docs-api"
+    assert session["extensionSessionId"] == "extension-session-edit-google-docs-api"
 
 
 def test_state_is_isolated_per_signed_in_user(tmp_path):

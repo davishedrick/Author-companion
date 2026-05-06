@@ -1480,11 +1480,21 @@ function renderIssueCard(issue, options = {}) {
   `;
 }
 
+function formatEditingSessionWordTitle(session) {
+  const wordsAdded = Math.max(0, number(session.wordsAdded));
+  const wordsRemoved = Math.max(0, number(session.wordsRemoved));
+  const hasBreakdown = wordsAdded > 0 || wordsRemoved > 0 || session.wordCountMethod === "google-docs-api";
+  if (hasBreakdown) {
+    return `(+${formatNumber(wordsAdded)} words - ${formatNumber(wordsRemoved)})`;
+  }
+  return `${formatNumber(session.wordsEdited)} words edited`;
+}
+
 function renderSessionCard(bundle, session) {
   const isEditSession = session.type === "edit";
   const snapshot = getSnapshotForSession(bundle, session.id);
   const title = isEditSession
-    ? `${formatNumber(session.wordsEdited)} words edited`
+    ? formatEditingSessionWordTitle(session)
     : `${formatNumber(session.wordsWritten)} words written`;
   const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
   const statusPill = snapshot
