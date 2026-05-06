@@ -1481,11 +1481,26 @@ function renderIssueCard(issue, options = {}) {
 }
 
 function formatEditingSessionWordTitle(session) {
-  const wordsAdded = Math.max(0, number(session.wordsAdded));
-  const wordsRemoved = Math.max(0, number(session.wordsRemoved));
-  const hasBreakdown = wordsAdded > 0 || wordsRemoved > 0 || session.wordCountMethod === "google-docs-api";
-  if (hasBreakdown) {
-    return `(+${formatNumber(wordsAdded)} words - ${formatNumber(wordsRemoved)})`;
+  let wordsAdded = Math.max(0, number(session.wordsAdded));
+  let wordsRemoved = Math.max(0, number(session.wordsRemoved));
+  const wordsEdited = Math.max(0, number(session.wordsEdited));
+  if (wordsAdded === 0 && wordsRemoved === 0 && wordsEdited > 0) {
+    const startCount = Number(session.startDocumentWordCount);
+    const endCount = Number(session.endDocumentWordCount);
+    const netWordsChanged = Number.isFinite(startCount) && Number.isFinite(endCount) && (startCount > 0 || endCount > 0)
+      ? endCount - startCount
+      : Number(session.netWordsChanged);
+    if (Number.isFinite(netWordsChanged) && netWordsChanged !== 0) {
+      const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;
+      const derivedWordsRemoved = (wordsEdited - netWordsChanged) / 2;
+      if (derivedWordsAdded >= 0 && derivedWordsRemoved >= 0) {
+        wordsAdded = Math.round(derivedWordsAdded);
+        wordsRemoved = Math.round(derivedWordsRemoved);
+      }
+    }
+  }
+  if (wordsAdded > 0 || wordsRemoved > 0) {
+    return `+${formatNumber(wordsAdded)} - ${formatNumber(wordsRemoved)}`;
   }
   return `${formatNumber(session.wordsEdited)} words edited`;
 }

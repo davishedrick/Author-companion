@@ -1019,7 +1019,8 @@ def test_session_history_cards_surface_handoff_summary():
 
     assert "function renderSessionCard(bundle, session)" in js
     assert "function formatEditingSessionWordTitle(session)" in js
-    assert "return `(+${formatNumber(wordsAdded)} words - ${formatNumber(wordsRemoved)})`;" in js
+    assert "const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;" in js
+    assert "return `+${formatNumber(wordsAdded)} - ${formatNumber(wordsRemoved)}`;" in js
     assert 'return `${formatNumber(session.wordsEdited)} words edited`;' in js
     assert "getSnapshotForSession(bundle, session.id)" in js
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
