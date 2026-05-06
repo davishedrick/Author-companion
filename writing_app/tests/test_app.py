@@ -219,9 +219,13 @@ def test_password_reset_token_cannot_be_reused(tmp_path):
 def test_html_references_separate_css_and_js_assets():
     html = get_html()
 
-    assert '<link rel="stylesheet" href="static/css/app.css" />' in html
+    asset_version = "editing-word-breakdown-20260506"
+    assert (
+        f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />'
+        in html
+    )
     for filename in JS_FILES:
-        assert f'<script src="static/js/{filename}"></script>' in html
+        assert f'<script src="static/js/{filename}?v={asset_version}"></script>' in html
     assert "<style>" not in html
     assert html.count("<script src=") == len(JS_FILES)
 
@@ -879,6 +883,7 @@ def test_goals_dashboard_view_and_vertical_navigation_are_present():
     assert 'goals: "Goals"' in js
     assert 'id="view-history-btn"' in js
     assert "<h2>History</h2>" in js
+    assert "static/js/app.js?v=editing-word-breakdown-20260506" in html
     assert "function renderGoalsDashboard(bundle)" in js
     assert "Structure goals" in js
     assert "Issue goals" in js
