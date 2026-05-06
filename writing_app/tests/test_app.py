@@ -1018,9 +1018,16 @@ def test_session_history_cards_surface_handoff_summary():
     js = get_app_js()
 
     assert "function renderSessionCard(bundle, session)" in js
+    assert "function getEditingSessionWordBreakdown(session)" in js
     assert "function formatEditingSessionWordTitle(session)" in js
     assert "const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;" in js
-    assert "return `+${formatNumber(wordsAdded)} - ${formatNumber(wordsRemoved)}`;" in js
+    assert (
+        "return `+${formatNumber(breakdown.wordsAdded)} - ${formatNumber(breakdown.wordsRemoved)}`;"
+        in js
+    )
+    assert "function formatEditingSessionWordDetail(session)" in js
+    assert "words added," in js
+    assert "total words edited" in js
     assert 'return `${formatNumber(session.wordsEdited)} words edited`;' in js
     assert "getSnapshotForSession(bundle, session.id)" in js
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
@@ -1681,6 +1688,31 @@ def test_extension_editing_session_derives_net_change_from_document_counts(tmp_p
     assert session["wordsAdded"] == 2
     assert session["wordsRemoved"] == 114
     assert session["netWordsChanged"] == -112
+
+
+def test_extension_editing_session_derives_even_split_from_zero_net_change(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-zero-net",
+            wordsEdited=10,
+            netWordsChanged=0,
+            wordCountMethod="google-docs-api",
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["wordsEdited"] == 10
+    assert session["wordsAdded"] == 5
+    assert session["wordsRemoved"] == 5
+    assert session["netWordsChanged"] == 0
 
 
 def test_extension_editing_session_defaults_missing_breakdown_to_zero(tmp_path):

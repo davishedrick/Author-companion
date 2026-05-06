@@ -1480,17 +1480,18 @@ function renderIssueCard(issue, options = {}) {
   `;
 }
 
-function formatEditingSessionWordTitle(session) {
+function getEditingSessionWordBreakdown(session) {
   let wordsAdded = Math.max(0, number(session.wordsAdded));
   let wordsRemoved = Math.max(0, number(session.wordsRemoved));
   const wordsEdited = Math.max(0, number(session.wordsEdited));
   if (wordsAdded === 0 && wordsRemoved === 0 && wordsEdited > 0) {
     const startCount = Number(session.startDocumentWordCount);
     const endCount = Number(session.endDocumentWordCount);
-    const netWordsChanged = Number.isFinite(startCount) && Number.isFinite(endCount) && (startCount > 0 || endCount > 0)
-      ? endCount - startCount
-      : Number(session.netWordsChanged);
-    if (Number.isFinite(netWordsChanged) && netWordsChanged !== 0) {
+    const hasDocumentCounts = Number.isFinite(startCount) && Number.isFinite(endCount) && (startCount > 0 || endCount > 0);
+    const rawNetWordsChanged = Number(session.netWordsChanged);
+    const hasNetWordsChanged = hasDocumentCounts || Number.isFinite(rawNetWordsChanged) && rawNetWordsChanged !== 0;
+    if (hasNetWordsChanged) {
+      const netWordsChanged = hasDocumentCounts ? endCount - startCount : rawNetWordsChanged;
       const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;
       const derivedWordsRemoved = (wordsEdited - netWordsChanged) / 2;
       if (derivedWordsAdded >= 0 && derivedWordsRemoved >= 0) {
@@ -1499,10 +1500,26 @@ function formatEditingSessionWordTitle(session) {
       }
     }
   }
-  if (wordsAdded > 0 || wordsRemoved > 0) {
-    return `+${formatNumber(wordsAdded)} - ${formatNumber(wordsRemoved)}`;
+  return {
+    wordsAdded,
+    wordsRemoved,
+    wordsEdited,
+    hasBreakdown: wordsAdded > 0 || wordsRemoved > 0
+  };
+}
+
+function formatEditingSessionWordTitle(session) {
+  const breakdown = getEditingSessionWordBreakdown(session);
+  if (breakdown.hasBreakdown) {
+    return `+${formatNumber(breakdown.wordsAdded)} - ${formatNumber(breakdown.wordsRemoved)}`;
   }
   return `${formatNumber(session.wordsEdited)} words edited`;
+}
+
+function formatEditingSessionWordDetail(session) {
+  const breakdown = getEditingSessionWordBreakdown(session);
+  if (!breakdown.hasBreakdown) return "";
+  return `${formatNumber(breakdown.wordsAdded)} words added, ${formatNumber(breakdown.wordsRemoved)} removed - ${formatNumber(breakdown.wordsEdited)} total words edited`;
 }
 
 function renderSessionCard(bundle, session) {
@@ -1511,6 +1528,7 @@ function renderSessionCard(bundle, session) {
   const title = isEditSession
     ? formatEditingSessionWordTitle(session)
     : `${formatNumber(session.wordsWritten)} words written`;
+  const editingWordDetail = isEditSession ? formatEditingSessionWordDetail(session) : "";
   const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
   const statusPill = snapshot
     ? `<span class="pill">${escapeHtml(sessionSnapshotOutcomeLabel(snapshot.outcomeStatus))}</span>`
@@ -1530,6 +1548,7 @@ function renderSessionCard(bundle, session) {
         <div>
           <p class="session-kind">${isEditSession ? "Editing session" : "Writing session"}</p>
           <h4>${title}</h4>
+          ${editingWordDetail ? `<p class="small-copy">${escapeHtml(editingWordDetail)}</p>` : ""}
           <p class="small-copy">${formatDate(session.date)} (${formatRelativeTime(session.date)})</p>
         </div>
         <div class="goal-actions">

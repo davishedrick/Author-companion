@@ -110,6 +110,23 @@ def _non_negative_int(value: Any) -> int:
     return round(parsed)
 
 
+def _int_value(value: Any) -> int:
+    try:
+        return round(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _derive_word_breakdown(total_activity: int, net_words_changed: int) -> tuple[int, int]:
+    if total_activity <= 0:
+        return 0, 0
+    words_added = (total_activity + net_words_changed) / 2
+    words_removed = (total_activity - net_words_changed) / 2
+    if words_added < 0 or words_removed < 0:
+        return 0, 0
+    return round(words_added), round(words_removed)
+
+
 def _current_editing_pass_name(project: dict[str, Any]) -> str:
     editing = project.get("editing")
     if not isinstance(editing, dict):
@@ -197,16 +214,45 @@ def append_extension_session(
     notes = _clean_text(payload.get("notes"))
     document_url = _clean_text(payload.get("documentUrl"))
     source = _clean_text(payload.get("source")) or "chrome-extension"
+    word_count_method = _clean_text(payload.get("wordCountMethod"))
+    measurement_pending = bool(payload.get("measurementPending"))
+    start_document_word_count = _non_negative_int(payload.get("startDocumentWordCount"))
+    end_document_word_count = _non_negative_int(payload.get("endDocumentWordCount"))
+    words_added = _non_negative_int(payload.get("wordsAdded"))
+    words_removed = _non_negative_int(payload.get("wordsRemoved"))
+    has_document_word_counts = (
+        "startDocumentWordCount" in payload or "endDocumentWordCount" in payload
+    )
+    has_net_words_changed = "netWordsChanged" in payload or has_document_word_counts
+    net_words_changed = (
+        _int_value(payload.get("netWordsChanged"))
+        if "netWordsChanged" in payload
+        else end_document_word_count - start_document_word_count
+        if has_document_word_counts
+        else 0
+    )
+    has_word_breakdown = "wordsAdded" in payload or "wordsRemoved" in payload
     words_written = (
         _non_negative_int(payload.get("wordsWritten"))
         if session_type == "writing"
         else 0
     )
-    words_edited = (
-        _non_negative_int(payload.get("wordsEdited"))
-        if session_type == "editing"
-        else 0
-    )
+    if session_type == "editing":
+        words_edited = (
+            words_added + words_removed
+            if has_word_breakdown
+            else _non_negative_int(payload.get("wordsEdited"))
+        )
+        if not has_word_breakdown and has_net_words_changed:
+            derived_words_added, derived_words_removed = _derive_word_breakdown(
+                words_edited, net_words_changed
+            )
+            if derived_words_added + derived_words_removed == words_edited:
+                words_added = derived_words_added
+                words_removed = derived_words_removed
+                has_word_breakdown = True
+    else:
+        words_edited = 0
 
     bindings = _bindings(state)
     bound_project_id = bindings.get(document_id)
@@ -229,6 +275,16 @@ def append_extension_session(
         None,
     )
     if existing_session:
+        if word_count_method:
+            existing_session["wordCountMethod"] = word_count_method
+        if "startDocumentWordCount" in payload:
+            existing_session["startDocumentWordCount"] = start_document_word_count
+        if "endDocumentWordCount" in payload:
+            existing_session["endDocumentWordCount"] = end_document_word_count
+        if "netWordsChanged" in payload:
+            existing_session["netWordsChanged"] = net_words_changed
+        if "measurementPending" in payload:
+            existing_session["measurementPending"] = measurement_pending
         if normalized_type == "write":
             existing_words_written = _non_negative_int(
                 existing_session.get("wordsWritten")
@@ -240,6 +296,16 @@ def append_extension_session(
             existing_words_edited = _non_negative_int(
                 existing_session.get("wordsEdited")
             )
+            if has_word_breakdown and (
+                words_edited >= existing_words_edited
+                or not (
+                    _non_negative_int(existing_session.get("wordsAdded"))
+                    or _non_negative_int(existing_session.get("wordsRemoved"))
+                )
+            ):
+                existing_session["wordsAdded"] = words_added
+                existing_session["wordsRemoved"] = words_removed
+                existing_session["wordsEdited"] = words_edited
             if words_edited > existing_words_edited:
                 existing_session["wordsEdited"] = words_edited
         return existing_session, _project_summary(project), True
@@ -254,12 +320,19 @@ def append_extension_session(
         "durationMinutes": duration_minutes,
         "wordsWritten": words_written,
         "wordsEdited": words_edited,
+        "wordsAdded": words_added,
+        "wordsRemoved": words_removed,
+        "netWordsChanged": net_words_changed,
         "notes": notes,
         "source": source,
         "documentId": document_id,
         "documentUrl": document_url,
         "extensionSessionId": extension_session_id,
         "createdAt": datetime.now(timezone.utc).isoformat(),
+        "wordCountMethod": word_count_method,
+        "measurementPending": measurement_pending,
+        "startDocumentWordCount": start_document_word_count,
+        "endDocumentWordCount": end_document_word_count,
     }
 
     if normalized_type == "edit":
@@ -324,6 +397,36 @@ def preserve_extension_sessions(
                 or session.get("extensionSessionId")
             )
         ]
+        extension_sessions_by_id = {
+            session.get("extensionSessionId") or session.get("id"): session
+            for session in extension_sessions
+        }
+
+        for incoming_session in incoming_sessions:
+            if not isinstance(incoming_session, dict):
+                continue
+            session_id = incoming_session.get("extensionSessionId") or incoming_session.get(
+                "id"
+            )
+            existing_session = extension_sessions_by_id.get(session_id)
+            if not existing_session:
+                continue
+            for field in [
+                "wordsAdded",
+                "wordsRemoved",
+                "netWordsChanged",
+                "wordCountMethod",
+                "measurementPending",
+                "startDocumentWordCount",
+                "endDocumentWordCount",
+                "source",
+                "documentId",
+                "documentUrl",
+                "extensionSessionId",
+                "createdAt",
+            ]:
+                if field not in incoming_session and field in existing_session:
+                    incoming_session[field] = existing_session[field]
 
         for session in extension_sessions:
             session_id = session.get("extensionSessionId") or session.get("id")
