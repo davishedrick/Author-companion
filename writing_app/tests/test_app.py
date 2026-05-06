@@ -1632,6 +1632,57 @@ def test_extension_editing_session_persists_google_docs_word_breakdown(tmp_path)
     assert session["endDocumentWordCount"] == 1113
 
 
+def test_extension_editing_session_derives_breakdown_from_total_and_net_change(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-derived",
+            wordsEdited=116,
+            netWordsChanged=-112,
+            wordCountMethod="google-docs-api",
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["wordsEdited"] == 116
+    assert session["wordsAdded"] == 2
+    assert session["wordsRemoved"] == 114
+    assert session["netWordsChanged"] == -112
+
+
+def test_extension_editing_session_derives_net_change_from_document_counts(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-derived-from-counts",
+            wordsEdited=116,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=500,
+            endDocumentWordCount=388,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["wordsEdited"] == 116
+    assert session["wordsAdded"] == 2
+    assert session["wordsRemoved"] == 114
+    assert session["netWordsChanged"] == -112
+
+
 def test_extension_editing_session_defaults_missing_breakdown_to_zero(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
