@@ -267,6 +267,16 @@ function getWorkspaceLandingView(bundle = currentBundle()) {
   return preferredWorkspaceView();
 }
 
+function applyUrlViewOverride() {
+  const params = new URLSearchParams(window.location.search);
+  const requestedView = params.get("view");
+  if (!requestedView) return;
+  if (requestedView === "edit" && currentBundle() && !isProjectPublished(currentBundle())) {
+    activeView = "edit";
+    lastWorkspaceView = "edit";
+  }
+}
+
 function getSidebarCollapseIcon() {
   return `
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -317,6 +327,7 @@ function syncThemePreferenceControls() {
 }
 
 function render() {
+  applyUrlViewOverride();
   const bundle = currentBundle();
   if (activeView === "edit2") {
     activeView = "edit";

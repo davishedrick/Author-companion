@@ -959,6 +959,10 @@ function renderEdit2ProjectStatsStrip(bundle) {
         <span class="pill">${escapeHtml(sessionLabel)}</span>
       </div>
       <div class="edit2-project-stat-grid">
+        <div class="edit2-project-stat edit2-project-stat--current">
+          <span>Current words</span>
+          <strong>${formatNumber(bundle.project.currentWordCount)}</strong>
+        </div>
         <div class="edit2-project-stat">
           <span>Words added</span>
           <strong>${formatNumber(stats.wordsAdded)}</strong>

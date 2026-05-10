@@ -273,10 +273,12 @@ def test_static_assets_load():
     assert "function renderPlotDashboard(bundle)" in get_js_asset("plot.js")
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
     assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
+    assert "Current words" in get_js_asset("edit2.js")
     assert "Words added" in get_js_asset("edit2.js")
     assert "Words removed" in get_js_asset("edit2.js")
     assert "Net change" in get_js_asset("edit2.js")
     assert ".edit2-project-stats {" in get_css_asset("edit2.css")
+    assert ".edit2-project-stat--current {" in get_css_asset("edit2.css")
     assert ".edit2-project-stat-grid {" in get_css_asset("edit2.css")
     assert 'const EDIT_FOCUS_ORDER = ["revision"];' in get_js_asset("state.js")
     assert (
@@ -1716,6 +1718,7 @@ def test_extension_duplicate_editing_session_keeps_google_docs_breakdown(tmp_pat
     assert session["measurementPending"] is False
     assert session["startDocumentWordCount"] == 1200
     assert session["endDocumentWordCount"] == 1113
+    assert project_a["project"]["currentWordCount"] == 1113
 
 
 def test_extension_writing_session_normalizes_to_write_with_words_written(tmp_path):
@@ -1752,19 +1755,24 @@ def test_extension_writing_session_preserves_google_docs_word_count_metadata(tmp
         "/api/extension/sessions",
         json=extension_session_payload(
             extensionSessionId="extension-session-google-docs-api",
-            wordsWritten=250,
+            wordsWritten=1,
             wordCountMethod="google-docs-api",
             startDocumentWordCount=1000,
             endDocumentWordCount=1250,
         ),
     )
     session = response.get_json()["session"]
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
 
     assert response.status_code == 201
-    assert session["wordsWritten"] == 250
+    assert session["wordsWritten"] == 1
     assert session["wordCountMethod"] == "google-docs-api"
     assert session["startDocumentWordCount"] == 1000
     assert session["endDocumentWordCount"] == 1250
+    assert project_a["project"]["currentWordCount"] == 1250
 
 
 def test_extension_writing_session_invalid_words_written_normalizes_to_zero(tmp_path):
@@ -1855,6 +1863,10 @@ def test_extension_editing_session_persists_google_docs_word_breakdown(tmp_path)
         ),
     )
     session = response.get_json()["session"]
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
 
     assert response.status_code == 201
     assert session["type"] == "edit"
@@ -1867,6 +1879,7 @@ def test_extension_editing_session_persists_google_docs_word_breakdown(tmp_path)
     assert session["measurementPending"] is False
     assert session["startDocumentWordCount"] == 1200
     assert session["endDocumentWordCount"] == 1113
+    assert project_a["project"]["currentWordCount"] == 1113
 
 
 def test_extension_editing_session_derives_breakdown_from_total_and_net_change(tmp_path):
@@ -2105,6 +2118,7 @@ def test_state_api_preserves_extension_session_breakdown_from_stale_app_save(tmp
     assert session["netWordsChanged"] == -87
     assert session["wordCountMethod"] == "google-docs-api"
     assert session["extensionSessionId"] == "extension-session-edit-google-docs-api"
+    assert project_a["project"]["currentWordCount"] == 1113
 
 
 def test_state_is_isolated_per_signed_in_user(tmp_path):
