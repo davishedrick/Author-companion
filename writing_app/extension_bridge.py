@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -21,8 +22,135 @@ class DocumentBindingConflictError(ExtensionBridgeError):
     status_code = 409
 
 
+ISSUE_TITLE_WORD_LIMIT = 8
+ISSUE_SECTION_NUMBER_WORDS = {
+    "zero": 0,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+ISSUE_SECTION_WORD_PATTERN = (
+    r"(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|"
+    r"twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+    r"(?:[-\s](?:one|two|three|four|five|six|seven|eight|nine))?"
+)
+ISSUE_SECTION_REGEX = re.compile(
+    rf"(chapter|scene|section)\s+(?:\d+|{ISSUE_SECTION_WORD_PATTERN})\b",
+    re.IGNORECASE,
+)
+ISSUE_TYPE_RULES = [
+    ("Dialogue", ["dialogue", "conversation", "line"]),
+    ("Pacing", ["slow", "fast", "drag", "rush"]),
+    ("Clarity", ["confusing", "unclear", "hard to follow"]),
+    ("Character", ["motivation", "arc", "character"]),
+    ("Grammar", ["grammar", "typo", "spelling"]),
+]
+ISSUE_HIGH_PRIORITY_KEYWORDS = ["major", "critical", "big"]
+ISSUE_META_FIELDS = [
+    "source",
+    "documentId",
+    "documentUrl",
+    "extensionIssueId",
+    "quoteLocator",
+    "textLocation",
+]
+
+
 def _clean_text(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _normalize_issue_note_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _normalize_issue_comparison_text(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+
+
+def _normalize_chapter_label(value: Any) -> str:
+    text = _normalize_issue_note_text(value)
+    return text or "Unassigned"
+
+
+def _parse_issue_section_number(value: Any) -> str:
+    normalized_value = _normalize_issue_note_text(value)
+    if re.fullmatch(r"\d+", normalized_value):
+        return normalized_value
+
+    word_tokens = [
+        token
+        for token in _normalize_issue_comparison_text(normalized_value).split(" ")
+        if token
+    ]
+    if not word_tokens or not all(token in ISSUE_SECTION_NUMBER_WORDS for token in word_tokens):
+        return normalized_value
+    return str(sum(ISSUE_SECTION_NUMBER_WORDS[token] for token in word_tokens))
+
+
+def _format_derived_issue_section(match: str) -> str:
+    section_match = re.match(r"^(chapter|scene|section)\s+(.+)$", match, re.IGNORECASE)
+    if not section_match:
+        return _normalize_chapter_label(match)
+    section_type = section_match.group(1).capitalize()
+    return f"{section_type} {_parse_issue_section_number(section_match.group(2))}"
+
+
+def _derive_issue_title_from_note(note: str) -> str:
+    normalized_note = _normalize_issue_note_text(note)
+    if not normalized_note:
+        return "Untitled issue"
+    words = [word for word in normalized_note.split(" ") if word]
+    return " ".join(words[: min(ISSUE_TITLE_WORD_LIMIT, len(words))])
+
+
+def _derive_issue_section_from_note(note: str) -> str:
+    matched_section = ISSUE_SECTION_REGEX.search(str(note or ""))
+    if matched_section:
+        return _format_derived_issue_section(matched_section.group(0))
+    return "Unassigned"
+
+
+def _derive_issue_type_from_note(note: str) -> str:
+    normalized_note = _normalize_issue_note_text(note).lower()
+    for issue_type, keywords in ISSUE_TYPE_RULES:
+        if any(keyword in normalized_note for keyword in keywords):
+            return issue_type
+    return "General"
+
+
+def _derive_issue_priority_from_note(note: str) -> str:
+    normalized_note = _normalize_issue_note_text(note).lower()
+    return (
+        "High"
+        if any(keyword in normalized_note for keyword in ISSUE_HIGH_PRIORITY_KEYWORDS)
+        else "Medium"
+    )
 
 
 def _project_summary(bundle: dict[str, Any]) -> dict[str, Any]:
@@ -188,6 +316,141 @@ def save_document_binding(
     return _project_summary(project)
 
 
+def _project_for_extension_issue(
+    state: dict[str, Any], document_id: str, project_id: str
+) -> dict[str, Any]:
+    bindings = _bindings(state)
+    bound_project_id = bindings.get(document_id)
+    if bound_project_id and project_id and bound_project_id != project_id:
+        raise DocumentBindingConflictError("Document is bound to a different project.")
+
+    resolved_project_id = bound_project_id or project_id
+    if not resolved_project_id:
+        raise ExtensionBridgeError("projectId is required for unbound documents.")
+
+    project = _require_project(state, resolved_project_id)
+    bindings[document_id] = resolved_project_id
+    return project
+
+
+def _normalize_extension_issue(
+    project: dict[str, Any], payload: dict[str, Any]
+) -> dict[str, Any]:
+    note = _normalize_issue_note_text(payload.get("note") or payload.get("notes"))
+    if not note:
+        raise ExtensionBridgeError("note is required.")
+
+    issue_id = _clean_text(payload.get("extensionIssueId")) or _clean_text(
+        payload.get("id")
+    ) or f"extension-issue-{uuid4()}"
+    snippet = _clean_text(payload.get("snippet"))
+    created_at = _clean_text(payload.get("createdAt")) or datetime.now(
+        timezone.utc
+    ).isoformat()
+    raw_status = _clean_text(payload.get("workflowStatus") or payload.get("status"))
+    workflow_status = (
+        "resolved"
+        if raw_status.lower() == "resolved"
+        else "in_progress"
+        if raw_status.lower() in {"in_progress", "in progress"}
+        else "open"
+    )
+    status = "Resolved" if workflow_status == "resolved" else "Open"
+    quote_locator = payload.get("quoteLocator")
+    if not isinstance(quote_locator, dict):
+        quote_locator = {}
+
+    return {
+        "id": issue_id,
+        "title": _clean_text(payload.get("title")) or _derive_issue_title_from_note(note),
+        "type": _clean_text(payload.get("type")) or _derive_issue_type_from_note(note),
+        "sectionLabel": _normalize_chapter_label(
+            payload.get("sectionLabel") or _derive_issue_section_from_note(note)
+        ),
+        "priority": _clean_text(payload.get("priority"))
+        or _derive_issue_priority_from_note(note),
+        "status": status,
+        "notes": note,
+        "snippet": snippet,
+        "createdAt": created_at,
+        "resolvedAt": created_at if status == "Resolved" else "",
+        "focusKey": _clean_text(payload.get("focusKey"))
+        or _clean_text(project.get("editing", {}).get("focusKey"))
+        or "revision",
+        "passName": "",
+        "workflowStatus": workflow_status,
+        "textLocation": _clean_text(payload.get("textLocation")),
+        "source": _clean_text(payload.get("source")) or "chrome-extension",
+        "documentId": _clean_text(payload.get("documentId")),
+        "documentUrl": _clean_text(payload.get("documentUrl")),
+        "extensionIssueId": issue_id,
+        "quoteLocator": {
+            "strategy": _clean_text(quote_locator.get("strategy")) or "quote-finder",
+            "quote": _clean_text(quote_locator.get("quote")) or snippet,
+            "createdAt": _clean_text(quote_locator.get("createdAt")) or created_at,
+        },
+    }
+
+
+def append_extension_issue(
+    state: dict[str, Any], payload: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any], bool]:
+    if not isinstance(payload, dict):
+        raise ExtensionBridgeError("JSON body is required.")
+
+    document_id = _clean_text(payload.get("documentId"))
+    project_id = _clean_text(payload.get("projectId"))
+    if not document_id:
+        raise ExtensionBridgeError("documentId is required.")
+
+    project = _project_for_extension_issue(state, document_id, project_id)
+    issue_payload = {
+        **payload,
+        "documentId": document_id,
+        "documentUrl": _clean_text(payload.get("documentUrl")),
+    }
+    issue = _normalize_extension_issue(project, issue_payload)
+    issues = project.setdefault("issues", [])
+    existing_issue = next(
+        (
+            item
+            for item in issues
+            if isinstance(item, dict)
+            and (
+                item.get("extensionIssueId") == issue["extensionIssueId"]
+                or item.get("id") == issue["id"]
+            )
+        ),
+        None,
+    )
+    if existing_issue:
+        for key, value in issue.items():
+            if key in ISSUE_META_FIELDS or key not in existing_issue or existing_issue.get(key) in {"", None}:
+                existing_issue[key] = value
+        return existing_issue, _project_summary(project), True
+
+    issues.insert(0, issue)
+    return issue, _project_summary(project), False
+
+
+def get_extension_issues(
+    state: dict[str, Any], document_id: str
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, bool]:
+    project, changed = get_document_binding(state, document_id)
+    if not project:
+        return [], None, changed
+
+    project_bundle = _find_project(state, project["id"])
+    issues = [
+        issue
+        for issue in project_bundle.get("issues", [])
+        if isinstance(issue, dict)
+        and _clean_text(issue.get("documentId")) == _clean_text(document_id)
+        and issue.get("status") != "Resolved"
+    ]
+    return issues, project, changed
+
+
 def append_extension_session(
     state: dict[str, Any], payload: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], bool]:
@@ -350,7 +613,7 @@ def append_extension_session(
 def preserve_extension_sessions(
     incoming_state: dict[str, Any], existing_state: dict[str, Any]
 ) -> dict[str, Any]:
-    """Keep extension-created sessions when an older app tab saves stale state."""
+    """Keep extension-created entries when an older app tab saves stale state."""
     if not isinstance(incoming_state, dict) or not isinstance(existing_state, dict):
         return incoming_state
 
@@ -439,5 +702,51 @@ def preserve_extension_sessions(
                         project_bundle["currentWordCount"] = _non_negative_int(
                             project_bundle.get("currentWordCount")
                         ) + _non_negative_int(session.get("wordsWritten"))
+
+        incoming_issues = incoming_project.setdefault("issues", [])
+        existing_issues = existing_project.get("issues", [])
+        if not isinstance(incoming_issues, list) or not isinstance(
+            existing_issues, list
+        ):
+            continue
+
+        incoming_issue_ids = {
+            issue.get("extensionIssueId") or issue.get("id")
+            for issue in incoming_issues
+            if isinstance(issue, dict)
+        }
+        extension_issues = [
+            issue
+            for issue in existing_issues
+            if isinstance(issue, dict)
+            and (issue.get("extensionIssueId") or issue.get("id"))
+            and (
+                issue.get("source") == "chrome-extension"
+                or issue.get("extensionIssueId")
+            )
+        ]
+        extension_issues_by_id = {
+            issue.get("extensionIssueId") or issue.get("id"): issue
+            for issue in extension_issues
+        }
+
+        for incoming_issue in incoming_issues:
+            if not isinstance(incoming_issue, dict):
+                continue
+            issue_id = incoming_issue.get("extensionIssueId") or incoming_issue.get(
+                "id"
+            )
+            existing_issue = extension_issues_by_id.get(issue_id)
+            if not existing_issue:
+                continue
+            for field in ISSUE_META_FIELDS:
+                if field not in incoming_issue and field in existing_issue:
+                    incoming_issue[field] = existing_issue[field]
+
+        for issue in extension_issues:
+            issue_id = issue.get("extensionIssueId") or issue.get("id")
+            if issue_id not in incoming_issue_ids:
+                incoming_issues.insert(0, issue)
+                incoming_issue_ids.add(issue_id)
 
     return incoming_state

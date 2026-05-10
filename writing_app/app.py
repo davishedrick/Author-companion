@@ -26,9 +26,11 @@ from auth_store import (
 )
 from extension_bridge import (
     ExtensionBridgeError,
+    append_extension_issue,
     append_extension_session,
     get_active_projects,
     get_document_binding,
+    get_extension_issues,
     preserve_extension_sessions,
     save_document_binding,
 )
@@ -387,6 +389,40 @@ def post_extension_session():
     return jsonify(
         {
             "session": created_session,
+            "project": project,
+            "duplicate": duplicate,
+        }
+    ), 200 if duplicate else 201
+
+
+@app.get("/api/extension/issues")
+@login_required
+def get_extension_issue_list():
+    state = load_state(session.get("user_id"))
+    document_id = request.args.get("documentId", "")
+    try:
+        issues, project, changed = get_extension_issues(state, document_id)
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    if changed:
+        save_state(state, session.get("user_id"))
+    return jsonify({"documentId": document_id, "project": project, "issues": issues})
+
+
+@app.post("/api/extension/issues")
+@login_required
+def post_extension_issue():
+    state = load_state(session.get("user_id"))
+    try:
+        issue, project, duplicate = append_extension_issue(
+            state, request.get_json(silent=True) or {}
+        )
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    save_state(state, session.get("user_id"))
+    return jsonify(
+        {
+            "issue": issue,
             "project": project,
             "duplicate": duplicate,
         }
