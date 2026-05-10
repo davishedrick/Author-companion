@@ -445,7 +445,6 @@ def get_extension_issues(
         issue
         for issue in project_bundle.get("issues", [])
         if isinstance(issue, dict)
-        and _clean_text(issue.get("documentId")) == _clean_text(document_id)
         and issue.get("status") != "Resolved"
     ]
     return issues, project, changed

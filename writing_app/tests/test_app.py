@@ -1458,6 +1458,62 @@ def test_extension_issue_list_returns_current_doc_open_issues(tmp_path):
     assert [issue["id"] for issue in payload["issues"]] == ["extension-issue-1"]
 
 
+def test_extension_issue_list_returns_all_open_project_issues_for_bound_doc(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    payload = save_extension_test_state(client)
+    project_a = next(
+        project for project in payload["projects"] if project["id"] == "project-a"
+    )
+    project_b = next(
+        project for project in payload["projects"] if project["id"] == "project-b"
+    )
+    project_a["issues"] = [
+        {
+            "id": "app-issue-1",
+            "title": "Chapter 4 slow",
+            "type": "Pacing",
+            "sectionLabel": "Chapter 4",
+            "priority": "Medium",
+            "status": "Open",
+            "notes": "Chapter 4 slow",
+            "snippet": "Apples and earth and rotting leaves.",
+        },
+        {
+            "id": "resolved-issue",
+            "title": "Already fixed",
+            "type": "General",
+            "sectionLabel": "Chapter 2",
+            "priority": "Low",
+            "status": "Resolved",
+            "notes": "",
+            "snippet": "",
+        },
+    ]
+    project_b["issues"] = [
+        {
+            "id": "other-project-issue",
+            "title": "Different book",
+            "type": "General",
+            "sectionLabel": "Chapter 1",
+            "priority": "Medium",
+            "status": "Open",
+            "notes": "",
+            "snippet": "",
+        }
+    ]
+    payload["extensionDocumentBindings"] = {"google-doc-a": "project-a"}
+    save_response = client.put("/api/state", json=payload)
+    assert save_response.status_code == 200
+
+    list_response = client.get("/api/extension/issues?documentId=google-doc-a")
+    issues = list_response.get_json()["issues"]
+
+    assert list_response.status_code == 200
+    assert [issue["id"] for issue in issues] == ["app-issue-1"]
+
+
 def test_extension_duplicate_issue_id_does_not_create_duplicate(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
