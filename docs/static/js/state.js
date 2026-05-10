@@ -1075,7 +1075,14 @@ function normalizeIssue(issue) {
     focusKey,
     passName: "",
     workflowStatus,
-    textLocation: String(issue?.textLocation || "")
+    textLocation: String(issue?.textLocation || ""),
+    source: String(issue?.source || ""),
+    documentId: String(issue?.documentId || ""),
+    documentUrl: String(issue?.documentUrl || ""),
+    extensionIssueId: String(issue?.extensionIssueId || ""),
+    quoteLocator: issue?.quoteLocator && typeof issue.quoteLocator === "object"
+      ? cloneValue(issue.quoteLocator)
+      : null
   };
 }
 
@@ -1320,6 +1327,54 @@ function getWriteSessions(bundle) {
 
 function getEditSessions(bundle) {
   return bundle.sessions.filter((session) => session.type === "edit");
+}
+
+function getEditingSessionWordBreakdown(session) {
+  let wordsAdded = Math.max(0, number(session.wordsAdded));
+  let wordsRemoved = Math.max(0, number(session.wordsRemoved));
+  const wordsEdited = Math.max(0, number(session.wordsEdited));
+  if (wordsAdded === 0 && wordsRemoved === 0 && wordsEdited > 0) {
+    const startCount = Number(session.startDocumentWordCount);
+    const endCount = Number(session.endDocumentWordCount);
+    const hasDocumentCounts = Number.isFinite(startCount) && Number.isFinite(endCount) && (startCount > 0 || endCount > 0);
+    const rawNetWordsChanged = Number(session.netWordsChanged);
+    const hasNetWordsChanged = hasDocumentCounts || Number.isFinite(rawNetWordsChanged) && rawNetWordsChanged !== 0;
+    if (hasNetWordsChanged) {
+      const netWordsChanged = hasDocumentCounts ? endCount - startCount : rawNetWordsChanged;
+      const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;
+      const derivedWordsRemoved = (wordsEdited - netWordsChanged) / 2;
+      if (derivedWordsAdded >= 0 && derivedWordsRemoved >= 0) {
+        wordsAdded = Math.round(derivedWordsAdded);
+        wordsRemoved = Math.round(derivedWordsRemoved);
+      }
+    }
+  }
+  return {
+    wordsAdded,
+    wordsRemoved,
+    wordsEdited,
+    hasBreakdown: wordsAdded > 0 || wordsRemoved > 0
+  };
+}
+
+function getEditProjectStats(bundle) {
+  const sessions = Array.isArray(bundle?.sessions) ? getEditSessions(bundle) : [];
+  return sessions.reduce((stats, session) => {
+    const breakdown = getEditingSessionWordBreakdown(session);
+    stats.wordsAdded += breakdown.wordsAdded;
+    stats.wordsRemoved += breakdown.wordsRemoved;
+    stats.netWordsChanged += breakdown.wordsAdded - breakdown.wordsRemoved;
+    stats.totalWordsEdited += breakdown.wordsEdited;
+    stats.totalMinutes += number(session.durationMinutes);
+    return stats;
+  }, {
+    wordsAdded: 0,
+    wordsRemoved: 0,
+    netWordsChanged: 0,
+    totalWordsEdited: 0,
+    sessionCount: sessions.length,
+    totalMinutes: 0
+  });
 }
 
 function getSessionGroups(bundle, filterFn = () => true) {

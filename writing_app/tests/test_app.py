@@ -219,7 +219,7 @@ def test_password_reset_token_cannot_be_reused(tmp_path):
 def test_html_references_separate_css_and_js_assets():
     html = get_html()
 
-    asset_version = "editing-word-breakdown-20260506"
+    asset_version = "edit-project-stats-20260509"
     assert (
         f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />'
         in html
@@ -272,6 +272,12 @@ def test_static_assets_load():
     assert "function renderGoalsDashboard(bundle)" in get_js_asset("dashboard.js")
     assert "function renderPlotDashboard(bundle)" in get_js_asset("plot.js")
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
+    assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
+    assert "Words added" in get_js_asset("edit2.js")
+    assert "Words removed" in get_js_asset("edit2.js")
+    assert "Net change" in get_js_asset("edit2.js")
+    assert ".edit2-project-stats {" in get_css_asset("edit2.css")
+    assert ".edit2-project-stat-grid {" in get_css_asset("edit2.css")
     assert 'const EDIT_FOCUS_ORDER = ["revision"];' in get_js_asset("state.js")
     assert (
         'function normalizeEditFocusKey(value = "", fallback = "revision")'
@@ -883,7 +889,7 @@ def test_goals_dashboard_view_and_vertical_navigation_are_present():
     assert 'goals: "Goals"' in js
     assert 'id="view-history-btn"' in js
     assert "<h2>History</h2>" in js
-    assert "static/js/app.js?v=editing-word-breakdown-20260506" in html
+    assert "static/js/app.js?v=edit-project-stats-20260509" in html
     assert "function renderGoalsDashboard(bundle)" in js
     assert "Structure goals" in js
     assert "Issue goals" in js
@@ -1341,6 +1347,169 @@ def extension_session_payload(**overrides):
     }
     payload.update(overrides)
     return payload
+
+
+def extension_issue_payload(**overrides):
+    payload = {
+        "documentId": "google-doc-a",
+        "projectId": "project-a",
+        "extensionIssueId": "extension-issue-1",
+        "note": "chapter three dialogue stiff and confusing here",
+        "snippet": "I was not sure why she said it that way.",
+        "documentUrl": "https://docs.google.com/document/d/google-doc-a/edit",
+        "source": "chrome-extension",
+        "quoteLocator": {
+            "strategy": "quote-finder",
+            "quote": "I was not sure why she said it that way.",
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_extension_issue_uses_bound_project_and_derives_dashboard_fields(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    binding_response = client.put(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "projectId": "project-a"},
+    )
+    assert binding_response.status_code == 200
+
+    response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(projectId=""),
+    )
+    issue = response.get_json()["issue"]
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert response.status_code == 201
+    assert issue["title"] == "chapter three dialogue stiff and confusing here"
+    assert issue["sectionLabel"] == "Chapter 3"
+    assert issue["type"] == "Dialogue"
+    assert issue["priority"] == "Medium"
+    assert issue["status"] == "Open"
+    assert issue["workflowStatus"] == "open"
+    assert issue["snippet"] == "I was not sure why she said it that way."
+    assert issue["documentId"] == "google-doc-a"
+    assert issue["source"] == "chrome-extension"
+    assert issue["quoteLocator"]["strategy"] == "quote-finder"
+    assert project_a["issues"][0]["id"] == "extension-issue-1"
+
+
+def test_extension_issue_requires_project_for_unbound_document(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(projectId=""),
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "projectId is required for unbound documents."}
+
+
+def test_extension_issue_can_bind_unbound_document_to_project(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(note="major pacing drag in scene twenty one"),
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert response.status_code == 201
+    assert state["extensionDocumentBindings"] == {"google-doc-a": "project-a"}
+    assert project_a["issues"][0]["sectionLabel"] == "Scene 21"
+    assert project_a["issues"][0]["type"] == "Pacing"
+    assert project_a["issues"][0]["priority"] == "High"
+
+
+def test_extension_issue_list_returns_current_doc_open_issues(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(),
+    )
+    assert response.status_code == 201
+
+    list_response = client.get("/api/extension/issues?documentId=google-doc-a")
+    payload = list_response.get_json()
+
+    assert list_response.status_code == 200
+    assert payload["project"]["id"] == "project-a"
+    assert [issue["id"] for issue in payload["issues"]] == ["extension-issue-1"]
+
+
+def test_extension_duplicate_issue_id_does_not_create_duplicate(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    first_response = client.post("/api/extension/issues", json=extension_issue_payload())
+    duplicate_response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(note="chapter three dialogue stiff"),
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert first_response.status_code == 201
+    assert duplicate_response.status_code == 200
+    assert duplicate_response.get_json()["duplicate"] is True
+    assert len(project_a["issues"]) == 1
+
+
+def test_state_api_preserves_extension_issues_from_stale_app_save(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    sync_response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(),
+    )
+    assert sync_response.status_code == 201
+
+    stale_payload = {
+        "projects": [
+            extension_project("project-a", "Project A"),
+            extension_project("project-b", "Project B"),
+        ],
+        "activeProjectId": "project-a",
+        "activeView": "dashboard",
+        "lastWorkspaceView": "dashboard",
+    }
+    save_response = client.put("/api/state", json=stale_payload)
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert save_response.status_code == 200
+    assert len(project_a["issues"]) == 1
+    assert project_a["issues"][0]["extensionIssueId"] == "extension-issue-1"
+    assert project_a["issues"][0]["quoteLocator"]["strategy"] == "quote-finder"
 
 
 def test_extension_session_for_project_a_does_not_affect_project_b(tmp_path):

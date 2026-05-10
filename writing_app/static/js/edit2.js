@@ -939,6 +939,47 @@ function renderEdit2IssueBoard(bundle) {
   `;
 }
 
+function formatEdit2NetWords(value) {
+  const netWords = number(value);
+  if (netWords > 0) return `+${formatNumber(netWords)}`;
+  if (netWords < 0) return `-${formatNumber(Math.abs(netWords))}`;
+  return formatNumber(0);
+}
+
+function renderEdit2ProjectStatsStrip(bundle) {
+  const stats = getEditProjectStats(bundle);
+  const sessionLabel = stats.sessionCount
+    ? `${formatNumber(stats.sessionCount)} editing session${stats.sessionCount === 1 ? "" : "s"}`
+    : "No editing sessions yet";
+
+  return `
+    <section class="card edit2-project-stats" aria-label="Editing project stats">
+      <div class="edit2-project-stats-head">
+        <p class="small-copy">Project edit stats</p>
+        <span class="pill">${escapeHtml(sessionLabel)}</span>
+      </div>
+      <div class="edit2-project-stat-grid">
+        <div class="edit2-project-stat">
+          <span>Words added</span>
+          <strong>${formatNumber(stats.wordsAdded)}</strong>
+        </div>
+        <div class="edit2-project-stat">
+          <span>Words removed</span>
+          <strong>${formatNumber(stats.wordsRemoved)}</strong>
+        </div>
+        <div class="edit2-project-stat">
+          <span>Net change</span>
+          <strong>${formatEdit2NetWords(stats.netWordsChanged)}</strong>
+        </div>
+        <div class="edit2-project-stat">
+          <span>Editing time</span>
+          <strong>${formatHours(stats.totalMinutes)}</strong>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderEdit2Overview(bundle, manuscript, chapters) {
   const nextFocusRecommendations = buildEdit2NextFocusRecommendations(bundle, chapters);
   noteEdit2PrimaryRecommendation(nextFocusRecommendations.primary);
@@ -949,6 +990,7 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
 
   return `
     <section class="stack">
+      ${renderEdit2ProjectStatsStrip(bundle)}
       ${renderEdit2NextFocusCards(nextFocusRecommendations)}
 
       <section class="card edit2-map-card edit2-map-card-full">
@@ -1056,6 +1098,7 @@ function renderEdit2ChapterPage(selectedChapter, manuscript, chapterIndex, chapt
   const unitLabel = getStructureUnitLabel(currentBundle());
   return `
     <section class="stack">
+      ${renderEdit2ProjectStatsStrip(currentBundle())}
       <section class="card hero">
         <div class="hero-panel edit2-hero edit2-detail-hero">
           <div class="section-head edit2-detail-hero-head">
@@ -1110,6 +1153,7 @@ function renderEdit2Dashboard(bundle) {
     edit2ViewMode = "overview";
     view.innerHTML = `
       <section class="stack">
+        ${renderEdit2ProjectStatsStrip(bundle)}
         <section class="card edit2-empty-state">
           <div class="section-head">
             <div>

@@ -71,6 +71,59 @@
   line-height: 1.5;
 }
 
+.edit2-project-stats {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: 18px;
+}
+
+.edit2-project-stats-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.edit2-project-stats-head .small-copy {
+  margin: 0;
+}
+
+.edit2-project-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(112px, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.edit2-project-stat {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 11px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(132, 91, 57, 0.08);
+}
+
+.edit2-project-stat span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.edit2-project-stat strong {
+  color: var(--ink);
+  font-size: 1.08rem;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
 .edit2-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
@@ -734,6 +787,14 @@
 }
 
 @media (max-width: 900px) {
+  .edit2-project-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .edit2-project-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .edit2-board-head-actions {
     width: 100%;
     justify-content: flex-start;
@@ -767,6 +828,10 @@
 }
 
 @media (max-width: 640px) {
+  .edit2-project-stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .edit2-primary-view-switch {
     border-radius: 18px;
   }
