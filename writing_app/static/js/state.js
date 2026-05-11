@@ -1329,6 +1329,31 @@ function getEditSessions(bundle) {
   return bundle.sessions.filter((session) => session.type === "edit");
 }
 
+function deriveEditingWordBreakdown(wordsEdited, netWordsChanged) {
+  const totalActivity = Math.max(0, number(wordsEdited));
+  const netWords = number(netWordsChanged);
+  if (totalActivity <= 0) {
+    return {
+      wordsAdded: netWords > 0 ? netWords : 0,
+      wordsRemoved: netWords < 0 ? Math.abs(netWords) : 0
+    };
+  }
+
+  const derivedWordsAdded = (totalActivity + netWords) / 2;
+  const derivedWordsRemoved = (totalActivity - netWords) / 2;
+  if (derivedWordsAdded < 0 || derivedWordsRemoved < 0) {
+    return {
+      wordsAdded: netWords > 0 ? netWords : 0,
+      wordsRemoved: netWords < 0 ? Math.abs(netWords) : 0
+    };
+  }
+
+  return {
+    wordsAdded: Math.round(derivedWordsAdded),
+    wordsRemoved: Math.round(derivedWordsRemoved)
+  };
+}
+
 function getEditingSessionWordBreakdown(session) {
   let wordsAdded = Math.max(0, number(session.wordsAdded));
   let wordsRemoved = Math.max(0, number(session.wordsRemoved));
@@ -1341,12 +1366,9 @@ function getEditingSessionWordBreakdown(session) {
     const hasNetWordsChanged = hasDocumentCounts || Number.isFinite(rawNetWordsChanged) && rawNetWordsChanged !== 0;
     if (hasNetWordsChanged) {
       const netWordsChanged = hasDocumentCounts ? endCount - startCount : rawNetWordsChanged;
-      const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;
-      const derivedWordsRemoved = (wordsEdited - netWordsChanged) / 2;
-      if (derivedWordsAdded >= 0 && derivedWordsRemoved >= 0) {
-        wordsAdded = Math.round(derivedWordsAdded);
-        wordsRemoved = Math.round(derivedWordsRemoved);
-      }
+      const derivedBreakdown = deriveEditingWordBreakdown(wordsEdited, netWordsChanged);
+      wordsAdded = derivedBreakdown.wordsAdded;
+      wordsRemoved = derivedBreakdown.wordsRemoved;
     }
   }
   return {

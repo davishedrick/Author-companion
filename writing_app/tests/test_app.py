@@ -1032,8 +1032,9 @@ def test_session_history_cards_surface_handoff_summary():
 
     assert "function renderSessionCard(bundle, session)" in js
     assert "function getEditingSessionWordBreakdown(session)" in js
+    assert "function deriveEditingWordBreakdown(wordsEdited, netWordsChanged)" in js
     assert "function formatEditingSessionWordTitle(session)" in js
-    assert "const derivedWordsAdded = (wordsEdited + netWordsChanged) / 2;" in js
+    assert "const derivedWordsAdded = (totalActivity + netWords) / 2;" in js
     assert (
         "return `+${formatNumber(breakdown.wordsAdded)} - ${formatNumber(breakdown.wordsRemoved)}`;"
         in js
@@ -1046,6 +1047,14 @@ def test_session_history_cards_surface_handoff_summary():
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
     assert "<strong>You:</strong>" in js
     assert "<strong>Next:</strong>" in js
+
+
+def test_edit_session_end_word_count_reconciles_project_total():
+    js = get_js_asset("edit.js")
+
+    assert "const submittedEndWordCount = nullableNumber(formData.get(\"sessionEndWordCount\"));" in js
+    assert "currentWordCount: submittedEndWordCount !== null" in js
+    assert "deriveEditingWordBreakdown(submittedWordsEdited, sessionNetWordsChanged)" in js
 
 
 def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
@@ -1907,6 +1916,44 @@ def test_extension_editing_session_derives_breakdown_from_total_and_net_change(t
     assert session["netWordsChanged"] == -112
 
 
+def test_extension_editing_session_net_change_updates_project_word_count(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    payload = save_extension_test_state(client)
+    payload["projects"][0]["project"]["currentWordCount"] = 1200
+    assert client.put("/api/state", json=payload).status_code == 200
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-net-only",
+            wordsEdited=116,
+            netWordsChanged=-112,
+            wordCountMethod="event-estimate",
+        ),
+    )
+    duplicate_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-net-only",
+            wordsEdited=116,
+            netWordsChanged=-112,
+            wordCountMethod="event-estimate",
+        ),
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert response.status_code == 201
+    assert duplicate_response.status_code == 200
+    assert project_a["project"]["currentWordCount"] == 1088
+
+
 def test_extension_editing_session_derives_net_change_from_document_counts(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
@@ -2119,6 +2166,62 @@ def test_state_api_preserves_extension_session_breakdown_from_stale_app_save(tmp
     assert session["wordCountMethod"] == "google-docs-api"
     assert session["extensionSessionId"] == "extension-session-edit-google-docs-api"
     assert project_a["project"]["currentWordCount"] == 1113
+
+
+def test_state_api_preserves_net_only_extension_session_word_count(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    payload = save_extension_test_state(client)
+    payload["projects"][0]["project"]["currentWordCount"] = 1200
+    assert client.put("/api/state", json=payload).status_code == 200
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-net-only",
+            wordsEdited=116,
+            netWordsChanged=-112,
+            wordCountMethod="event-estimate",
+        ),
+    )
+    assert sync_response.status_code == 201
+
+    stale_project = extension_project("project-a", "Project A")
+    stale_project["project"]["currentWordCount"] = 1200
+    stale_project["sessions"] = [
+        {
+            "id": "extension-session-edit-net-only",
+            "type": "edit",
+            "date": "2026-05-04T12:42:00.000Z",
+            "durationMinutes": 42,
+            "wordsWritten": 0,
+            "wordsEdited": 116,
+            "notes": "",
+            "passName": "Line edit",
+            "sectionLabel": "",
+        }
+    ]
+    save_response = client.put(
+        "/api/state",
+        json={
+            "projects": [stale_project],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+    session = project_a["sessions"][0]
+
+    assert save_response.status_code == 200
+    assert session["wordsAdded"] == 2
+    assert session["wordsRemoved"] == 114
+    assert session["netWordsChanged"] == -112
+    assert project_a["project"]["currentWordCount"] == 1088
 
 
 def test_state_is_isolated_per_signed_in_user(tmp_path):

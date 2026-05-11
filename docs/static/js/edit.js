@@ -890,6 +890,7 @@ function bindEditDashboardEvents(bundle) {
       event.preventDefault();
       const formData = new FormData(editSessionForm);
       const isEditingExisting = Boolean(editingEditSessionId);
+      const existingSession = isEditingExisting ? bundle.sessions.find((item) => item.id === editingEditSessionId) : null;
       const existingSnapshot = isEditingExisting ? getSnapshotForSession(bundle, editingEditSessionId) : null;
       const structureUnitName = String(formData.get("sectionLabel") || "").trim();
       const outcomeStatus = String(formData.get("sessionOutcomeStatus") || "partial");
@@ -899,16 +900,37 @@ function bindEditDashboardEvents(bundle) {
       const confidenceLevel = String(formData.get("sessionConfidenceLevel") || "").trim();
       const excerpt = String(formData.get("sessionExcerpt") || "").trim();
       const issueIds = readSelectedSessionIssueIds("edit-session-issue-links-field");
+      const submittedWordsEdited = Math.max(0, number(formData.get("wordsEdited")));
+      const submittedEndWordCount = nullableNumber(formData.get("sessionEndWordCount"));
       const sessionFocusKey = normalizeEditFocusKey(
         existingSnapshot?.focusKey || pendingCompletedEditSession?.focusKey || bundle.editing.focusKey
       );
       const sessionTimestamp = pendingCompletedEditSession?.endedAt || new Date().toISOString();
+      const sessionStartWordCount = submittedEndWordCount !== null
+        ? isEditingExisting
+          ? nullableNumber(existingSnapshot?.startWordCount) ?? number(bundle.project.currentWordCount)
+          : number(bundle.project.currentWordCount)
+        : null;
+      const sessionNetWordsChanged = submittedEndWordCount !== null && sessionStartWordCount !== null
+        ? submittedEndWordCount - sessionStartWordCount
+        : number(existingSession?.netWordsChanged);
+      const sessionWordBreakdown = submittedEndWordCount !== null
+        ? deriveEditingWordBreakdown(submittedWordsEdited, sessionNetWordsChanged)
+        : {
+            wordsAdded: number(existingSession?.wordsAdded),
+            wordsRemoved: number(existingSession?.wordsRemoved)
+          };
       const session = normalizeSession({
         id: editingEditSessionId || createId(),
         type: "edit",
         date: new Date(`${formData.get("sessionDate")}T12:00:00`).toISOString(),
         durationMinutes: Math.max(1, number(formData.get("durationMinutes"))),
-        wordsEdited: Math.max(0, number(formData.get("wordsEdited"))),
+        wordsEdited: submittedWordsEdited,
+        wordsAdded: sessionWordBreakdown.wordsAdded,
+        wordsRemoved: sessionWordBreakdown.wordsRemoved,
+        netWordsChanged: sessionNetWordsChanged,
+        startDocumentWordCount: sessionStartWordCount ?? number(existingSession?.startDocumentWordCount),
+        endDocumentWordCount: submittedEndWordCount ?? number(existingSession?.endDocumentWordCount),
         notes: String(formData.get("sessionNotes") || "").trim(),
         focusKey: sessionFocusKey,
         passName: "",
@@ -943,7 +965,13 @@ function bindEditDashboardEvents(bundle) {
           issues: nextIssues,
           sessions: isEditingExisting
             ? projectBundle.sessions.map((item) => item.id === editingEditSessionId ? session : item)
-            : [session, ...projectBundle.sessions]
+            : [session, ...projectBundle.sessions],
+          project: {
+            ...projectBundle.project,
+            currentWordCount: submittedEndWordCount !== null
+              ? Math.max(0, submittedEndWordCount)
+              : number(projectBundle.project.currentWordCount)
+          }
         };
         return upsertSessionSnapshot(updatedBundle, createSessionSnapshot({
           id: session.id,
@@ -959,11 +987,11 @@ function bindEditDashboardEvents(bundle) {
           structureUnitId: snapshotToPreserve?.structureUnitId || "",
           structureUnitName,
           structureUnitType: snapshotToPreserve?.structureUnitType || getStructureUnitLower(projectBundle),
-          startWordCount: snapshotToPreserve?.startWordCount,
-          endWordCount: formData.get("sessionEndWordCount"),
-          wordsAdded: snapshotToPreserve?.wordsAdded,
-          wordsRemoved: snapshotToPreserve?.wordsRemoved,
-          netWords: snapshotToPreserve?.netWords,
+          startWordCount: sessionStartWordCount ?? snapshotToPreserve?.startWordCount,
+          endWordCount: submittedEndWordCount ?? snapshotToPreserve?.endWordCount,
+          wordsAdded: sessionWordBreakdown.wordsAdded,
+          wordsRemoved: sessionWordBreakdown.wordsRemoved,
+          netWords: sessionNetWordsChanged,
           intendedGoal: snapshotToPreserve?.intendedGoal || "revise",
           outcomeStatus,
           focusKey: sessionFocusKey,
@@ -1203,7 +1231,7 @@ function openEditSessionModal(sessionId = null) {
     form.elements.durationMinutes.value = String(Math.max(1, number(existingSession.durationMinutes)));
     form.elements.sectionLabel.value = existingSnapshot?.structureUnitName || existingSession.sectionLabel || "";
     form.elements.wordsEdited.value = String(number(existingSession.wordsEdited));
-    form.elements.sessionEndWordCount.value = existingSnapshot?.endWordCount ?? "";
+    form.elements.sessionEndWordCount.value = existingSnapshot?.endWordCount ?? nullableNumber(existingSession.endDocumentWordCount) ?? "";
     form.querySelector(`input[name="sessionOutcomeStatus"][value="${existingSnapshot?.outcomeStatus || "partial"}"]`)?.click();
     form.elements.sessionAccomplished.value = existingSnapshot?.accomplished || "";
     form.elements.sessionNextStep.value = existingSnapshot?.nextStep || "";
