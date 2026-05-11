@@ -266,11 +266,73 @@ def _add_project_words(project: dict[str, Any], delta: int) -> None:
     if delta <= 0:
         return
 
+    _apply_project_word_delta(project, delta)
+
+
+def _apply_project_word_delta(project: dict[str, Any], delta: int) -> None:
+    if delta == 0:
+        return
+
     project_bundle = project.get("project")
     if isinstance(project_bundle, dict):
-        project_bundle["currentWordCount"] = (
-            _non_negative_int(project_bundle.get("currentWordCount")) + delta
+        project_bundle["currentWordCount"] = max(
+            0,
+            _non_negative_int(project_bundle.get("currentWordCount"))
+            + _int_value(delta),
         )
+
+
+def _set_project_current_word_count(project: dict[str, Any], word_count: int) -> None:
+    project_bundle = project.get("project")
+    if isinstance(project_bundle, dict):
+        project_bundle["currentWordCount"] = _non_negative_int(word_count)
+
+
+def _session_end_word_count(session: dict[str, Any]) -> int | None:
+    if not isinstance(session, dict):
+        return None
+    if session.get("measurementPending"):
+        return None
+    if _clean_text(session.get("wordCountMethod")) != "google-docs-api":
+        return None
+    if "endDocumentWordCount" not in session:
+        return None
+    try:
+        parsed = float(session.get("endDocumentWordCount"))
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return round(parsed)
+
+
+def _session_timestamp(session: dict[str, Any]) -> str:
+    return _clean_text(
+        session.get("endedAt") or session.get("date") or session.get("createdAt")
+    )
+
+
+def _sync_project_word_count_to_latest_extension_snapshot(
+    project: dict[str, Any],
+) -> None:
+    sessions = project.get("sessions")
+    if not isinstance(sessions, list):
+        return
+
+    latest_session = max(
+        (
+            session
+            for session in sessions
+            if isinstance(session, dict)
+            and (session.get("source") == "chrome-extension" or session.get("extensionSessionId"))
+            and _session_end_word_count(session) is not None
+        ),
+        key=_session_timestamp,
+        default=None,
+    )
+    latest_word_count = _session_end_word_count(latest_session) if latest_session else None
+    if latest_word_count is not None:
+        _set_project_current_word_count(project, latest_word_count)
 
 
 def get_active_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -505,6 +567,9 @@ def append_extension_session(
             if has_word_breakdown
             else _non_negative_int(payload.get("wordsEdited"))
         )
+        if has_word_breakdown and not has_net_words_changed:
+            net_words_changed = words_added - words_removed
+            has_net_words_changed = True
         if not has_word_breakdown and has_net_words_changed:
             derived_words_added, derived_words_removed = _derive_word_breakdown(
                 words_edited, net_words_changed
@@ -537,12 +602,20 @@ def append_extension_session(
         None,
     )
     if existing_session:
+        existing_has_word_count_snapshot = _session_end_word_count(existing_session) is not None
+        existing_net_words_changed = (
+            _int_value(existing_session.get("netWordsChanged"))
+            if not existing_has_word_count_snapshot
+            else 0
+        )
         if word_count_method:
             existing_session["wordCountMethod"] = word_count_method
         if "startDocumentWordCount" in payload:
             existing_session["startDocumentWordCount"] = start_document_word_count
         if "endDocumentWordCount" in payload:
             existing_session["endDocumentWordCount"] = end_document_word_count
+            if not measurement_pending:
+                _set_project_current_word_count(project, end_document_word_count)
         if "netWordsChanged" in payload:
             existing_session["netWordsChanged"] = net_words_changed
         if "measurementPending" in payload:
@@ -553,7 +626,8 @@ def append_extension_session(
             )
             if words_written > existing_words_written:
                 existing_session["wordsWritten"] = words_written
-                _add_project_words(project, words_written - existing_words_written)
+                if "endDocumentWordCount" not in payload:
+                    _add_project_words(project, words_written - existing_words_written)
         elif normalized_type == "edit":
             existing_words_edited = _non_negative_int(
                 existing_session.get("wordsEdited")
@@ -570,6 +644,15 @@ def append_extension_session(
                 existing_session["wordsEdited"] = words_edited
             if words_edited > existing_words_edited:
                 existing_session["wordsEdited"] = words_edited
+            if (
+                "endDocumentWordCount" not in payload
+                and has_net_words_changed
+                and not measurement_pending
+            ):
+                _apply_project_word_delta(
+                    project,
+                    net_words_changed - existing_net_words_changed,
+                )
         return existing_session, _project_summary(project), True
 
     bindings[document_id] = project_id
@@ -603,7 +686,13 @@ def append_extension_session(
     else:
         session["passName"] = ""
         session["sectionLabel"] = ""
-        _add_project_words(project, words_written)
+        if "endDocumentWordCount" not in payload:
+            _add_project_words(project, words_written)
+
+    if "endDocumentWordCount" in payload and not measurement_pending:
+        _set_project_current_word_count(project, end_document_word_count)
+    elif normalized_type == "edit" and has_net_words_changed and not measurement_pending:
+        _apply_project_word_delta(project, net_words_changed)
 
     sessions.append(session)
     return session, _project_summary(project), False
@@ -673,6 +762,7 @@ def preserve_extension_sessions(
             existing_session = extension_sessions_by_id.get(session_id)
             if not existing_session:
                 continue
+            incoming_had_net_words_changed = "netWordsChanged" in incoming_session
             for field in [
                 "wordsAdded",
                 "wordsRemoved",
@@ -689,6 +779,16 @@ def preserve_extension_sessions(
             ]:
                 if field not in incoming_session and field in existing_session:
                     incoming_session[field] = existing_session[field]
+            if (
+                incoming_session.get("type") == "edit"
+                and not incoming_had_net_words_changed
+                and _session_end_word_count(incoming_session) is None
+                and not incoming_session.get("measurementPending")
+            ):
+                _apply_project_word_delta(
+                    incoming_project,
+                    _int_value(incoming_session.get("netWordsChanged")),
+                )
 
         for session in extension_sessions:
             session_id = session.get("extensionSessionId") or session.get("id")
@@ -701,6 +801,15 @@ def preserve_extension_sessions(
                         project_bundle["currentWordCount"] = _non_negative_int(
                             project_bundle.get("currentWordCount")
                         ) + _non_negative_int(session.get("wordsWritten"))
+                elif (
+                    session.get("type") == "edit"
+                    and _session_end_word_count(session) is None
+                    and not session.get("measurementPending")
+                ):
+                    _apply_project_word_delta(
+                        incoming_project,
+                        _int_value(session.get("netWordsChanged")),
+                    )
 
         incoming_issues = incoming_project.setdefault("issues", [])
         existing_issues = existing_project.get("issues", [])
@@ -747,5 +856,7 @@ def preserve_extension_sessions(
             if issue_id not in incoming_issue_ids:
                 incoming_issues.insert(0, issue)
                 incoming_issue_ids.add(issue_id)
+
+        _sync_project_word_count_to_latest_extension_snapshot(incoming_project)
 
     return incoming_state
