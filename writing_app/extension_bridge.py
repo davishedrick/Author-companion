@@ -159,6 +159,7 @@ def _project_summary(bundle: dict[str, Any]) -> dict[str, Any]:
         "id": _clean_text(bundle.get("id")),
         "bookTitle": _clean_text(project.get("bookTitle")) or "Untitled project",
         "manuscriptType": _clean_text(project.get("manuscriptType")),
+        "currentWordCount": _non_negative_int(project.get("currentWordCount")),
         "status": _clean_text(bundle.get("status")) or "active",
     }
 
@@ -205,6 +206,13 @@ def _bindings(state: dict[str, Any]) -> dict[str, str]:
         bindings = {}
         state["extensionDocumentBindings"] = bindings
     return bindings
+
+
+def _deleted_extension_session_ids(state: dict[str, Any]) -> set[str]:
+    session_ids = state.get("deletedExtensionSessionIds")
+    if not isinstance(session_ids, list):
+        return set()
+    return {_clean_text(session_id) for session_id in session_ids if _clean_text(session_id)}
 
 
 def _parse_iso(value: Any, field_name: str) -> str:
@@ -733,6 +741,18 @@ def preserve_extension_sessions(
         ):
             continue
 
+        deleted_session_ids = _deleted_extension_session_ids(incoming_state)
+        if deleted_session_ids:
+            incoming_sessions[:] = [
+                session
+                for session in incoming_sessions
+                if not (
+                    isinstance(session, dict)
+                    and (session.get("extensionSessionId") or session.get("id"))
+                    in deleted_session_ids
+                )
+            ]
+
         incoming_ids = {
             session.get("extensionSessionId") or session.get("id")
             for session in incoming_sessions
@@ -747,6 +767,8 @@ def preserve_extension_sessions(
                 session.get("source") == "chrome-extension"
                 or session.get("extensionSessionId")
             )
+            and (session.get("extensionSessionId") or session.get("id"))
+            not in deleted_session_ids
         ]
         extension_sessions_by_id = {
             session.get("extensionSessionId") or session.get("id"): session
