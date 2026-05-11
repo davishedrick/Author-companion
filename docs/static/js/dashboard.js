@@ -1953,11 +1953,13 @@ function bindSessionActions() {
     button.addEventListener("click", () => {
       const sessionId = button.dataset.id;
       const deletedSession = currentBundle()?.sessions.find((item) => item.id === sessionId);
+      markExtensionSessionDeleted(deletedSession);
       updateCurrentBundle((projectBundle) => {
         const session = projectBundle.sessions.find((item) => item.id === sessionId);
-        const nextWordCount = session?.type === "edit"
-          ? number(projectBundle.project.currentWordCount)
-          : Math.max(0, number(projectBundle.project.currentWordCount) - number(session?.wordsWritten));
+        const nextWordCount = Math.max(
+          0,
+          number(projectBundle.project.currentWordCount) - getSessionManuscriptWordDelta(session)
+        );
         return removeSessionSnapshot({
           ...projectBundle,
           sessions: projectBundle.sessions.filter((item) => item.id !== sessionId),

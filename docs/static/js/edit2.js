@@ -960,19 +960,19 @@ function renderEdit2ProjectStatsStrip(bundle) {
       </div>
       <div class="edit2-project-stat-grid">
         <div class="edit2-project-stat edit2-project-stat--current">
-          <span>Current words</span>
+          <span>Current manuscript words</span>
           <strong>${formatNumber(bundle.project.currentWordCount)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Words added</span>
+          <span>Total words added</span>
           <strong>${formatNumber(stats.wordsAdded)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Words removed</span>
+          <span>Total words removed</span>
           <strong>${formatNumber(stats.wordsRemoved)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Net change</span>
+          <span>Net manuscript change</span>
           <strong>${formatEdit2NetWords(stats.netWordsChanged)}</strong>
         </div>
         <div class="edit2-project-stat">

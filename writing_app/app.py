@@ -332,6 +332,10 @@ def put_state():
         payload["extensionDocumentBindings"] = existing_state.get(
             "extensionDocumentBindings", {}
         )
+    if isinstance(payload, dict) and "deletedExtensionSessionIds" not in payload:
+        payload["deletedExtensionSessionIds"] = existing_state.get(
+            "deletedExtensionSessionIds", []
+        )
     if isinstance(payload, dict):
         payload = preserve_extension_sessions(payload, existing_state)
     return jsonify(save_state(payload, session.get("user_id")))

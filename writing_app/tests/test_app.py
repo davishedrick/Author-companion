@@ -273,10 +273,10 @@ def test_static_assets_load():
     assert "function renderPlotDashboard(bundle)" in get_js_asset("plot.js")
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
     assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
-    assert "Current words" in get_js_asset("edit2.js")
-    assert "Words added" in get_js_asset("edit2.js")
-    assert "Words removed" in get_js_asset("edit2.js")
-    assert "Net change" in get_js_asset("edit2.js")
+    assert "Current manuscript words" in get_js_asset("edit2.js")
+    assert "Total words added" in get_js_asset("edit2.js")
+    assert "Total words removed" in get_js_asset("edit2.js")
+    assert "Net manuscript change" in get_js_asset("edit2.js")
     assert ".edit2-project-stats {" in get_css_asset("edit2.css")
     assert ".edit2-project-stat--current {" in get_css_asset("edit2.css")
     assert ".edit2-project-stat-grid {" in get_css_asset("edit2.css")
@@ -1057,6 +1057,15 @@ def test_edit_session_end_word_count_reconciles_project_total():
     assert "deriveEditingWordBreakdown(submittedWordsEdited, sessionNetWordsChanged)" in js
 
 
+def test_session_delete_reconciles_manuscript_total_and_tombstones_extension_sessions():
+    js = get_app_js()
+
+    assert "function getSessionManuscriptWordDelta(session)" in js
+    assert "markExtensionSessionDeleted(deletedSession);" in js
+    assert "number(projectBundle.project.currentWordCount) - getSessionManuscriptWordDelta(session)" in js
+    assert "deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds)" in js
+
+
 def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
     js = get_app_js()
     css = get_css_asset("edit.css")
@@ -1199,6 +1208,7 @@ def test_state_api_returns_default_state_when_empty(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "deletedExtensionSessionIds": [],
     }
 
 
@@ -1249,6 +1259,7 @@ def test_state_api_persists_snapshot_to_sqlite(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "deletedExtensionSessionIds": [],
     }
 
     put_response = client.put("/api/state", json=payload)
@@ -1784,6 +1795,22 @@ def test_extension_writing_session_preserves_google_docs_word_count_metadata(tmp
     assert project_a["project"]["currentWordCount"] == 1250
 
 
+def test_extension_project_summary_includes_current_word_count(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    payload = save_extension_test_state(client)
+    payload["projects"][0]["project"]["currentWordCount"] = 1200
+    assert client.put("/api/state", json=payload).status_code == 200
+
+    response = client.get("/api/projects")
+    projects = response.get_json()["projects"]
+    project_a = next(project for project in projects if project["id"] == "project-a")
+
+    assert response.status_code == 200
+    assert project_a["currentWordCount"] == 1200
+
+
 def test_extension_writing_session_invalid_words_written_normalizes_to_zero(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
@@ -2046,6 +2073,7 @@ def test_extension_document_binding_returns_same_project_after_save(tmp_path):
         "id": "project-a",
         "bookTitle": "Project A",
         "manuscriptType": "Novel",
+        "currentWordCount": 0,
         "status": "active",
     }
 
@@ -2224,6 +2252,39 @@ def test_state_api_preserves_net_only_extension_session_word_count(tmp_path):
     assert project_a["project"]["currentWordCount"] == 1088
 
 
+def test_state_api_does_not_restore_deleted_extension_session(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=148),
+    )
+    assert sync_response.status_code == 201
+
+    stale_project = extension_project("project-a", "Project A")
+    save_response = client.put(
+        "/api/state",
+        json={
+            "projects": [stale_project],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+            "deletedExtensionSessionIds": ["extension-session-1"],
+        },
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert save_response.status_code == 200
+    assert project_a["sessions"] == []
+    assert project_a["project"]["currentWordCount"] == 0
+    assert state["deletedExtensionSessionIds"] == ["extension-session-1"]
+
+
 def test_state_is_isolated_per_signed_in_user(tmp_path):
     use_temp_state_db(tmp_path)
 
@@ -2259,6 +2320,7 @@ def test_state_is_isolated_per_signed_in_user(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "deletedExtensionSessionIds": [],
     }
 
 

@@ -436,7 +436,8 @@ const defaultState = {
   projects: [],
   activeProjectId: null,
   themePreference: "light",
-  sidebarCollapsed: false
+  sidebarCollapsed: false,
+  deletedExtensionSessionIds: []
 };
 
 let persistenceMode = "local";
@@ -570,7 +571,8 @@ function normalizeLoadedState(snapshot) {
         ? snapshot.activeProjectId
         : activeProjects[0]?.id || null,
       themePreference: normalizeThemePreference(snapshot.themePreference),
-      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed)
+      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
+      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
     };
   }
 
@@ -591,7 +593,8 @@ function normalizeLoadedState(snapshot) {
       projects: [migrated],
       activeProjectId: migrated.id,
       themePreference: normalizeThemePreference(snapshot.themePreference),
-      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed)
+      sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
+      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
     };
   }
 
@@ -621,6 +624,11 @@ function normalizeThemePreference(value) {
 
 function normalizeSidebarCollapsed(value) {
   return Boolean(value);
+}
+
+function normalizeDeletedExtensionSessionIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((sessionId) => String(sessionId || "").trim()).filter(Boolean))];
 }
 
 function normalizePersistedSnapshot(snapshot) {
@@ -1095,6 +1103,7 @@ function serializeStateSnapshot() {
     activeProjectId: state.activeProjectId,
     themePreference: normalizeThemePreference(state.themePreference),
     sidebarCollapsed: normalizeSidebarCollapsed(state.sidebarCollapsed),
+    deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds),
     activeView,
     lastWorkspaceView
   };
@@ -1327,6 +1336,42 @@ function getWriteSessions(bundle) {
 
 function getEditSessions(bundle) {
   return bundle.sessions.filter((session) => session.type === "edit");
+}
+
+function hasSessionDocumentWordCounts(session) {
+  const startCount = nullableNumber(session?.startDocumentWordCount);
+  const endCount = nullableNumber(session?.endDocumentWordCount);
+  return startCount !== null && endCount !== null && (startCount > 0 || endCount > 0);
+}
+
+function getSessionManuscriptWordDelta(session) {
+  if (!session) return 0;
+  if (hasSessionDocumentWordCounts(session)) {
+    return number(session.endDocumentWordCount) - number(session.startDocumentWordCount);
+  }
+  if (session.type === "edit") {
+    const rawNetWordsChanged = Number(session.netWordsChanged);
+    if (Number.isFinite(rawNetWordsChanged) && rawNetWordsChanged !== 0) {
+      return rawNetWordsChanged;
+    }
+    return number(session.wordsAdded) - number(session.wordsRemoved);
+  }
+  return number(session.wordsWritten);
+}
+
+function extensionSessionIdForDeletion(session) {
+  if (!session) return "";
+  if (session.extensionSessionId) return String(session.extensionSessionId);
+  return session.source === "chrome-extension" && session.id ? String(session.id) : "";
+}
+
+function markExtensionSessionDeleted(session) {
+  const sessionId = extensionSessionIdForDeletion(session);
+  if (!sessionId) return;
+  state.deletedExtensionSessionIds = normalizeDeletedExtensionSessionIds([
+    ...(state.deletedExtensionSessionIds || []),
+    sessionId
+  ]);
 }
 
 function deriveEditingWordBreakdown(wordsEdited, netWordsChanged) {
