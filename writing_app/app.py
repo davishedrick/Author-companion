@@ -38,6 +38,12 @@ from state_store import load_state, save_state
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "author-engine-dev-secret")
+app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
+    "SESSION_COOKIE_SAMESITE", "None"
+)
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.environ.get("SESSION_COOKIE_SECURE", "true").lower() != "false"
+)
 app.config["MAIL_HOST"] = os.environ.get("MAIL_HOST", "smtp.gmail.com").strip()
 app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", "587"))
 app.config["MAIL_USERNAME"] = os.environ.get(

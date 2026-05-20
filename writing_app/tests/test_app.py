@@ -104,6 +104,17 @@ def test_first_account_signup_unlocks_home_page(tmp_path):
     assert "Scriptor" in response.get_data(as_text=True)
 
 
+def test_login_cookie_supports_extension_api_credentials(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+
+    response = register_and_login(client)
+
+    set_cookie = response.headers["Set-Cookie"]
+    assert "SameSite=None" in set_cookie
+    assert "Secure" in set_cookie
+
+
 def test_login_page_shows_forgot_password_link_after_accounts_exist(tmp_path):
     use_temp_state_db(tmp_path)
 
