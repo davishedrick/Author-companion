@@ -343,6 +343,61 @@ def _sync_project_word_count_to_latest_extension_snapshot(
         _set_project_current_word_count(project, latest_word_count)
 
 
+def _preserve_extension_session_metrics(
+    project: dict[str, Any],
+    incoming_session: dict[str, Any],
+    existing_session: dict[str, Any],
+) -> None:
+    session_type = _clean_text(
+        existing_session.get("type") or incoming_session.get("type")
+    )
+    existing_has_word_count_snapshot = _session_end_word_count(existing_session) is not None
+
+    if not existing_has_word_count_snapshot:
+        if session_type == "write":
+            existing_words_written = _non_negative_int(
+                existing_session.get("wordsWritten")
+            )
+            incoming_words_written = _non_negative_int(
+                incoming_session.get("wordsWritten")
+            )
+            if existing_words_written > incoming_words_written:
+                _add_project_words(
+                    project, existing_words_written - incoming_words_written
+                )
+        elif session_type == "edit" and not existing_session.get("measurementPending"):
+            existing_net_words_changed = _int_value(
+                existing_session.get("netWordsChanged")
+            )
+            incoming_net_words_changed = _int_value(
+                incoming_session.get("netWordsChanged")
+            )
+            if existing_net_words_changed != incoming_net_words_changed:
+                _apply_project_word_delta(
+                    project, existing_net_words_changed - incoming_net_words_changed
+                )
+
+    for field in [
+        "type",
+        "wordsWritten",
+        "wordsEdited",
+        "wordsAdded",
+        "wordsRemoved",
+        "netWordsChanged",
+        "wordCountMethod",
+        "measurementPending",
+        "startDocumentWordCount",
+        "endDocumentWordCount",
+        "source",
+        "documentId",
+        "documentUrl",
+        "extensionSessionId",
+        "createdAt",
+    ]:
+        if field in existing_session:
+            incoming_session[field] = existing_session[field]
+
+
 def get_active_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         _project_summary(project)
@@ -784,33 +839,9 @@ def preserve_extension_sessions(
             existing_session = extension_sessions_by_id.get(session_id)
             if not existing_session:
                 continue
-            incoming_had_net_words_changed = "netWordsChanged" in incoming_session
-            for field in [
-                "wordsAdded",
-                "wordsRemoved",
-                "netWordsChanged",
-                "wordCountMethod",
-                "measurementPending",
-                "startDocumentWordCount",
-                "endDocumentWordCount",
-                "source",
-                "documentId",
-                "documentUrl",
-                "extensionSessionId",
-                "createdAt",
-            ]:
-                if field not in incoming_session and field in existing_session:
-                    incoming_session[field] = existing_session[field]
-            if (
-                incoming_session.get("type") == "edit"
-                and not incoming_had_net_words_changed
-                and _session_end_word_count(incoming_session) is None
-                and not incoming_session.get("measurementPending")
-            ):
-                _apply_project_word_delta(
-                    incoming_project,
-                    _int_value(incoming_session.get("netWordsChanged")),
-                )
+            _preserve_extension_session_metrics(
+                incoming_project, incoming_session, existing_session
+            )
 
         for session in extension_sessions:
             session_id = session.get("extensionSessionId") or session.get("id")

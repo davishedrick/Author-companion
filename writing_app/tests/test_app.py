@@ -2188,6 +2188,53 @@ def test_state_api_preserves_extension_sessions_from_stale_app_save(tmp_path):
     assert project_a["project"]["currentWordCount"] == 148
 
 
+def test_state_api_repairs_stale_extension_writing_session_word_count(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=148),
+    )
+    assert sync_response.status_code == 201
+
+    stale_project = extension_project("project-a", "Project A")
+    stale_project["sessions"] = [
+        {
+            "id": "extension-session-1",
+            "type": "write",
+            "date": "2026-05-04T12:42:00.000Z",
+            "durationMinutes": 42,
+            "wordsWritten": 0,
+            "wordsEdited": 0,
+            "notes": "",
+            "source": "chrome-extension",
+            "extensionSessionId": "extension-session-1",
+            "wordCountMethod": "event-estimate",
+            "measurementPending": False,
+        }
+    ]
+    save_response = client.put(
+        "/api/state",
+        json={
+            "projects": [stale_project],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+
+    assert save_response.status_code == 200
+    assert len(project_a["sessions"]) == 1
+    assert project_a["sessions"][0]["wordsWritten"] == 148
+    assert project_a["project"]["currentWordCount"] == 148
+
+
 def test_state_api_preserves_extension_session_breakdown_from_stale_app_save(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
@@ -2297,6 +2344,70 @@ def test_state_api_preserves_net_only_extension_session_word_count(tmp_path):
     session = project_a["sessions"][0]
 
     assert save_response.status_code == 200
+    assert session["wordsAdded"] == 2
+    assert session["wordsRemoved"] == 114
+    assert session["netWordsChanged"] == -112
+    assert project_a["project"]["currentWordCount"] == 1088
+
+
+def test_state_api_repairs_stale_extension_edit_session_net_change(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    payload = save_extension_test_state(client)
+    payload["projects"][0]["project"]["currentWordCount"] = 1200
+    assert client.put("/api/state", json=payload).status_code == 200
+    sync_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-net-only",
+            wordsEdited=116,
+            netWordsChanged=-112,
+            wordCountMethod="event-estimate",
+        ),
+    )
+    assert sync_response.status_code == 201
+
+    stale_project = extension_project("project-a", "Project A")
+    stale_project["project"]["currentWordCount"] = 1200
+    stale_project["sessions"] = [
+        {
+            "id": "extension-session-edit-net-only",
+            "type": "edit",
+            "date": "2026-05-04T12:42:00.000Z",
+            "durationMinutes": 42,
+            "wordsWritten": 0,
+            "wordsEdited": 0,
+            "wordsAdded": 0,
+            "wordsRemoved": 0,
+            "netWordsChanged": 0,
+            "notes": "",
+            "passName": "Line edit",
+            "sectionLabel": "",
+            "source": "chrome-extension",
+            "extensionSessionId": "extension-session-edit-net-only",
+            "wordCountMethod": "event-estimate",
+            "measurementPending": False,
+        }
+    ]
+    save_response = client.put(
+        "/api/state",
+        json={
+            "projects": [stale_project],
+            "activeProjectId": "project-a",
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
+    session = project_a["sessions"][0]
+
+    assert save_response.status_code == 200
+    assert session["wordsEdited"] == 116
     assert session["wordsAdded"] == 2
     assert session["wordsRemoved"] == 114
     assert session["netWordsChanged"] == -112
