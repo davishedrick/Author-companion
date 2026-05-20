@@ -219,7 +219,7 @@ def test_password_reset_token_cannot_be_reused(tmp_path):
 def test_html_references_separate_css_and_js_assets():
     html = get_html()
 
-    asset_version = "ui-polish-20260518"
+    asset_version = "pythonanywhere-ui-20260520"
     assert (
         f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />'
         in html
@@ -235,7 +235,7 @@ def test_static_assets_load():
     js = get_app_js()
 
     for filename in CSS_FILES:
-        assert f'@import url("./{filename}");' in css
+        assert f'@import url("./{filename}?v=pythonanywhere-ui-20260520");' in css
     assert "persistAndRender();" in js
     assert ":root {" in get_css_asset("base.css")
     assert ".app-shell {" in get_css_asset("layout.css")
@@ -904,7 +904,7 @@ def test_goals_dashboard_view_and_vertical_navigation_are_present():
     assert 'label: "Activity", view: "sessions"' in js
     assert 'activeView = button.dataset.globalView;' in js
     assert "<h2>Activity</h2>" in js
-    assert "static/js/app.js?v=ui-polish-20260518" in html
+    assert "static/js/app.js?v=pythonanywhere-ui-20260520" in html
     assert "function renderGoalsDashboard(bundle)" in js
     assert 'data-goal-filter="all"' in js
     assert 'data-goal-filter="writing"' in js

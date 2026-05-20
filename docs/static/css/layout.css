@@ -306,6 +306,22 @@
   fill: none;
 }
 
+.sidebar-action-icon svg *,
+.nav-icon svg *,
+.button-line-icon svg *,
+.menu-chevron svg *,
+.project-card-menu-btn svg *,
+.activity-kpi-icon svg *,
+.activity-timeline-dot svg *,
+.goals-summary-icon svg *,
+.goals-progress-ring svg *,
+.goals-row-icon svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .settings-grid {
   display: grid;
   gap: 16px;

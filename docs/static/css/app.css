@@ -1,10 +1,10 @@
-@import url("./base.css");
-@import url("./layout.css");
-@import url("./dashboard.css");
-@import url("./plot.css");
-@import url("./edit.css");
-@import url("./edit2.css");
-@import url("./themes.css");
+@import url("./base.css?v=pythonanywhere-ui-20260520");
+@import url("./layout.css?v=pythonanywhere-ui-20260520");
+@import url("./dashboard.css?v=pythonanywhere-ui-20260520");
+@import url("./plot.css?v=pythonanywhere-ui-20260520");
+@import url("./edit.css?v=pythonanywhere-ui-20260520");
+@import url("./edit2.css?v=pythonanywhere-ui-20260520");
+@import url("./themes.css?v=pythonanywhere-ui-20260520");
 
 .edit2-project-stat--current span,
 .project-stat-card.dark p,
