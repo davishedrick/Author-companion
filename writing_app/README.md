@@ -1,6 +1,6 @@
-# The Author Engine
+# Scriptor
 
-The Author Engine is a Flask writing workspace for planning, drafting, editing,
+Scriptor is a Flask writing workspace for planning, drafting, editing,
 goal tracking, and project export. The hosted Flask app adds account login,
 server-side SQLite persistence, and password reset email on top of the browser UI.
 

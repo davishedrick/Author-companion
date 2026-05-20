@@ -101,7 +101,7 @@ def test_first_account_signup_unlocks_home_page(tmp_path):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "The Author Engine" in response.get_data(as_text=True)
+    assert "Scriptor" in response.get_data(as_text=True)
 
 
 def test_login_page_shows_forgot_password_link_after_accounts_exist(tmp_path):
@@ -137,7 +137,7 @@ def test_password_reset_request_sends_email_and_updates_password(tmp_path):
     assert "a password reset link has been sent" in html
     assert len(outbox) == 1
     assert outbox[0]["to"] == "writer@example.com"
-    assert "Reset your Author Engine password" in outbox[0]["subject"]
+    assert "Reset your Scriptor password" in outbox[0]["subject"]
 
     token_match = re.search(r"/reset-password/([A-Za-z0-9._=-]+)", outbox[0]["body"])
     assert token_match is not None
@@ -219,7 +219,7 @@ def test_password_reset_token_cannot_be_reused(tmp_path):
 def test_html_references_separate_css_and_js_assets():
     html = get_html()
 
-    asset_version = "edit-project-stats-20260509"
+    asset_version = "ui-polish-20260518"
     assert (
         f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />'
         in html
@@ -273,10 +273,10 @@ def test_static_assets_load():
     assert "function renderPlotDashboard(bundle)" in get_js_asset("plot.js")
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
     assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
-    assert "Current manuscript words" in get_js_asset("edit2.js")
-    assert "Total words added" in get_js_asset("edit2.js")
-    assert "Total words removed" in get_js_asset("edit2.js")
-    assert "Net manuscript change" in get_js_asset("edit2.js")
+    assert "Word count" in get_js_asset("edit2.js")
+    assert "Words added" in get_js_asset("edit2.js")
+    assert "Words removed" in get_js_asset("edit2.js")
+    assert "Net change" in get_js_asset("edit2.js")
     assert ".edit2-project-stats {" in get_css_asset("edit2.css")
     assert ".edit2-project-stat--current {" in get_css_asset("edit2.css")
     assert ".edit2-project-stat-grid {" in get_css_asset("edit2.css")
@@ -304,7 +304,7 @@ def test_edit_dashboard_uses_the_same_start_timer_pattern_as_writing_sessions():
     assert 'id="editing-session-screen"' in html
     assert 'id="end-edit-session-btn"' in html
     assert 'id="end-edit-session-confirm-modal"' in html
-    assert "Start Session" in html
+    assert "Start session" in html
     assert "Log previous session" in html
     assert 'id="start-edit-session-btn"' not in html
     assert 'id="edit-session-start-modal"' not in html
@@ -442,9 +442,9 @@ def test_export_csv_contract_is_present():
     html = get_html()
     js = get_app_js()
 
-    assert "Export Write" in html
-    assert "Export Edit" in html
-    assert "Export All" in html
+    assert "Export write" in html
+    assert "Export edit" in html
+    assert "Export all" in html
     assert "Import CSV" in html
     assert "Appearance" in html
     assert 'name="themePreference"' in html
@@ -491,13 +491,12 @@ def test_projects_can_publish_into_a_locked_final_stats_mode():
     assert "Type REOPEN to confirm" in html
     assert "function getPublishEligibility(bundle)" in state_js
     assert "function isProjectPublished(bundle)" in state_js
-    assert 'id="open-publish-project-btn"' in app_js
     assert "function bindProjectPublicationModals()" in app_js
     assert "function openPublishProjectModal(bundle = currentBundle())" in app_js
     assert (
         "function openReopenProjectModal(projectId = state.activeProjectId)" in app_js
     )
-    assert "View final stats" in app_js
+    assert 'data-project-card-open="${escapeAttr(bundle.id)}"' in app_js
     assert 'data-action="reopen-project"' in app_js
     assert "function renderPublishedProjectDashboard(bundle)" in dashboard_js
     assert (
@@ -508,7 +507,6 @@ def test_projects_can_publish_into_a_locked_final_stats_mode():
         "function downloadPublishedProjectPdf(bundle = currentBundle())" in dashboard_js
     )
     assert "Download final stats PDF" in dashboard_js
-    assert ".nav-publish-shell {" in layout_css
     assert ".published-celebration-screen {" in layout_css
     assert ".project-card-status {" in dashboard_css
     assert ".published-summary-grid {" in dashboard_css
@@ -518,11 +516,16 @@ def test_settings_modal_replaces_separate_import_export_controls():
     html = get_html()
     js = get_app_js()
 
-    assert 'id="open-settings-modal-btn"' in js
+    assert 'id="avatar-settings-btn"' in js
+    assert "openSettingsModal();" in js
     assert 'id="settings-modal"' in html
     assert 'id="close-settings-modal-btn"' in html
     assert "Manage appearance, import, and export actions for this workspace." in html
     assert "Choose the theme for the full app workspace." in html
+    assert 'id="profile-photo-input"' in html
+    assert 'id="choose-profile-photo-btn"' in html
+    assert 'id="remove-profile-photo-btn"' in html
+    assert "profilePhoto" in js
     assert 'id="export-write-modal-btn"' in html
     assert 'id="export-edit-modal-btn"' in html
     assert 'id="export-all-modal-btn"' in html
@@ -535,18 +538,17 @@ def test_settings_modal_replaces_separate_import_export_controls():
     assert 'id="export-project-csv-btn"' not in html
 
 
-def test_sidebar_can_collapse_to_icon_only_navigation():
+def test_sidebar_has_no_vestigial_collapse_or_footer_controls():
     js = get_app_js()
     css = get_css_asset("layout.css")
-    state_js = get_js_asset("state.js")
 
-    assert "function applySidebarCollapseState()" in js
-    assert 'id="sidebar-collapse-btn"' in js
-    assert "Collapse sidebar" in js
-    assert "sidebarCollapsed" in state_js
-    assert ".app-shell.sidebar-collapsed {" in css
-    assert ".sidebar-collapse-btn {" in css
-    assert ".sidebar-action-label {" in css
+    assert "function applySidebarCollapseState()" not in js
+    assert "function renderSidebarFooter(" not in js
+    assert 'id="sidebar-collapse-btn"' not in js
+    assert 'id="sidebar-footer"' not in get_html()
+    assert ".app-shell.sidebar-collapsed {" not in css
+    assert ".sidebar-collapse-btn {" not in css
+    assert ".sidebar-footer {" not in css
 
 
 def test_sidebar_start_session_menu_launches_global_session_flows():
@@ -554,24 +556,25 @@ def test_sidebar_start_session_menu_launches_global_session_flows():
     css = get_css_asset("layout.css")
 
     assert 'id="start-session-menu-btn"' in js
-    assert 'id="start-session-menu"' not in js
-    assert 'data-session-action="write"' not in js
-    assert 'data-session-action="edit"' not in js
-    assert 'data-session-action="log-previous-writing"' not in js
-    assert 'data-session-action="log-previous-editing"' not in js
-    assert 'aria-haspopup="menu"' not in js
+    assert 'id="start-session-menu"' in js
+    assert 'data-session-action="write"' in js
+    assert 'data-session-action="edit"' in js
+    assert 'data-session-action="log-previous"' in js
+    assert 'aria-haspopup="menu"' in js
     assert "Open the writing timer" not in js
     assert "Open the editing timer" not in js
     assert "function bindStartSessionMenu()" in js
     assert "function startSidebarSession(action)" in js
-    assert 'startSidebarSession("start")' in js
+    assert 'toggleGlobalMenu("session")' in js
+    assert "openWritingSessionStartModal();" in js
+    assert "openPreviousSessionChoiceModal();" in js
     assert "openSessionModal();" in js
     assert 'nav.querySelectorAll("button[data-view]")' in js
-    assert (
-        '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>' in js
-    )
+    assert '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>' not in js
+    assert "<span>Start session</span>" in js
+    assert ".global-header {" in css
     assert ".nav-session-shell {" in css
-    assert ".nav-session-trigger .nav-session-icon {" in css
+    assert ".nav-session-trigger .nav-session-icon {" not in css
 
 
 def test_goal_type_dropdown_includes_writing_time():
@@ -609,6 +612,9 @@ def test_goal_time_logic_present_for_calendar_and_progress():
         "const trackedGoals = bundle.goals.filter((goal) => isGoalTrackedOnDate(goal, cursor));"
         in js
     )
+    assert "function parseDateValue(date)" in js
+    assert "date.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/)" in js
+    assert "return `${year}-${month}-${day}`;" in js
     assert "function goalTargetForDate(goal, dateValue)" in js
     assert "function goalScheduleSummary(goal, bundle = currentBundle())" in js
     assert "function goalWindowSummary(goal)" in js
@@ -624,12 +630,12 @@ def test_goal_archiving_and_heatmap_day_detail_are_present():
     assert "function renderHeatmapDayDetail(day)" in js
     assert 'id="heatmap-detail-panel"' in js
     assert 'data-action="archive-goal"' in js
-    assert "Archived Goals" in js
+    assert "Archived goals" in js
     assert (
         "Past goal targets stay here so old heatmap days keep the context they were earned under."
         in js
     )
-    assert "Hover, focus, or tap a day to inspect the goal snapshot behind it." in js
+    assert 'class="card goal-heatmap-panel"' in js
     assert (
         "Hover, focus, or tap a day to compare what you did against the goal that was active then."
         in js
@@ -759,6 +765,7 @@ def test_edit_dashboard_view_and_navigation_are_present():
     assert 'edit: "Edit"' in js
     assert 'edit2: "Edit 2.0"' not in js
     assert "function renderEditDashboard(bundle)" in js
+    assert "renderEdit2Dashboard(bundle);" in js
     assert "function renderEdit2Dashboard(bundle)" in js
     assert "<h3>Hours Edited</h3>" not in js
     assert "<h3>Pass Snapshot</h3>" not in js
@@ -773,18 +780,20 @@ def test_edit2_dashboard_view_and_navigation_are_present():
     assert 'id="view-edit2"' not in html
     assert 'edit: "Edit"' in js
     assert 'edit2: "Edit 2.0"' not in js
-    assert "function renderEdit2Dashboard(bundle)" in js
-    assert "<h3>Manuscript Structure</h3>" in js
-    assert "${escapeHtml(unitLabel)} Issues" in js
-    assert 'data-edit2-board-view="chapters"' in js
-    assert 'data-edit2-board-view="issues"' in js
-    assert 'id="edit2-issue-filters-form"' in js
-    assert 'data-edit2-issue-view="current"' in js
-    assert 'data-edit2-detail-tab="chapters"' not in js
-    assert 'data-edit2-detail-tab="current"' in js
-    assert 'data-edit2-detail-tab="resolved"' in js
-    assert "Open issues" in js
-    assert "Archived Issues" in js
+    assert "function renderEdit2Dashboard(bundle)" in edit2_js
+    assert "${escapeHtml(unitPlural)} will appear here." in edit2_js
+    assert "Identify each ${unitLower}'s issues and spot which need the most revision." in edit2_js
+    assert '"Manuscript structure"' in edit2_js
+    assert "${escapeHtml(unitLabel)} Issues" in edit2_js
+    assert 'data-edit2-board-view="chapters"' in edit2_js
+    assert 'data-edit2-board-view="issues"' in edit2_js
+    assert 'id="edit2-issue-filters-form"' in edit2_js
+    assert 'data-edit2-issue-view="current"' in edit2_js
+    assert 'data-edit2-detail-tab="chapters"' not in edit2_js
+    assert 'data-edit2-detail-tab="current"' in edit2_js
+    assert 'data-edit2-detail-tab="resolved"' in edit2_js
+    assert "Open issues" in edit2_js
+    assert "Archived issues" in js
     assert 'editIssueBoardView = "current";' in js
     assert 'edit2ViewMode = "overview";' in js
     assert "A focused workspace for reviewing" not in js
@@ -792,13 +801,14 @@ def test_edit2_dashboard_view_and_navigation_are_present():
     assert "Review the issues attached" not in js
     assert "Keep active problems visible" not in js
     assert "<h4>Summary</h4>" in js
-    assert "<h3>Next Up</h3>" in edit2_js
+    assert "<h3>Next up</h3>" in edit2_js
     assert 'data-edit2-next-focus-action="' in edit2_js
     assert (
-        "One clear next move now, with backup options only if you need them."
+        "Best issues to tackle first."
         in edit2_js
     )
-    assert "Next step:" in edit2_js
+    assert "Based on priority level, sections with the most issues, and other factors." in edit2_js
+    assert "Next step:" not in edit2_js
     assert "Other options (" not in edit2_js
     assert 'data-edit2-carousel data-active-index="0"' in edit2_js
     assert 'data-edit2-carousel-shift="1"' in edit2_js
@@ -823,13 +833,13 @@ def test_plot_dashboard_view_navigation_and_modal_are_present():
     assert 'plot: "Story"' in js
     assert 'id="plot-entry-modal"' in html
     assert 'id="plot-entry-form"' in html
-    assert "<h3>Story Categories</h3>" in js
+    assert "<h3>Story categories</h3>" in js
     assert 'role="group" aria-label="Story categories"' in js
     assert "Characters" in js
     assert "Locations" in js
-    assert "World Rules" in js
+    assert "World rules" in js
     assert 'id="open-plot-tab-modal-btn"' in js
-    assert 'aria-label="Add Story tab"' in js
+    assert 'aria-label="Add story tab"' in js
     assert 'id="plot-tab-modal"' in html
     assert 'id="plot-tab-form"' in html
     assert 'id="plot-tab-picker"' in html
@@ -871,8 +881,8 @@ def test_story_workspace_tabs_are_customizable_and_preserve_hidden_content():
         in plot_js
     )
     assert "Any saved ${config.singular} entries are still here." in plot_js
-    assert "Memoir People" in plot_js
-    assert "Magic Systems" in plot_js
+    assert "Memoir people" in plot_js
+    assert "Magic systems" in plot_js
     assert "Research" in plot_js
     assert ".plot-add-tab-btn {" in css
     assert ".plot-remove-tab-link {" in css
@@ -885,16 +895,45 @@ def test_goals_dashboard_view_and_vertical_navigation_are_present():
     assert 'id="view-goals"' in html
     assert "const navLabels = {" in js
     assert 'plot: "Story"' in js
-    assert 'dashboard: isPublishedBundle ? "Final Stats" : "Write"' in js
+    assert 'dashboard: isPublishedBundle ? "Final stats" : "Write"' in js
     assert 'edit: "Edit"' in js
     assert 'edit2: "Edit 2.0"' not in js
-    assert 'goals: "Goals"' in js
-    assert 'id="view-history-btn"' in js
-    assert "<h2>History</h2>" in js
-    assert "static/js/app.js?v=edit-project-stats-20260509" in html
+    assert 'label: "Goals", view: "goals"' in js
+    assert 'label: "Activity", view: "sessions"' in js
+    assert 'label: "Tracker"' in js
+    assert 'label: "Activity", view: "sessions"' in js
+    assert 'activeView = button.dataset.globalView;' in js
+    assert "<h2>Activity</h2>" in js
+    assert "static/js/app.js?v=ui-polish-20260518" in html
     assert "function renderGoalsDashboard(bundle)" in js
-    assert "Structure goals" in js
-    assert "Issue goals" in js
+    assert 'data-goal-filter="all"' in js
+    assert 'data-goal-filter="writing"' in js
+    assert 'data-goal-filter="editing"' in js
+    assert 'const structureGoals = activeGoals.filter((goal) => goal.type === "structure_units_completed");' in js
+    assert "const editingGoals = [...structureGoals, ...issueGoals];" in js
+
+
+def test_project_cards_use_real_today_goals_only():
+    js = get_app_js()
+    css = get_css_asset("dashboard.css")
+
+    assert "function projectCardDailyGoalProgress(todaysGoals)" in js
+    assert "function renderProjectCardLifecycle(bundle)" in js
+    assert "Math.min(100, Math.max(0, number(goal.progress)))" in js
+    assert "Drafting" in js
+    assert "Editing" in js
+    assert "Published" in js
+    assert "All active goals" in js
+    assert "project-card-goal-grid" not in js
+    assert "project-card-goal-grid" not in css
+    assert "project-card-placeholder" not in css
+    assert "renderProjectPlaceholders" not in js
+    assert "Edit for 2 hours" not in js
+    assert "Review goal board" not in js
+    assert ".project-card-progress-ring::before" in css
+    assert ".project-card-lifecycle" in css
+    assert ".project-card-stage-line.is-complete" in css
+    assert "min-height: 0;" in css
 
 
 def test_edit_dashboard_supports_editing_focus_issues_and_edit_sessions():
@@ -1070,7 +1109,7 @@ def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
     js = get_app_js()
     css = get_css_asset("edit.css")
 
-    assert "<h3>Next Up</h3>" in js
+    assert "<h3>Next up</h3>" in js
     assert "<h3>Section Hotspots</h3>" not in js
     assert 'id="edit2-issue-filters-form"' in js
     assert 'id="edit2-issue-sort"' in js
@@ -1087,7 +1126,7 @@ def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
         in js
     )
     assert "Why this surfaced:" not in js
-    assert "One clear next move now, with backup options only if you need them." in js
+    assert "Best issues to tackle first." in js
     assert "Other options (" not in js
     assert "data-edit2-carousel-track" in js
     assert "function buildEditSectionHotspots(bundle)" in js
@@ -1139,7 +1178,7 @@ def test_last_workspace_tab_is_persisted_separately_from_active_view():
     js = get_app_js()
 
     assert 'const PRIMARY_WORKSPACE_VIEWS = ["dashboard", "plot", "edit"];' in js
-    assert 'const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals"];' in js
+    assert 'const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals", "sessions"];' in js
     assert 'snapshot?.activeView === "edit2" ? "edit" : snapshot?.activeView' in js
     assert "function loadLastWorkspaceView()" in js
     assert "lastWorkspaceView" in js
@@ -1171,8 +1210,9 @@ def test_edit_dashboard_session_history_matches_writing_dashboard_today_scope():
     js = get_app_js()
 
     assert "<p>All editing sessions logged today.</p>" not in js
-    assert "<p>All writing sessions logged today.</p>" in js
-    assert ".filter((session) => dateKey(session.date) === todayKey)" in js
+    assert "<p>All writing sessions logged today.</p>" not in js
+    assert "Writing goals for today" in js
+    assert 'id="write-dashboard-view-goals-btn"' in js
 
 
 def test_state_loading_reconnects_active_project_id_to_normalized_projects():

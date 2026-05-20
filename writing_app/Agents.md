@@ -1,6 +1,6 @@
 # AGENTS.md
 
-You are working in The Author Engine, a small Flask web app with a Jinja-rendered
+You are working in Scriptor, a small Flask web app with a Jinja-rendered
 workspace, split static assets, SQLite persistence, and tests that guard UI
 contracts.
 

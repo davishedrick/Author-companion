@@ -143,13 +143,13 @@ def send_password_reset_email(recipient_email, reset_url):
     use_ssl = bool(app.config.get("MAIL_USE_SSL", False))
 
     message = EmailMessage()
-    message["Subject"] = "Reset your Author Engine password"
-    message["From"] = sender or "no-reply@author-engine.local"
+    message["Subject"] = "Reset your Scriptor password"
+    message["From"] = sender or "no-reply@scriptor.local"
     message["To"] = recipient_email
     message.set_content(
         "\n".join(
             [
-                "A password reset was requested for your Author Engine account.",
+                "A password reset was requested for your Scriptor account.",
                 "",
                 f"Open this link to choose a new password: {reset_url}",
                 "",

@@ -37,7 +37,7 @@ const SESSION_SNAPSHOT_CONFIDENCE_LEVELS = ["", "low", "medium", "high"];
 const PROJECT_TYPE_OPTIONS = ["Novel", "Short story", "Screenplay", "Essay", "Other"];
 const STRUCTURE_UNIT_OPTIONS = ["Chapter", "Scene", "Section"];
 const PRIMARY_WORKSPACE_VIEWS = ["dashboard", "plot", "edit"];
-const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals"];
+const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals", "sessions"];
 const views = ["projects", "create-project", "dashboard", "plot", "edit", "goals", "sessions", "edit-project"];
 const requiredImportColumns = [
   "row_type",
@@ -436,6 +436,7 @@ const defaultState = {
   projects: [],
   activeProjectId: null,
   themePreference: "light",
+  profilePhoto: "",
   sidebarCollapsed: false,
   deletedExtensionSessionIds: []
 };
@@ -571,6 +572,7 @@ function normalizeLoadedState(snapshot) {
         ? snapshot.activeProjectId
         : activeProjects[0]?.id || null,
       themePreference: normalizeThemePreference(snapshot.themePreference),
+      profilePhoto: normalizeProfilePhoto(snapshot.profilePhoto),
       sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
       deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
     };
@@ -593,6 +595,7 @@ function normalizeLoadedState(snapshot) {
       projects: [migrated],
       activeProjectId: migrated.id,
       themePreference: normalizeThemePreference(snapshot.themePreference),
+      profilePhoto: normalizeProfilePhoto(snapshot.profilePhoto),
       sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
       deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
     };
@@ -620,6 +623,11 @@ function normalizeStoredLastWorkspaceView(snapshot) {
 
 function normalizeThemePreference(value) {
   return value === "dark" ? "dark" : "light";
+}
+
+function normalizeProfilePhoto(value) {
+  const photo = String(value || "");
+  return photo.startsWith("data:image/") ? photo : "";
 }
 
 function normalizeSidebarCollapsed(value) {
@@ -1095,13 +1103,14 @@ function normalizeIssue(issue) {
 }
 
 function serializeStateSnapshot() {
-  if (isProjectWorkspaceView(activeView)) {
+  if (isPrimaryWorkspaceView(activeView)) {
     lastWorkspaceView = activeView;
   }
   return {
     projects: cloneValue(state.projects),
     activeProjectId: state.activeProjectId,
     themePreference: normalizeThemePreference(state.themePreference),
+    profilePhoto: normalizeProfilePhoto(state.profilePhoto),
     sidebarCollapsed: normalizeSidebarCollapsed(state.sidebarCollapsed),
     deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds),
     activeView,
@@ -1316,8 +1325,23 @@ function slugifyFilePart(value) {
     .replace(/^-+|-+$/g, "") || "project";
 }
 
+function parseDateValue(date) {
+  if (date instanceof Date) return new Date(date);
+  if (typeof date === "string") {
+    const dateOnlyMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      return new Date(
+        Number(dateOnlyMatch[1]),
+        Number(dateOnlyMatch[2]) - 1,
+        Number(dateOnlyMatch[3])
+      );
+    }
+  }
+  return new Date(date);
+}
+
 function startOfDay(date) {
-  const value = new Date(date);
+  const value = parseDateValue(date);
   value.setHours(0, 0, 0, 0);
   return value;
 }
@@ -1327,7 +1351,12 @@ function daysBetween(a, b) {
 }
 
 function dateKey(dateString) {
-  return new Date(dateString).toISOString().slice(0, 10);
+  const value = parseDateValue(dateString);
+  if (Number.isNaN(value.getTime())) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getWriteSessions(bundle) {
@@ -2053,11 +2082,10 @@ function renderGoalHeatmap(bundle) {
   selectedHeatmapDayKey = selectedDayKey;
   const selectedDay = days.find((day) => day.key === selectedDayKey) || null;
   return `
-    <section class="card">
+    <section class="card goal-heatmap-panel">
       <div class="section-head">
         <div>
           <h3>Goal Heatmap</h3>
-          <p>Daily goal performance, one month at a time. Hover, focus, or tap a day to inspect the goal snapshot behind it.</p>
         </div>
       </div>
       <div class="heatmap-shell">

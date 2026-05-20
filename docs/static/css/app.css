@@ -5,3 +5,35 @@
 @import url("./edit.css");
 @import url("./edit2.css");
 @import url("./themes.css");
+
+.edit2-project-stat--current span,
+.project-stat-card.dark p,
+.project-stat-card.dark .small-copy,
+.editing-metric-card.dark p,
+.editing-metric-card.dark .small-copy {
+  color: #f6e8dc;
+}
+
+.edit2-project-stat--current strong,
+.project-stat-card.dark strong,
+.project-stat-card.dark .value,
+.editing-metric-card.dark strong,
+.editing-metric-card.dark .value {
+  color: #fffdfa;
+}
+
+.heatmap-swatch.exceeded,
+.heatmap-cell.exceeded,
+html[data-theme="dark"] .heatmap-cell.exceeded {
+  border-color: rgba(36, 113, 58, 0.78);
+  --heatmap-fill-color: linear-gradient(180deg, rgba(112, 202, 134, 0.96), rgba(36, 113, 58, 0.9));
+}
+
+.heatmap-swatch.exceeded {
+  background: linear-gradient(180deg, #70ca86, #24713a);
+}
+
+.heatmap-cell.exceeded .heatmap-daynum,
+html[data-theme="dark"] .heatmap-cell.exceeded .heatmap-daynum {
+  color: #123d21;
+}

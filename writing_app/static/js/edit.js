@@ -761,6 +761,7 @@ function getCurrentEdit2ChapterLabel(bundle) {
 }
 
 function renderEditDashboard(bundle) {
+  renderEdit2Dashboard(bundle);
   bindEditDashboardEvents(bundle);
 }
 
@@ -1225,7 +1226,7 @@ function openEditSessionModal(sessionId = null) {
   if (sectionInput) sectionInput.placeholder = `Example: ${unitLabel} 12`;
 
   if (existingSession) {
-    title.textContent = "Edit Editing Session";
+    title.textContent = "Edit editing session";
     copy.textContent = "Update the handoff for this editing session.";
     form.elements.sessionDate.value = toInputDate(existingSession.date);
     form.elements.durationMinutes.value = String(Math.max(1, number(existingSession.durationMinutes)));
@@ -1245,7 +1246,7 @@ function openEditSessionModal(sessionId = null) {
     }
     submit.textContent = "Save changes";
   } else {
-    title.textContent = loggingPastEditingSession ? "Log editing session" : "Editing Session Complete";
+    title.textContent = loggingPastEditingSession ? "Log editing session" : "Editing session complete";
     copy.textContent = pendingCompletedEditSession
       ? `You edited for ${describeMinutes(pendingCompletedEditSession.durationMinutes)}. Close the loop with a quick handoff.`
       : loggingPastEditingSession
@@ -1551,7 +1552,7 @@ function openIssueModal(issueId = null) {
 
   if (issue) {
     if (noteLabel) noteLabel.textContent = "Jot a quick note (short is fine)";
-    title.textContent = "Edit Issue";
+    title.textContent = "Edit issue";
     copy.textContent = `Update the issue details if you want. The quick note can stay short.`;
     form.elements.note.value = issue.notes || "";
     if (snippetInput) snippetInput.value = issue.snippet || "";

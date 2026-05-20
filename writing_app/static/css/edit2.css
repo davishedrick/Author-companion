@@ -110,13 +110,23 @@
 }
 
 .edit2-project-stat--current {
-  background: #2f281f;
-  box-shadow: 0 12px 22px rgba(47, 40, 31, 0.14);
+  background: #211711;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 250, 245, 0.1),
+    0 12px 22px rgba(33, 23, 17, 0.18);
 }
 
 .edit2-project-stat--current span,
 .edit2-project-stat--current strong {
-  color: #fffaf0;
+  color: #fff7ec;
+}
+
+.edit2-project-stat--current span {
+  color: #f6e8dc;
+}
+
+.edit2-project-stat--current strong {
+  color: #fffdfa;
 }
 
 .edit2-project-stat span {

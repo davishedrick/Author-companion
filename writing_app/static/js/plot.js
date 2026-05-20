@@ -3,9 +3,10 @@ const PLOT_SECTION_CONFIG = {
     label: "Characters",
     singular: "character",
     kicker: "Cast and pressure",
-    description: "Track who matters, what they want, and what keeps pushing against them.",
+    description: "Who matters, what they want, and how they change.",
     navCopy: "POV characters, antagonists, allies, and the emotional friction between them.",
-    emptyCopy: "Start with protagonists, antagonistic forces, and any relationship that changes the story.",
+    emptyHeading: "No characters created.",
+    emptyCopy: "Start with your protagonist, antagonist, or that one lovable side character.",
     prompts: [
       {
         label: "Capture",
@@ -43,7 +44,7 @@ const PLOT_SECTION_CONFIG = {
     label: "Locations",
     singular: "location",
     kicker: "Places with story weight",
-    description: "Map where the story moves and what each place does to your characters.",
+    description: "Critical areas and their function.",
     navCopy: "Cities, rooms, landscapes, hidden spaces, and any setting that changes the tone or stakes.",
     emptyCopy: "Add the places that hold conflict, secrets, danger, memory, or status in your story.",
     prompts: [
@@ -112,7 +113,7 @@ const PLOT_SECTION_CONFIG = {
     }
   },
   worldRules: {
-    label: "World Rules",
+    label: "World rules",
     singular: "rule",
     kicker: "Systems and consequences",
     description: "Define the laws, limits, and costs that make the world feel believable.",
@@ -332,7 +333,7 @@ const PLOT_SECTION_CONFIG = {
     }
   },
   plotThreads: {
-    label: "Plot Threads",
+    label: "Plot threads",
     singular: "plot thread",
     kicker: "Open loops",
     description: "Track promises, mysteries, subplots, and payoffs so nothing important disappears.",
@@ -484,7 +485,7 @@ const PLOT_SECTION_CONFIG = {
     }
   },
   magicSystems: {
-    label: "Magic Systems",
+    label: "Magic systems",
     singular: "magic rule",
     kicker: "Power with limits",
     description: "Track abilities, costs, limits, loopholes, training, and consequences.",
@@ -596,7 +597,7 @@ const PLOT_SECTION_CONFIG = {
     }
   },
   memoirPeople: {
-    label: "Memoir People",
+    label: "Memoir people",
     singular: "person",
     kicker: "Real people and boundaries",
     description: "Track real people, composite characters, privacy boundaries, and emotional context.",
@@ -775,7 +776,7 @@ function plotArchivedSectionIds(bundle) {
 
 const PLOT_TAB_PICKER_GROUPS = [
   {
-    label: "Story Core",
+    label: "Story core",
     sectionIds: ["characters", "relationships", "premise", "themes", "plotThreads", "scenes"]
   },
   {
@@ -783,7 +784,7 @@ const PLOT_TAB_PICKER_GROUPS = [
     sectionIds: ["locations", "worldRules", "history", "mythology", "cultures", "objects"]
   },
   {
-    label: "Systems and Reference",
+    label: "Systems and reference",
     sectionIds: ["glossary", "timeline", "magicSystems", "technology", "research", "questions"]
   },
   {
@@ -821,14 +822,14 @@ function renderPlotDashboard(bundle) {
       <section class="plot-workspace">
         <div class="plot-section-nav-wrap">
           <div hidden>
-            <h3>Story Categories</h3>
+            <h3>Story categories</h3>
           </div>
           <div class="plot-section-nav" role="group" aria-label="Story categories">
             <button
               class="plot-add-tab-btn"
               id="open-plot-tab-modal-btn"
               type="button"
-              aria-label="Add Story tab"
+              aria-label="Add story tab"
               ${inactiveSectionIds.length ? "" : "disabled"}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -843,7 +844,6 @@ function renderPlotDashboard(bundle) {
         <section class="card plot-section-detail" id="plot-section-panel" aria-labelledby="plot-tab-${activeSectionId}">
           <div class="section-head">
             <div>
-              <p class="small-copy">${activeSection.kicker}</p>
               <h3>${activeSection.label}</h3>
               <p>${activeSection.description}</p>
             </div>
@@ -854,7 +854,7 @@ function renderPlotDashboard(bundle) {
           <div class="plot-entry-grid">
             ${activeEntries.length ? activeEntries.map((entry) => renderPlotEntryCard(activeSectionId, entry)).join("") : `
               <div class="empty plot-empty">
-                <strong>${activeSection.label} are empty right now.</strong>
+                <strong>${escapeHtml(activeSection.emptyHeading || `${activeSection.label} are empty right now.`)}</strong>
                 <p>${activeSection.emptyCopy}</p>
               </div>
             `}
@@ -1019,7 +1019,7 @@ function selectedPlotTabIds() {
 function renderPlotTabChoices(bundle) {
   const inactiveSectionIds = inactivePlotSectionIds(bundle);
   if (!inactiveSectionIds.length) {
-    return `<p class="plot-tab-picker-empty">All Story tabs are active.</p>`;
+    return `<p class="plot-tab-picker-empty">All story tabs are active.</p>`;
   }
   const inactiveSectionSet = new Set(inactiveSectionIds);
   const orderedSectionIds = PLOT_TAB_PICKER_GROUPS.flatMap((group) => group.sectionIds)

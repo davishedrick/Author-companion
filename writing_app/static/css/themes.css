@@ -110,7 +110,6 @@ html[data-theme="dark"] .nav button,
 html[data-theme="dark"] .ghost-btn,
 html[data-theme="dark"] .inline-btn,
 html[data-theme="dark"] .plot-section-tab,
-html[data-theme="dark"] .sidebar-collapse-btn,
 html[data-theme="dark"] .theme-option span {
   background: rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 0 0 1px rgba(245, 230, 214, 0.1);
@@ -125,12 +124,6 @@ html[data-theme="dark"] .nav-session-trigger {
   box-shadow:
     0 16px 30px rgba(0, 0, 0, 0.28),
     inset 0 0 0 1px rgba(28, 21, 17, 0.08);
-}
-
-html[data-theme="dark"] .nav-session-trigger .nav-session-icon {
-  background: rgba(28, 21, 17, 0.14);
-  color: #1c1511;
-  box-shadow: inset 0 0 0 1px rgba(28, 21, 17, 0.08);
 }
 
 html[data-theme="dark"] .nav-session-menu {
@@ -237,7 +230,6 @@ html[data-theme="dark"] .project-topbar-nav button:hover {
   color: var(--ink);
 }
 
-html[data-theme="dark"] .sidebar-text-btn:hover,
 html[data-theme="dark"] .icon-btn:hover,
 html[data-theme="dark"] .quiet-btn:hover {
   background: rgba(255, 255, 255, 0.05);
@@ -513,4 +505,97 @@ html[data-theme="dark"] .snapshot-card {
   .theme-toggle {
     grid-template-columns: 1fr;
   }
+}
+
+/* Typography refinement: lighter, clearer, more editorial across the app. */
+body,
+button,
+input,
+select,
+textarea {
+  font-family: var(--sans);
+  font-weight: 430;
+}
+
+h1,
+h2,
+h3,
+h4,
+.hero-title,
+.section-title,
+.card-title,
+.brand-home-btn,
+.project-selector-btn,
+.project-card h3,
+.projects-board h2,
+.activity-board h2,
+.goals-board h2,
+.tracker-progress-panel h2 {
+  font-weight: 620;
+  letter-spacing: 0;
+}
+
+strong,
+.value,
+.project-card-stat-row strong,
+.project-card-overall-progress strong,
+.goals-summary-card strong,
+.activity-kpi-card strong,
+.tracker-stat-strip strong {
+  font-weight: 620;
+}
+
+.small-copy,
+.pill,
+.project-card-genre,
+.project-card-stage,
+.nav button,
+.global-nav button,
+.primary-btn,
+.ghost-btn,
+.inline-btn,
+.route-chip,
+.auth-form label,
+.auth-link-row a {
+  font-weight: 560;
+}
+
+.project-card-stage,
+.project-card-genre {
+  letter-spacing: 0.035em;
+}
+
+/* Portfolio polish final pass: keep dark mode CTAs flat and intentional. */
+html[data-theme="dark"] .primary-btn,
+html[data-theme="dark"] .header-primary-btn,
+html[data-theme="dark"] .global-header .nav-session-trigger,
+html[data-theme="dark"] .settings-section .primary-btn,
+html[data-theme="dark"] .goals-create-btn,
+html[data-theme="dark"] .plot-entry-card .primary-btn,
+html[data-theme="dark"] .edit-stage-roadmap .primary-btn,
+html[data-theme="dark"] .projects-board .project-card-actions .primary-btn {
+  border-color: #f7efe6;
+  background: #f7efe6;
+  color: #151311;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .primary-btn:hover,
+html[data-theme="dark"] .header-primary-btn:hover,
+html[data-theme="dark"] .global-header .nav-session-trigger:hover,
+html[data-theme="dark"] .settings-section .primary-btn:hover,
+html[data-theme="dark"] .goals-create-btn:hover,
+html[data-theme="dark"] .plot-entry-card .primary-btn:hover,
+html[data-theme="dark"] .edit-stage-roadmap .primary-btn:hover,
+html[data-theme="dark"] .projects-board .project-card-actions .primary-btn:hover {
+  background: transparent;
+  color: #f7efe6;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .avatar-image,
+html[data-theme="dark"] .profile-photo-preview {
+  background:
+    radial-gradient(circle at 50% 36%, rgba(245, 230, 214, 0.18), transparent 28%),
+    rgba(255, 255, 255, 0.04);
 }

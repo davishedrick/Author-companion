@@ -14,10 +14,13 @@ function persistAndRender() {
 let floatingFocusTimerDock = "top-right";
 let floatingFocusTimerResizeBound = false;
 let floatingFocusTimerPosition = null;
-let sidebarCollapseResizeBound = false;
 let startSessionMenuDocumentBound = false;
+let globalHeaderMenuDocumentBound = false;
+let projectCardMenuDocumentBound = false;
 let publishCelebrationTimer = null;
 let pendingReopenProjectId = null;
+let activityRangeKey = "7";
+let activityScreenMode = "summary";
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -254,10 +257,6 @@ function applyThemePreference() {
   document.documentElement.dataset.theme = themePreference;
 }
 
-function canCollapseSidebar() {
-  return window.innerWidth > 1080 && isProjectWorkspaceView(activeView);
-}
-
 function getBundleById(projectId) {
   return state.projects.find((project) => project.id === projectId) || null;
 }
@@ -277,46 +276,6 @@ function applyUrlViewOverride() {
   }
 }
 
-function getSidebarCollapseIcon() {
-  return `
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m14.5 6-6 6 6 6" />
-    </svg>
-  `;
-}
-
-function applySidebarCollapseState() {
-  const appShell = document.querySelector(".app-shell");
-  const collapseButton = document.getElementById("sidebar-collapse-btn");
-  if (!appShell) return;
-  const shouldCollapse = canCollapseSidebar() && Boolean(state.sidebarCollapsed) && !appShell.classList.contains("no-sidebar");
-  appShell.classList.toggle("sidebar-collapsed", shouldCollapse);
-  if (collapseButton) {
-    collapseButton.classList.toggle("is-collapsed", shouldCollapse);
-    collapseButton.setAttribute("aria-label", shouldCollapse ? "Expand sidebar" : "Collapse sidebar");
-    collapseButton.setAttribute("title", shouldCollapse ? "Expand sidebar" : "Collapse sidebar");
-  }
-  applyFloatingFocusTimerPosition();
-}
-
-function bindSidebarCollapseToggle() {
-  const collapseButton = document.getElementById("sidebar-collapse-btn");
-  if (collapseButton && collapseButton.dataset.bound !== "true") {
-    collapseButton.dataset.bound = "true";
-    collapseButton.addEventListener("click", () => {
-      state.sidebarCollapsed = !state.sidebarCollapsed;
-      applySidebarCollapseState();
-      saveState();
-    });
-  }
-  if (!sidebarCollapseResizeBound) {
-    window.addEventListener("resize", () => {
-      applySidebarCollapseState();
-    });
-    sidebarCollapseResizeBound = true;
-  }
-}
-
 function syncThemePreferenceControls() {
   const themeInputs = document.querySelectorAll("input[name='themePreference']");
   if (!themeInputs.length) return;
@@ -326,30 +285,80 @@ function syncThemePreferenceControls() {
   });
 }
 
+function renderScriptorLogoMark() {
+  return `
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <radialGradient id="scriptor-logo-bg" cx="50%" cy="50%" r="72%">
+          <stop offset="0" stop-color="#f2f2f0"></stop>
+          <stop offset="0.42" stop-color="#b9b9b7"></stop>
+          <stop offset="0.74" stop-color="#6f6f6d"></stop>
+          <stop offset="1" stop-color="#303030"></stop>
+        </radialGradient>
+      </defs>
+      <rect width="48" height="48" rx="10" fill="url(#scriptor-logo-bg)"></rect>
+      <text x="24" y="37" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="900" fill="#050505">S</text>
+    </svg>
+  `;
+}
+
+function renderChevronIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m6 9 6 6 6-6"></path>
+    </svg>
+  `;
+}
+
+function renderAvatarPlaceholder() {
+  return `
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <circle cx="24" cy="18" r="8"></circle>
+      <path d="M10.5 41c1.8-8 7-12 13.5-12s11.7 4 13.5 12"></path>
+    </svg>
+  `;
+}
+
+function syncProfilePhotoControls() {
+  const preview = document.getElementById("profile-photo-preview");
+  const removeButton = document.getElementById("remove-profile-photo-btn");
+  const profilePhoto = normalizeProfilePhoto(state.profilePhoto);
+  if (preview) {
+    preview.innerHTML = profilePhoto
+      ? `<img src="${profilePhoto}" alt="" />`
+      : renderAvatarPlaceholder();
+  }
+  if (removeButton) removeButton.disabled = !profilePhoto;
+}
+
 function render() {
   applyUrlViewOverride();
   const bundle = currentBundle();
   if (activeView === "edit2") {
     activeView = "edit";
   }
-  if (!bundle && !["dashboard", "plot", "edit", "goals", "projects", "create-project"].includes(activeView)) {
-    activeView = "dashboard";
+  if (!bundle && !["projects", "create-project"].includes(activeView)) {
+    activeView = "projects";
   }
   if (bundle && isProjectPublished(bundle) && !["dashboard", "projects", "create-project"].includes(activeView)) {
     activeView = "dashboard";
   }
   applyThemePreference();
   const appShell = document.querySelector(".app-shell");
-  appShell.classList.toggle("no-sidebar", !isProjectWorkspaceView(activeView));
+  appShell.classList.toggle("no-sidebar", !isPrimaryWorkspaceView(activeView));
+  appShell.classList.toggle("projects-context", ["projects", "create-project"].includes(activeView));
+  appShell.classList.toggle("project-context", Boolean(bundle) && !["projects", "create-project"].includes(activeView));
   renderBrand(bundle);
+  renderProjectSelector(bundle);
+  renderGlobalNav(bundle);
+  renderHeaderAction(bundle);
+  renderAvatarMenu();
   renderNav(bundle);
-  renderSidebarFooter(bundle);
   renderProjects();
   renderCreateProject();
   renderDashboard(bundle);
   renderPlotDashboard(bundle);
   renderEditDashboard(bundle);
-  renderEdit2Dashboard(bundle);
   renderGoalsDashboard(bundle);
   renderSessions(bundle);
   renderEditProject(bundle);
@@ -362,36 +371,35 @@ function render() {
   });
   bindImportExportModals();
   bindProjectPublicationModals();
-  bindSidebarCollapseToggle();
-  applySidebarCollapseState();
   bindFloatingFocusTimer();
   syncFloatingFocusTimer();
   saveState();
 }
 
 function renderBrand(bundle) {
-  document.getElementById("brand").innerHTML = bundle && isProjectWorkspaceView(activeView) ? `
-    <div class="brand-head">
-      <div class="brand-copy">
-        <h1>The Author Engine</h1>
-        <p>${escapeHtml(bundle.project.bookTitle)}</p>
-      </div>
-      <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" type="button" aria-label="Collapse sidebar" title="Collapse sidebar">
-        ${getSidebarCollapseIcon()}
-      </button>
-    </div>
-  ` : `
-    <div class="brand-head">
-      <div class="brand-copy">
-        <h1>The Author Engine</h1>
-        <p>Write. Track. Finish.</p>
-      </div>
-    </div>
+  document.getElementById("brand").innerHTML = `
+    <button class="brand-home-btn" id="brand-home-btn" type="button" aria-label="View all projects">
+      <span class="brand-mark" aria-hidden="true">${renderScriptorLogoMark()}</span>
+      <span>Scriptor</span>
+    </button>
   `;
+  document.getElementById("brand-home-btn")?.addEventListener("click", () => {
+    activeView = "projects";
+    saveState();
+    render();
+  });
 }
 
 function getNavIcon(view) {
   const icons = {
+    tracker: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6" height="6" rx="1.5" />
+        <rect x="14" y="4" width="6" height="6" rx="1.5" />
+        <rect x="4" y="14" width="6" height="6" rx="1.5" />
+        <rect x="14" y="14" width="6" height="6" rx="1.5" />
+      </svg>
+    `,
     session: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="7.5" />
@@ -400,25 +408,22 @@ function getNavIcon(view) {
     `,
     plot: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 18h14" />
-        <path d="M7 15l3-3 3 2 4-5" />
-        <path d="M16 7h1.5V8.5" />
+        <path d="M12 7v14" />
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H12V5H6.5A2.5 2.5 0 0 0 4 7.5v12Z" />
+        <path d="M20 19.5A2.5 2.5 0 0 0 17.5 17H12V5h5.5A2.5 2.5 0 0 1 20 7.5v12Z" />
       </svg>
     `,
     dashboard: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="4" width="6" height="6" rx="1.5" />
-        <rect x="14" y="4" width="6" height="6" rx="1.5" />
-        <rect x="4" y="14" width="6" height="6" rx="1.5" />
-        <rect x="14" y="14" width="6" height="6" rx="1.5" />
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
       </svg>
     `,
     edit: `
       <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="5" width="7" height="6" rx="1.6" />
-        <rect x="13" y="5" width="7" height="6" rx="1.6" />
-        <rect x="4" y="13" width="16" height="6" rx="1.8" />
-        <path d="m16.5 3 .5 1.4 1.5.5-1.5.5-.5 1.4-.5-1.4-1.5-.5 1.5-.5Z" />
+        <path d="M9 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+        <path d="M9 15h3l8.5-8.5a2.1 2.1 0 0 0-3-3L9 12v3Z" />
+        <path d="m16 5 3 3" />
       </svg>
     `,
     goals: `
@@ -465,6 +470,189 @@ function toggleStartSessionMenu() {
   }
 }
 
+function closeProjectSelectorMenu() {
+  const trigger = document.getElementById("project-selector-btn");
+  const menu = document.getElementById("project-selector-menu");
+  trigger?.setAttribute("aria-expanded", "false");
+  menu?.classList.add("hidden");
+}
+
+function closeAvatarMenu() {
+  const trigger = document.getElementById("avatar-menu-btn");
+  const menu = document.getElementById("avatar-menu-popover");
+  trigger?.setAttribute("aria-expanded", "false");
+  menu?.classList.add("hidden");
+}
+
+function closeGlobalHeaderMenus(except = "") {
+  if (except !== "project") closeProjectSelectorMenu();
+  if (except !== "session") closeStartSessionMenu();
+  if (except !== "avatar") closeAvatarMenu();
+}
+
+function toggleGlobalMenu(menuName) {
+  const config = {
+    project: ["project-selector-btn", "project-selector-menu"],
+    session: ["start-session-menu-btn", "start-session-menu"],
+    avatar: ["avatar-menu-btn", "avatar-menu-popover"]
+  }[menuName];
+  if (!config) return;
+  const [triggerId, menuId] = config;
+  const trigger = document.getElementById(triggerId);
+  const menu = document.getElementById(menuId);
+  if (!trigger || !menu) return;
+  const willOpen = menu.classList.contains("hidden");
+  closeGlobalHeaderMenus(menuName);
+  trigger.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  menu.classList.toggle("hidden", !willOpen);
+}
+
+function bindGlobalHeaderDismissal() {
+  if (globalHeaderMenuDocumentBound) return;
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".global-header")) closeGlobalHeaderMenus();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeGlobalHeaderMenus();
+  });
+  globalHeaderMenuDocumentBound = true;
+}
+
+function renderProjectSelector(bundle) {
+  const shell = document.getElementById("project-selector");
+  if (!shell) return;
+  const inProjectPage = ["projects", "create-project"].includes(activeView);
+  if (!bundle || inProjectPage) {
+    shell.innerHTML = "";
+    return;
+  }
+
+  const activeProjects = state.projects.filter((project) => !isProjectArchived(project));
+  const recentProjects = [
+    bundle,
+    ...activeProjects.filter((project) => project.id !== bundle.id)
+  ].slice(0, 4);
+
+  shell.innerHTML = `
+    <button class="project-selector-btn" id="project-selector-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+      <span>${escapeHtml(bundle.project.bookTitle || "Untitled project")}</span>
+      <span class="menu-chevron" aria-hidden="true">${renderChevronIcon()}</span>
+    </button>
+    <div class="project-selector-menu hidden" id="project-selector-menu" role="menu">
+      ${recentProjects.map((project) => `
+        <button class="${project.id === bundle.id ? "active" : ""}" type="button" data-project-select="${escapeAttr(project.id)}" role="menuitem">
+          ${escapeHtml(project.project.bookTitle || "Untitled project")}
+        </button>
+      `).join("")}
+      <div class="menu-divider"></div>
+      <button type="button" data-project-select="all" role="menuitem">View all projects</button>
+    </div>
+  `;
+
+  document.getElementById("project-selector-btn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleGlobalMenu("project");
+  });
+  shell.querySelectorAll("[data-project-select]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeProjectSelectorMenu();
+      if (button.dataset.projectSelect === "all") {
+        activeView = "projects";
+      } else {
+        state.activeProjectId = button.dataset.projectSelect;
+        activeView = getWorkspaceLandingView(getBundleById(button.dataset.projectSelect));
+      }
+      saveState();
+      render();
+    });
+  });
+}
+
+function renderGlobalNav(bundle) {
+  const nav = document.getElementById("global-nav");
+  if (!nav) return;
+  const inProjectPage = ["projects", "create-project"].includes(activeView);
+  if (!bundle || inProjectPage) {
+    nav.innerHTML = "";
+    return;
+  }
+
+  const topLevelItems = [
+    { key: "tracker", label: "Tracker", view: getWorkspaceLandingView(bundle), active: isPrimaryWorkspaceView(activeView) },
+    { key: "activity", label: "Activity", view: "sessions", active: activeView === "sessions" },
+    { key: "goals", label: "Goals", view: "goals", active: activeView === "goals" }
+  ];
+
+  nav.innerHTML = topLevelItems.map((item) => `
+    <button class="${item.active ? "active" : ""}" type="button" data-global-view="${item.view}" aria-label="${item.label}">
+      <span class="nav-icon">${getNavIcon(item.key === "tracker" ? "tracker" : item.key === "activity" ? "session" : "goals")}</span>
+      <span>${item.label}</span>
+    </button>
+  `).join("");
+
+  nav.querySelectorAll("[data-global-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeView = button.dataset.globalView;
+      if (activeView === "sessions") activityScreenMode = "summary";
+      saveState();
+      render();
+    });
+  });
+}
+
+function renderHeaderAction(bundle) {
+  const shell = document.getElementById("header-action");
+  if (!shell) return;
+  const onProjectsSurface = ["projects", "create-project"].includes(activeView) || !bundle;
+  if (onProjectsSurface) {
+    shell.innerHTML = `<button class="primary-btn header-primary-btn" id="open-create-project-btn" type="button">Create new project</button>`;
+    return;
+  }
+
+  shell.innerHTML = `
+    <div class="nav-session-shell" id="start-session-menu-shell">
+      <button class="nav-session-trigger header-primary-btn" id="start-session-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false">
+        <span>Start session</span>
+        <span class="menu-chevron" aria-hidden="true">${renderChevronIcon()}</span>
+      </button>
+      <div class="start-session-menu hidden" id="start-session-menu" role="menu">
+        <button type="button" data-session-action="write" role="menuitem">Writing session</button>
+        <button type="button" data-session-action="edit" role="menuitem">Editing session</button>
+        <button type="button" data-session-action="log-previous" role="menuitem">Log previous session</button>
+      </div>
+    </div>
+  `;
+  bindStartSessionMenu();
+}
+
+function renderAvatarMenu() {
+  const shell = document.getElementById("avatar-menu");
+  if (!shell) return;
+  const profilePhoto = normalizeProfilePhoto(state.profilePhoto);
+  shell.innerHTML = `
+    <button class="avatar-menu-btn" id="avatar-menu-btn" type="button" aria-label="User menu" aria-haspopup="menu" aria-expanded="false">
+      <span class="avatar-image">${profilePhoto ? `<img src="${profilePhoto}" alt="" />` : renderAvatarPlaceholder()}</span>
+    </button>
+    <div class="avatar-menu-popover hidden" id="avatar-menu-popover" role="menu">
+      <div class="avatar-menu-name">DavisHedrick</div>
+      <button type="button" id="avatar-settings-btn" role="menuitem">Settings</button>
+      ${persistenceMode === "remote" ? `<a href="/logout" role="menuitem">Log out</a>` : ""}
+    </div>
+  `;
+  document.getElementById("avatar-menu-btn")?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleGlobalMenu("avatar");
+  });
+  document.getElementById("avatar-settings-btn")?.addEventListener("click", () => {
+    closeAvatarMenu();
+    syncThemePreferenceControls();
+    syncProfilePhotoControls();
+    openSettingsModal();
+  });
+  bindGlobalHeaderDismissal();
+}
+
 function startSidebarSession(action) {
   if (!currentBundle()) {
     showToast("Create a project first", "Sessions need an active project so the handoff has somewhere to land.");
@@ -483,11 +671,15 @@ function startSidebarSession(action) {
     return;
   }
   if (action === "write") {
-    openSessionModal();
+    openWritingSessionStartModal();
     return;
   }
   if (action === "edit") {
     openEditSessionStartModal();
+    return;
+  }
+  if (action === "log-previous") {
+    openPreviousSessionChoiceModal();
     return;
   }
   if (action === "log-previous-writing") {
@@ -509,7 +701,7 @@ function bindStartSessionMenu() {
   trigger.addEventListener("click", (event) => {
     event.stopPropagation();
     if (menu) {
-      toggleStartSessionMenu();
+      toggleGlobalMenu("session");
       return;
     }
     startSidebarSession("start");
@@ -536,54 +728,29 @@ function bindStartSessionMenu() {
 
 function renderNav(bundle) {
   const nav = document.getElementById("nav");
-  const isWorkspaceContext = (bundle && isProjectWorkspaceView(activeView)) || (!bundle && WORKSPACE_VIEWS.includes(activeView));
+  if (!nav) return;
+  const isTrackerContext = bundle && isPrimaryWorkspaceView(activeView);
   const isPublishedBundle = isProjectPublished(bundle);
-  const availableViews = isWorkspaceContext
-    ? (isPublishedBundle ? ["dashboard"] : ["dashboard", "plot", "edit", "goals"])
+  const availableViews = isTrackerContext
+    ? (isPublishedBundle ? ["dashboard"] : ["dashboard", "plot", "edit"])
     : [];
   const highlightedView = availableViews.includes(activeView) ? activeView : "";
-  const publishEligibility = bundle ? getPublishEligibility(bundle) : null;
   const navLabels = {
     plot: "Story",
-    dashboard: isPublishedBundle ? "Final Stats" : "Write",
-    edit: "Edit",
-    goals: "Goals",
-    publish: "Publish",
+    dashboard: isPublishedBundle ? "Final stats" : "Write",
+    edit: "Edit"
   };
-  const publishCopy = !bundle || isPublishedBundle
-    ? ""
-    : publishEligibility?.canPublish
-      ? "Lock this project into its final stats view."
-      : publishEligibility?.reasons[0] || "Finish the manuscript and editing flow before publishing.";
+
   nav.innerHTML = `
-    ${bundle && !isPublishedBundle ? `
-      <div class="nav-session-shell" id="start-session-menu-shell">
-        <button class="nav-session-trigger" id="start-session-menu-btn" type="button" aria-label="Start a session" title="Start a session">
-          <span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>
-          <span class="nav-label">Start a session</span>
-        </button>
-      </div>
-    ` : ""}
     <div class="nav-main">
       ${availableViews.map((view) => `
-        <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}" title="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
+        <button data-view="${view}" class="${highlightedView === view ? "active" : ""}" aria-label="${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}">
           <span class="nav-icon">${getNavIcon(view)}</span>
           <span class="nav-label">${navLabels[view] || (view.charAt(0).toUpperCase() + view.slice(1))}</span>
         </button>
       `).join("")}
     </div>
-    ${bundle && !isPublishedBundle ? `
-      <div class="nav-publish-shell">
-        <button class="nav-publish-btn ${publishEligibility?.canPublish ? "" : "is-locked"}" id="open-publish-project-btn" type="button" aria-label="Publish project" title="Publish project">
-          <span class="nav-icon">${getNavIcon("publish")}</span>
-          <span class="nav-label">Publish</span>
-        </button>
-        <p class="nav-publish-copy">${escapeHtml(publishCopy)}</p>
-      </div>
-    ` : ""}
   `;
-
-  bindStartSessionMenu();
 
   [...nav.querySelectorAll("button[data-view]")].forEach((button) => {
     button.addEventListener("click", () => {
@@ -592,22 +759,6 @@ function renderNav(bundle) {
       render();
     });
   });
-
-  const publishButton = document.getElementById("open-publish-project-btn");
-  if (publishButton && bundle) {
-    publishButton.addEventListener("click", () => {
-      if (getActiveFocusSession()) {
-        showToast("Finish the active session first", "End the current writing or editing session before publishing the project.");
-        return;
-      }
-      const eligibility = getPublishEligibility(bundle);
-      if (!eligibility.canPublish) {
-        showToast("Publish is locked", eligibility.reasons.join(" "));
-        return;
-      }
-      openPublishProjectModal(bundle);
-    });
-  }
 }
 
 function showProjectPublishedCelebration(bundle = currentBundle()) {
@@ -793,89 +944,6 @@ function bindProjectPublicationModals() {
   }
 }
 
-function getSidebarFooterIcon(action) {
-  const icons = {
-    projects: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="4" y="4" width="6" height="6" rx="1.5" />
-        <rect x="14" y="4" width="6" height="6" rx="1.5" />
-        <rect x="4" y="14" width="6" height="6" rx="1.5" />
-        <rect x="14" y="14" width="6" height="6" rx="1.5" />
-      </svg>
-    `,
-    history: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 6v5h5" />
-        <path d="M5.8 11a7 7 0 1 0 2-4.9L5 8.9" />
-        <path d="M12 8v4l3 2" />
-      </svg>
-    `,
-    settings: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 4.5h1.3l.5 2.1a5.8 5.8 0 0 1 1.7.7l1.8-1.2 1 1-1.2 1.8a5.8 5.8 0 0 1 .7 1.7l2.1.5v1.3l-2.1.5a5.8 5.8 0 0 1-.7 1.7l1.2 1.8-1 1-1.8-1.2a5.8 5.8 0 0 1-1.7.7l-.5 2.1H12.1l-.5-2.1a5.8 5.8 0 0 1-1.7-.7l-1.8 1.2-1-1 1.2-1.8a5.8 5.8 0 0 1-.7-1.7l-2.1-.5v-1.3l2.1-.5a5.8 5.8 0 0 1 .7-1.7L7.1 7.1l1-1 1.8 1.2a5.8 5.8 0 0 1 1.7-.7Z" />
-      </svg>
-    `,
-    logout: `
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M10 5H6.8A1.8 1.8 0 0 0 5 6.8v10.4A1.8 1.8 0 0 0 6.8 19H10" />
-        <path d="M14 8.5 18 12l-4 3.5" />
-        <path d="M9 12h9" />
-      </svg>
-    `,
-  };
-  return icons[action] || "";
-}
-
-function renderSidebarFooter(bundle) {
-  const footer = document.getElementById("sidebar-footer");
-  if (!isProjectWorkspaceView(activeView)) {
-    footer.innerHTML = "";
-    return;
-  }
-  footer.innerHTML = `
-    <div class="sidebar-footer-actions">
-      ${bundle ? `
-        <button class="sidebar-text-btn" id="view-all-projects-btn" type="button" aria-label="View all projects" title="View all projects">
-          <span class="sidebar-action-icon">${getSidebarFooterIcon("projects")}</span>
-          <span class="sidebar-action-label">View all projects</span>
-        </button>
-        <button class="sidebar-text-btn" id="view-history-btn" type="button" aria-label="History" title="History">
-          <span class="sidebar-action-icon">${getSidebarFooterIcon("history")}</span>
-          <span class="sidebar-action-label">History</span>
-        </button>
-      ` : ""}
-      <button class="sidebar-text-btn" id="open-settings-modal-btn" type="button" aria-label="Settings" title="Settings">
-        <span class="sidebar-action-icon">${getSidebarFooterIcon("settings")}</span>
-        <span class="sidebar-action-label">Settings</span>
-      </button>
-      ${persistenceMode === "remote" ? `
-        <a class="sidebar-text-btn" id="logout-link" href="/logout" aria-label="Log out" title="Log out">
-          <span class="sidebar-action-icon">${getSidebarFooterIcon("logout")}</span>
-          <span class="sidebar-action-label">Log out</span>
-        </a>
-      ` : ""}
-    </div>
-  `;
-  if (bundle) {
-    document.getElementById("view-all-projects-btn").addEventListener("click", () => {
-      activeView = "projects";
-      saveState();
-      render();
-    });
-    document.getElementById("view-history-btn").addEventListener("click", () => {
-      sessionsReturnView = isProjectWorkspaceView(activeView) ? activeView : preferredWorkspaceView();
-      activeView = "sessions";
-      saveState();
-      render();
-    });
-  }
-  document.getElementById("open-settings-modal-btn").addEventListener("click", () => {
-    syncThemePreferenceControls();
-    openSettingsModal();
-  });
-}
-
 function bindImportExportModals() {
   const settingsModal = document.getElementById("settings-modal");
   const closeSettingsButton = document.getElementById("close-settings-modal-btn");
@@ -884,6 +952,9 @@ function bindImportExportModals() {
   const exportEditButton = document.getElementById("export-edit-modal-btn");
   const exportAllButton = document.getElementById("export-all-modal-btn");
   const importProjectCsvInput = document.getElementById("import-project-csv-input");
+  const profilePhotoInput = document.getElementById("profile-photo-input");
+  const chooseProfilePhotoButton = document.getElementById("choose-profile-photo-btn");
+  const removeProfilePhotoButton = document.getElementById("remove-profile-photo-btn");
   const themeInputs = document.querySelectorAll("input[name='themePreference']");
   const hasBundle = Boolean(currentBundle());
 
@@ -904,6 +975,43 @@ function bindImportExportModals() {
     importProjectCsvInput.addEventListener("change", () => {
       closeSettingsModal();
     });
+  }
+
+  if (chooseProfilePhotoButton) {
+    chooseProfilePhotoButton.onclick = () => {
+      profilePhotoInput?.click();
+    };
+  }
+
+  if (profilePhotoInput && profilePhotoInput.dataset.bound !== "true") {
+    profilePhotoInput.dataset.bound = "true";
+    profilePhotoInput.addEventListener("change", () => {
+      const file = profilePhotoInput.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showToast("Choose an image", "Profile photos need to be an image file.");
+        profilePhotoInput.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.profilePhoto = normalizeProfilePhoto(reader.result);
+        saveState();
+        renderAvatarMenu();
+        syncProfilePhotoControls();
+        profilePhotoInput.value = "";
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  if (removeProfilePhotoButton) {
+    removeProfilePhotoButton.onclick = () => {
+      state.profilePhoto = "";
+      saveState();
+      renderAvatarMenu();
+      syncProfilePhotoControls();
+    };
   }
 
   if (exportWriteButton) {
@@ -950,6 +1058,7 @@ function bindImportExportModals() {
     });
   });
   syncThemePreferenceControls();
+  syncProfilePhotoControls();
 }
 
 function renderProjects() {
@@ -959,32 +1068,28 @@ function renderProjects() {
     .sort((a, b) => new Date(b.archivedAt || 0) - new Date(a.archivedAt || 0));
   const hasActiveProjects = activeProjects.length > 0;
   document.getElementById("view-projects").innerHTML = `
-    <section class="stack">
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <p class="small-copy">The Author Engine</p>
-            <h2 class="hero-title">Projects</h2>
-            <p class="muted">A focused writing tracker built to make progress visible, measurable, and satisfying.</p>
-          </div>
-          <div class="meta-line">
-            <button class="primary-btn" id="open-create-project-btn" type="button">Create new project</button>
-          </div>
-        </div>
+    <section class="projects-board-shell">
+      <section class="projects-board">
+        <h2>Projects</h2>
         <input id="import-project-csv-input" class="hidden" type="file" accept=".csv,text/csv" />
         ${hasActiveProjects ? `
           <div class="projects-grid">
             ${activeProjects.map(renderProjectCard).join("")}
           </div>
         ` : `
-          <div class="empty">No active projects yet. Create one to start tracking your manuscript.</div>
+          <div class="projects-grid">
+            <div class="project-card project-card-empty-state">
+              <h3>No projects yet</h3>
+              <p>Create a project to start tracking a manuscript.</p>
+            </div>
+          </div>
         `}
       </section>
       ${archivedProjects.length ? `
         <section class="card">
           <div class="section-head">
             <div>
-              <h3>Archived Projects</h3>
+              <h3>Archived projects</h3>
               <p>Archived projects stay recoverable here until you choose to permanently delete them.</p>
             </div>
           </div>
@@ -1005,7 +1110,7 @@ function renderCreateProject() {
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>Create New Project</h2>
+            <h2>Create new project</h2>
             <p>Start with the essentials, then refine everything later inside the project workspace.</p>
           </div>
           <button class="route-chip" id="back-to-projects-from-create-btn" type="button" aria-label="Back to projects">
@@ -1102,61 +1207,401 @@ function bindProjectTypeFields(form) {
   syncProjectStructureUnitFields(form);
 }
 
+function projectCardProjectedFinish(stats) {
+  return stats.estimatedCompletionDate ? formatDate(stats.estimatedCompletionDate) : "Build pace";
+}
+
+function projectCardGoalSummary(todaysGoals) {
+  if (!todaysGoals.length) return "No active goals today";
+  return "All active goals";
+}
+
+function projectCardDailyGoalProgress(todaysGoals) {
+  if (!todaysGoals.length) return 0;
+  const averageProgress = todaysGoals.reduce((sum, goal) => {
+    return sum + Math.min(100, Math.max(0, number(goal.progress)));
+  }, 0) / todaysGoals.length;
+  return Math.round(averageProgress);
+}
+
+function projectCardLifecycleStep(bundle) {
+  if (isProjectPublished(bundle)) return "published";
+  if (bundle?.completion?.isManuscriptComplete) return "editing";
+  return "drafting";
+}
+
+function renderProjectCardLifecycle(bundle) {
+  const activeStep = projectCardLifecycleStep(bundle);
+  const rank = { drafting: 0, editing: 1, published: 2 };
+  const steps = [
+    { key: "drafting", label: "Drafting" },
+    { key: "editing", label: "Editing" },
+    { key: "published", label: "Published" }
+  ];
+  return `
+    <div class="project-card-lifecycle" aria-label="Project lifecycle: ${activeStep}">
+      ${steps.map((step, index) => `
+        <span class="project-card-stage ${step.key === activeStep ? "is-active" : ""} ${rank[step.key] < rank[activeStep] ? "is-complete" : ""}">
+          ${step.label}
+        </span>
+        ${index < steps.length - 1 ? `<span class="project-card-stage-line ${index < rank[activeStep] ? "is-complete" : ""}" aria-hidden="true"></span>` : ""}
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderProjectCard(bundle, options = {}) {
   const { archived = false } = options;
   const stats = getStats(bundle);
   const published = isProjectPublished(bundle);
+  const openIssueCount = getOutstandingIssueCount(bundle);
+  const projectedFinish = projectCardProjectedFinish(stats);
+  const activeTodayGoals = activeGoalsForBundle(bundle)
+    .map((goal) => evaluateGoal(bundle, goal))
+    .filter((goal) => goal.trackedToday);
+  const dailyGoalProgress = projectCardDailyGoalProgress(activeTodayGoals);
   return `
-    <div class="card project-card ${published ? "project-card-published" : ""} ${archived ? "archived-project" : ""}">
-      <div>
-        <div class="project-card-head">
-          <p class="small-copy">Project</p>
-          ${archived ? `<span class="project-card-status">Archived</span>` : ""}
-          ${published ? `<span class="project-card-status">Published</span>` : ""}
+    <div
+      class="project-card ${published ? "project-card-published" : ""} ${archived ? "archived-project" : ""} ${archived ? "" : "project-card--interactive"}"
+      ${archived ? "" : `role="button" tabindex="0" data-project-card-open="${escapeAttr(bundle.id)}" aria-label="Open ${escapeAttr(bundle.project.bookTitle || "Untitled project")}"`}
+    >
+      ${archived ? "" : `
+        <div class="project-card-menu">
+          <button class="project-card-menu-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Project actions">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="5" cy="12" r="1.4"></circle>
+              <circle cx="12" cy="12" r="1.4"></circle>
+              <circle cx="19" cy="12" r="1.4"></circle>
+            </svg>
+          </button>
+          <div class="project-card-overflow-menu hidden" role="menu">
+            ${published
+              ? `<button type="button" data-action="reopen-project" data-id="${bundle.id}" role="menuitem">Re-open project</button>`
+              : `<button type="button" data-action="edit-project" data-id="${bundle.id}" role="menuitem">Edit project</button>`}
+            <button type="button" data-action="archive-project" data-id="${bundle.id}" role="menuitem">Archive project</button>
+          </div>
         </div>
-        <h3 class="hero-title">${escapeHtml(bundle.project.bookTitle)}</h3>
-        ${archived ? `<p class="project-card-status-copy">Archived ${escapeHtml(formatDate(bundle.archivedAt || new Date().toISOString()))}</p>` : ""}
-        ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
-        <div class="meta-line">
-          <span class="pill">${escapeHtml(bundle.project.manuscriptType || "Novel")}</span>
-          <span class="pill">${escapeHtml(getStructureUnitPlural(bundle))}</span>
-          <span class="pill">${formatNumber(bundle.project.currentWordCount)} / ${formatNumber(bundle.project.targetWordCount)} words</span>
-          <span class="pill">${bundle.project.deadline ? `Due ${formatDate(bundle.project.deadline)}` : "No deadline"}</span>
+      `}
+      <p class="project-card-genre">${escapeHtml(bundle.project.manuscriptType || "Novel")}</p>
+      <h3>${escapeHtml(bundle.project.bookTitle || "Untitled project")}</h3>
+      ${archived ? `<p class="project-card-status-copy">Archived ${escapeHtml(formatDate(bundle.archivedAt || new Date().toISOString()))}</p>` : ""}
+      ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
+      ${renderProjectCardLifecycle(bundle)}
+      <div class="project-card-stat-row" aria-label="Project overview stats">
+        <article>
+          <strong>${escapeHtml(projectedFinish)}</strong>
+          <span>Projected finish</span>
+        </article>
+        <article>
+          <strong>${formatNumber(openIssueCount)}</strong>
+          <span>Open issues</span>
+        </article>
+        <article>
+          <strong>${formatNumber(number(bundle.project.currentWordCount))}</strong>
+          <span>Words</span>
+        </article>
+      </div>
+      <div class="project-card-goals">
+        <div class="project-card-overall-progress">
+          <span class="project-card-progress-ring" style="--project-card-progress:${dailyGoalProgress}%"></span>
+          <div>
+            <strong>${formatNumber(dailyGoalProgress)}%</strong>
+            <h4>Overall progress</h4>
+            <p>${escapeHtml(projectCardGoalSummary(activeTodayGoals))}</p>
+          </div>
         </div>
       </div>
-      <div class="progress-block">
-        <div class="progress-label-row">
-          <strong>Completion</strong>
-          <span>${stats.totalProgress.toFixed(1)}%</span>
-        </div>
-        <div class="progress-rail">
-          <div class="progress-fill" style="width:${stats.totalProgress}%"></div>
-        </div>
-      </div>
-      <div class="metrics" style="grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0;">
-        <div class="metric">
-          <div class="label">Words today</div>
-          <div class="value">${formatNumber(stats.wordsToday)}</div>
-        </div>
-        <div class="metric">
-          <div class="label">Current streak</div>
-          <div class="value">${formatNumber(stats.currentStreak)}</div>
-        </div>
-      </div>
-      <div class="meta-line">
-        ${archived ? `
+      ${archived ? `
+        <div class="project-card-actions">
           <button class="ghost-btn" data-action="restore-project" data-id="${bundle.id}">Restore</button>
           <button class="inline-btn" data-action="delete-project-permanently" data-id="${bundle.id}">Delete permanently</button>
-        ` : `
-          <button class="primary-btn" data-action="open-project" data-id="${bundle.id}">${published ? "View final stats" : "Open project"}</button>
-          ${published
-            ? `<button class="ghost-btn" data-action="reopen-project" data-id="${bundle.id}">Re-open</button>`
-            : `<button class="ghost-btn" data-action="edit-project" data-id="${bundle.id}">Edit project</button>`}
-          <button class="inline-btn" data-action="archive-project" data-id="${bundle.id}">Archive</button>
-        `}
-      </div>
+        </div>
+      ` : ""}
     </div>
   `;
+}
+
+function getActivityRangeOptions() {
+  return [
+    { key: "today", label: "Today", days: 1, copy: "today" },
+    { key: "7", label: "7D", days: 7, copy: "the last 7 days" },
+    { key: "30", label: "30D", days: 30, copy: "the last 30 days" },
+    { key: "all", label: "All", days: null, copy: "all time" }
+  ];
+}
+
+function getActivityRangeConfig() {
+  return getActivityRangeOptions().find((option) => option.key === activityRangeKey) || getActivityRangeOptions()[1];
+}
+
+function getSessionDateObject(session) {
+  const date = new Date(session?.date || "");
+  return Number.isNaN(date.getTime()) ? null : startOfDay(date);
+}
+
+function getActivityRangeStart(bundle, config = getActivityRangeConfig()) {
+  const today = startOfDay(new Date());
+  if (config.key === "all") {
+    const sessionDates = (bundle?.sessions || [])
+      .map(getSessionDateObject)
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+    return sessionDates[0] || today;
+  }
+  const start = new Date(today);
+  start.setDate(today.getDate() - Math.max(0, number(config.days) - 1));
+  return start;
+}
+
+function getActivityRangeSessions(bundle, config = getActivityRangeConfig()) {
+  const today = startOfDay(new Date());
+  const start = getActivityRangeStart(bundle, config);
+  return (bundle?.sessions || [])
+    .filter((session) => {
+      const sessionDate = getSessionDateObject(session);
+      return sessionDate && sessionDate >= start && sessionDate <= today;
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+}
+
+function getActivityDailyActivity(bundle, config = getActivityRangeConfig()) {
+  const today = startOfDay(new Date());
+  const start = getActivityRangeStart(bundle, config);
+  const dayCount = Math.max(1, daysBetween(start, today) + 1);
+  return Array.from({ length: dayCount }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = date.toISOString().slice(0, 10);
+    const daySessions = (bundle?.sessions || []).filter((session) => dateKey(session.date) === key);
+    const writingSessions = daySessions.filter((session) => session.type !== "edit");
+    const editingSessions = daySessions.filter((session) => session.type === "edit");
+    return {
+      key,
+      label: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+      shortLabel: config.key === "today" ? "Today" : date.toLocaleDateString(undefined, { month: "numeric", day: "numeric" }),
+      sessions: daySessions.length,
+      writingSessions: writingSessions.length,
+      editingSessions: editingSessions.length,
+      words: writingSessions.reduce((sum, session) => sum + number(session.wordsWritten), 0),
+      minutes: daySessions.reduce((sum, session) => sum + number(session.durationMinutes), 0),
+      editingMinutes: editingSessions.reduce((sum, session) => sum + number(session.durationMinutes), 0)
+    };
+  });
+}
+
+function summarizeActivityRange(rangeSessions) {
+  const writingSessions = rangeSessions.filter((session) => session.type !== "edit");
+  const editingSessions = rangeSessions.filter((session) => session.type === "edit");
+  const words = writingSessions.reduce((sum, session) => sum + number(session.wordsWritten), 0);
+  const minutes = rangeSessions.reduce((sum, session) => sum + number(session.durationMinutes), 0);
+  const editingMinutes = editingSessions.reduce((sum, session) => sum + number(session.durationMinutes), 0);
+  return { writingSessions, editingSessions, words, minutes, editingMinutes };
+}
+
+function getActivityMomentumLabel(days) {
+  if (!days.length || days.reduce((sum, day) => sum + day.words, 0) <= 0) return "No trend";
+  if (days.length < 4) return "Active";
+  const midpoint = Math.floor(days.length / 2);
+  const earlier = days.slice(0, midpoint).reduce((sum, day) => sum + day.words, 0);
+  const later = days.slice(midpoint).reduce((sum, day) => sum + day.words, 0);
+  if (later > earlier * 1.08) return "Increasing";
+  if (later < earlier * 0.92) return "Slowing";
+  return "Steady";
+}
+
+function renderActivityRangeTabs() {
+  return `
+    <div class="activity-range-tabs" aria-label="Activity date range">
+      ${getActivityRangeOptions().map((option) => `
+        <button
+          class="${option.key === activityRangeKey ? "active" : ""}"
+          type="button"
+          data-activity-range="${option.key}"
+          aria-pressed="${option.key === activityRangeKey ? "true" : "false"}"
+        >${option.label}</button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderMiniSparkline(values = []) {
+  const series = values.length ? values.map(number) : [0];
+  const width = 160;
+  const height = 50;
+  const max = Math.max(...series, 1);
+  const min = Math.min(...series, 0);
+  const range = Math.max(1, max - min);
+  const points = series.map((value, index) => {
+    const x = series.length === 1 ? width / 2 : 8 + (index * (width - 16)) / Math.max(1, series.length - 1);
+    const y = height - 8 - ((value - min) / range) * (height - 16);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+  return `
+    <svg class="activity-sparkline" viewBox="0 0 ${width} ${height}" aria-hidden="true">
+      <polyline fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}" />
+      ${series.map((value, index) => {
+        const x = series.length === 1 ? width / 2 : 8 + (index * (width - 16)) / Math.max(1, series.length - 1);
+        const y = height - 8 - ((value - min) / range) * (height - 16);
+        return `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="2.4" fill="currentColor"></circle>`;
+      }).join("")}
+    </svg>
+  `;
+}
+
+function renderActivityLineIcon(icon) {
+  const icons = {
+    writing: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20h16"></path>
+        <path d="M7 16.5 17.6 5.9a2 2 0 0 1 2.8 2.8L9.8 19.3 5 20Z"></path>
+        <path d="m15.8 7.7 2.8 2.8"></path>
+      </svg>
+    `,
+    editing: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="16" height="16" rx="3"></rect>
+        <path d="m8 12 3 3 5-6"></path>
+      </svg>
+    `,
+    words: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M5 6h14"></path>
+        <path d="M5 11h14"></path>
+        <path d="M5 16h10"></path>
+        <path d="M5 20h6"></path>
+      </svg>
+    `,
+    time: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 3h6"></path>
+        <circle cx="12" cy="13" r="7"></circle>
+        <path d="M12 9v4l3 2"></path>
+      </svg>
+    `,
+    milestone: `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 21V4"></path>
+        <path d="M6 5h11l-1.5 4L17 13H6"></path>
+      </svg>
+    `
+  };
+  return icons[icon] || icons.writing;
+}
+
+function renderActivityTrendChart(days, config = getActivityRangeConfig()) {
+  const width = 760;
+  const height = 238;
+  const average = days.length
+    ? days.reduce((sum, day) => sum + day.words, 0) / days.length
+    : 0;
+  const max = Math.max(...days.map((day) => day.words), average, 1);
+  const yForValue = (value) => height - 36 - (number(value) / max) * (height - 78);
+  const points = days.map((day, index) => {
+    const x = days.length === 1 ? width / 2 : 56 + (index * (width - 112)) / Math.max(1, days.length - 1);
+    const y = yForValue(day.words);
+    return { ...day, x, y };
+  });
+  const polyline = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const baseline = height - 36;
+  const area = points.length
+    ? `${points[0].x},${baseline} ${polyline} ${points[points.length - 1].x},${baseline}`
+    : "";
+  const averageY = yForValue(average);
+  const labelStep = Math.max(1, Math.ceil(days.length / 7));
+  const tickValues = [0.25, 0.5, 0.75, 1].map((ratio) => Math.round(max * ratio));
+  const lastPoint = points[points.length - 1];
+  return `
+    <div class="activity-chart-legend" aria-hidden="true">
+      <span><i class="activity-legend-dot words"></i>Words written</span>
+      <span><i class="activity-legend-dot average"></i>Daily average</span>
+    </div>
+    <svg class="activity-chart-svg" viewBox="0 0 ${width} ${height}" aria-label="Writing progress for ${config.copy}">
+      ${tickValues.map((tick) => {
+        const y = yForValue(tick);
+        return `
+          <line class="activity-chart-grid" x1="56" y1="${y.toFixed(2)}" x2="${width - 34}" y2="${y.toFixed(2)}"></line>
+          <text class="activity-chart-y-label" x="40" y="${(y + 4).toFixed(2)}" text-anchor="end">${formatCompactCheckpoint(tick)}</text>
+        `;
+      }).join("")}
+      <line class="activity-chart-axis" x1="56" y1="${baseline}" x2="${width - 34}" y2="${baseline}"></line>
+      <polygon class="activity-chart-area" points="${area}" />
+      <line class="activity-chart-average" x1="56" y1="${averageY.toFixed(2)}" x2="${width - 34}" y2="${averageY.toFixed(2)}"></line>
+      <polyline class="activity-chart-line" fill="none" points="${polyline}" />
+      ${points.map((point, index) => `
+        <circle class="activity-chart-dot" cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="${index === points.length - 1 ? 5 : 3.5}" />
+      `).join("")}
+      ${points.map((point, index) => index % labelStep === 0 || index === points.length - 1 ? `
+        <text class="activity-chart-x-label" x="${point.x.toFixed(2)}" y="${height - 13}" text-anchor="middle">${escapeHtml(point.shortLabel)}</text>
+      ` : "").join("")}
+      ${lastPoint ? `
+        <g class="activity-chart-callout" transform="translate(${Math.min(width - 214, Math.max(72, lastPoint.x - 102)).toFixed(2)} ${Math.max(24, lastPoint.y - 62).toFixed(2)})">
+          <rect width="188" height="52" rx="10"></rect>
+          <text x="14" y="22">Latest</text>
+          <text x="174" y="22" text-anchor="end">${formatNumber(lastPoint.words)}</text>
+          <text x="14" y="40">Average</text>
+          <text x="174" y="40" text-anchor="end">${formatNumber(Math.round(average))}</text>
+        </g>
+      ` : ""}
+    </svg>
+  `;
+}
+
+function renderActivityTimeline(sessions, expanded = false) {
+  if (!sessions.length) return `<div class="empty">No recent activity yet.</div>`;
+  const visibleSessions = expanded ? sessions : sessions.slice(0, 5);
+  return visibleSessions.map((session) => {
+    const isEdit = session.type === "edit";
+    const title = isEdit
+      ? `Edited for ${formatNumber(session.durationMinutes)} minutes`
+      : `Wrote ${formatNumber(session.wordsWritten)} words`;
+    return `
+      <article class="activity-timeline-item ${isEdit ? "editing" : "writing"}">
+        <span class="activity-timeline-dot">${renderActivityLineIcon(isEdit ? "editing" : "writing")}</span>
+        <div>
+          <time>${escapeHtml(formatRelativeTime(session.date))}</time>
+          <strong>${escapeHtml(title)}</strong>
+          <p>${formatNumber(session.durationMinutes)}m${session.sectionLabel ? ` · ${escapeHtml(session.sectionLabel)}` : ""}</p>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+function bindActivityBoardActions(bundle) {
+  document.querySelectorAll("[data-activity-range]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activityRangeKey = button.dataset.activityRange || "7";
+      renderSessions(bundle);
+    });
+  });
+
+  document.getElementById("activity-view-all-btn")?.addEventListener("click", () => {
+    activityScreenMode = "all";
+    renderSessions(bundle);
+  });
+}
+
+function renderAllActivityPage(bundle) {
+  const view = document.getElementById("view-sessions");
+  const sessions = [...bundle.sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  view.innerHTML = `
+    <section class="activity-board activity-all-board">
+      <div class="activity-board-top">
+        <div class="activity-hero-copy">
+          <h2>All activity</h2>
+        </div>
+        <button class="activity-text-btn" id="activity-summary-btn" type="button">Back to activity</button>
+      </div>
+      <div class="activity-all-list">
+        ${sessions.length ? sessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No activity logged yet.</div>`}
+      </div>
+    </section>
+  `;
+  document.getElementById("activity-summary-btn")?.addEventListener("click", () => {
+    activityScreenMode = "summary";
+    renderSessions(bundle);
+  });
+  bindSessionActions();
 }
 
 
@@ -1167,38 +1612,90 @@ function renderSessions(bundle) {
     view.innerHTML = "";
     return;
   }
-  const sessions = [...bundle.sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (activityScreenMode === "all") {
+    renderAllActivityPage(bundle);
+    return;
+  }
+  const config = getActivityRangeConfig();
+  const sessions = getActivityRangeSessions(bundle, config);
+  const recentDays = getActivityDailyActivity(bundle, config);
+  const summary = summarizeActivityRange(sessions);
+  const momentumLabel = getActivityMomentumLabel(recentDays);
   view.innerHTML = `
-    <section class="stack">
-      <section class="card">
-        <div class="section-head">
-          <div>
-            <h2>History</h2>
-            <p>View and delete every writing or editing session logged for this project.</p>
+    <section class="activity-board">
+      <div class="activity-board-top">
+        <div class="activity-hero-copy">
+          <h2>Activity</h2>
+        </div>
+        ${renderActivityRangeTabs()}
+      </div>
+      <div class="activity-layout">
+        <div class="activity-main">
+          <section class="activity-kpi-panel">
+            <article class="activity-kpi-card writing">
+              <span class="activity-kpi-icon">${renderActivityLineIcon("writing")}</span>
+              <span>Writing sessions</span>
+              <strong>${formatNumber(summary.writingSessions.length)}</strong>
+              ${renderMiniSparkline(recentDays.map((day) => day.writingSessions))}
+            </article>
+            <article class="activity-kpi-card editing">
+              <span class="activity-kpi-icon">${renderActivityLineIcon("editing")}</span>
+              <span>Editing sessions</span>
+              <strong>${formatNumber(summary.editingSessions.length)}</strong>
+              ${renderMiniSparkline(recentDays.map((day) => day.editingSessions))}
+            </article>
+            <article class="activity-kpi-card words">
+              <span class="activity-kpi-icon">${renderActivityLineIcon("words")}</span>
+              <span>Words written</span>
+              <strong>${formatNumber(summary.words)}</strong>
+              ${renderMiniSparkline(recentDays.map((day) => day.words))}
+            </article>
+            <article class="activity-kpi-card time">
+              <span class="activity-kpi-icon">${renderActivityLineIcon("time")}</span>
+              <span>Hours focused</span>
+              <strong>${(summary.minutes / 60).toFixed(1)}</strong>
+              ${renderMiniSparkline(recentDays.map((day) => day.minutes))}
+            </article>
+          </section>
+          <section class="activity-chart-card">
+            <div class="activity-chart-head">
+              <div>
+                <h3>Writing progress</h3>
+                <p>Words across ${escapeHtml(config.copy)}.</p>
+              </div>
+            </div>
+            <div class="chart-shell activity-trend-chart">
+              ${renderActivityTrendChart(recentDays, config)}
+            </div>
+            <div class="activity-narrative-strip">
+              <article>
+                <strong>${escapeHtml(momentumLabel)}</strong>
+                <span>Writing momentum</span>
+              </article>
+              <article>
+                <strong>${formatNumber(Math.round(summary.words / Math.max(1, recentDays.length)))} words</strong>
+                <span>Daily average</span>
+              </article>
+              <article>
+                <strong>${formatHours(summary.editingMinutes)}</strong>
+                <span>Revision time in range</span>
+              </article>
+            </div>
+          </section>
+        </div>
+        <aside class="activity-timeline-card">
+          <div class="activity-timeline-head">
+            <h3>Recent activity</h3>
+            <button class="activity-text-btn" id="activity-view-all-btn" type="button">View all</button>
           </div>
-          <button class="route-chip" id="back-to-dashboard-btn" type="button" aria-label="Back to workspace">
-            <span class="route-chip-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24">
-                <path d="m14.5 6-6 6 6 6" />
-              </svg>
-            </span>
-            <span>Back</span>
-          </button>
-        </div>
-        <div class="list">
-          ${sessions.length ? sessions.map((session) => renderSessionCard(bundle, session)).join("") : `<div class="empty">No sessions logged yet.</div>`}
-        </div>
-      </section>
+          <div class="activity-timeline-list">
+            ${renderActivityTimeline(sessions, false)}
+          </div>
+        </aside>
+      </div>
     </section>
   `;
-  const backButton = document.getElementById("back-to-dashboard-btn");
-  if (backButton) {
-    backButton.addEventListener("click", () => {
-      activeView = sessionsReturnView;
-      render();
-    });
-  }
-  bindSessionActions();
+  bindActivityBoardActions(bundle);
 }
 
 function renderEditProject(bundle) {
@@ -1212,7 +1709,7 @@ function renderEditProject(bundle) {
       <section class="card">
         <div class="section-head">
           <div>
-            <h2>Edit Project</h2>
+            <h2>Edit project</h2>
             <p>Update the manuscript setup from its own dedicated page.</p>
           </div>
           <button class="route-chip" id="back-to-projects-btn" type="button" aria-label="Back to projects">
@@ -1302,12 +1799,53 @@ function bindProjectEvents() {
     });
   }
 
+  document.querySelectorAll(".project-card-menu-btn").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const menu = button.parentElement?.querySelector(".project-card-overflow-menu");
+      const willOpen = menu?.classList.contains("hidden");
+      document.querySelectorAll(".project-card-overflow-menu").forEach((item) => item.classList.add("hidden"));
+      document.querySelectorAll(".project-card-menu-btn").forEach((item) => item.setAttribute("aria-expanded", "false"));
+      if (menu && willOpen) {
+        menu.classList.remove("hidden");
+        button.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+
+  if (!projectCardMenuDocumentBound) {
+    document.addEventListener("click", (event) => {
+      if (event.target.closest(".project-card-menu")) return;
+      document.querySelectorAll(".project-card-overflow-menu").forEach((item) => item.classList.add("hidden"));
+      document.querySelectorAll(".project-card-menu-btn").forEach((item) => item.setAttribute("aria-expanded", "false"));
+    });
+    projectCardMenuDocumentBound = true;
+  }
+
+  function openProjectCard(projectId) {
+    if (!projectId) return;
+    state.activeProjectId = projectId;
+    activeView = getWorkspaceLandingView(getBundleById(projectId));
+    saveState();
+    render();
+  }
+
+  document.querySelectorAll("[data-project-card-open]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea, [role='menu']")) return;
+      openProjectCard(card.dataset.projectCardOpen);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      if (event.target.closest("button, a, input, select, textarea, [role='menu']")) return;
+      event.preventDefault();
+      openProjectCard(card.dataset.projectCardOpen);
+    });
+  });
+
   document.querySelectorAll("[data-action='open-project']").forEach((button) => {
     button.addEventListener("click", () => {
-      state.activeProjectId = button.dataset.id;
-      activeView = getWorkspaceLandingView(getBundleById(button.dataset.id));
-      saveState();
-      render();
+      openProjectCard(button.dataset.id);
     });
   });
 

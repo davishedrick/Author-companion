@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Author Engine</title>
+  <title>Scriptor</title>
   <script>
     try {
       const storedSnapshot = JSON.parse(localStorage.getItem("author-engine-mvp"));
@@ -13,14 +13,20 @@
       document.documentElement.dataset.theme = "light";
     }
   </script>
-  <link rel="stylesheet" href="static/css/app.css?v=edit-project-stats-20260509" />
+  <link rel="stylesheet" href="static/css/app.css?v=ui-polish-20260518" />
 </head>
 <body>
   <div class="app-shell">
-    <aside class="sidebar">
+    <header class="global-header">
       <div class="brand" id="brand"></div>
-      <nav class="nav" id="nav"></nav>
-      <div class="sidebar-footer" id="sidebar-footer"></div>
+      <div class="project-selector-shell" id="project-selector"></div>
+      <nav class="global-nav" id="global-nav" aria-label="Primary"></nav>
+      <div class="header-action" id="header-action"></div>
+      <div class="avatar-menu-shell" id="avatar-menu"></div>
+    </header>
+
+    <aside class="sidebar">
+      <nav class="nav" id="nav" aria-label="Tracker workspace"></nav>
     </aside>
 
     <section class="content-shell">
@@ -45,7 +51,7 @@
           </svg>
         </button>
         <div>
-          <h3 id="session-modal-title">Start Session</h3>
+          <h3 id="session-modal-title">Start session</h3>
           <p id="session-modal-copy">Choose the kind of focus you need, then set a timer that fits.</p>
         </div>
         <button class="ghost-btn" id="close-session-modal-btn" type="button">Close</button>
@@ -93,7 +99,7 @@
                 </svg>
                 <p class="session-dial-caption" id="edit-session-dial-caption">Drag the dial to set your timer.</p>
               </div>
-              <label id="session-start-word-count-field">Current manuscript word count
+              <label id="session-start-word-count-field">Current word count
                 <input type="number" min="0" id="session-start-word-count" name="sessionStartWordCount" required />
               </label>
               <button class="primary-btn writing-launch-cta" id="start-session-btn" type="button">Start session</button>
@@ -118,7 +124,7 @@
       </div>
       <form id="session-complete-form" class="session-complete-form">
         <p class="small-copy full" id="session-start-count-copy"></p>
-        <label id="session-end-word-count-field">Current manuscript word count
+        <label id="session-end-word-count-field">Current word count
           <input type="number" min="0" name="sessionEndWordCount" />
         </label>
         <label id="session-words-written-field" class="hidden">Words written
@@ -309,8 +315,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="goal-modal-title">Create Goal</h3>
-          <p id="goal-modal-copy">Set a simple daily target you can review quickly from the Goals workspace.</p>
+          <h3 id="goal-modal-title">Create goal</h3>
         </div>
         <button class="ghost-btn" id="close-goal-modal-btn" type="button">Close</button>
       </div>
@@ -405,8 +410,20 @@
           </div>
         </section>
         <section class="settings-section">
+          <h4>Account photo</h4>
+          <p class="muted">Add a profile photo for the account menu.</p>
+          <div class="profile-photo-control">
+            <div class="profile-photo-preview" id="profile-photo-preview" aria-hidden="true"></div>
+            <div class="profile-photo-actions">
+              <button class="primary-btn" id="choose-profile-photo-btn" type="button">Choose photo</button>
+              <button class="ghost-btn" id="remove-profile-photo-btn" type="button">Remove</button>
+              <input class="hidden" id="profile-photo-input" type="file" accept="image/*" />
+            </div>
+          </div>
+        </section>
+        <section class="settings-section">
           <h4>Import</h4>
-          <p class="muted">Bring an existing project into The Author Engine from a CSV file.</p>
+          <p class="muted">Bring an existing project into Scriptor from a CSV file.</p>
           <div class="meta-line" style="margin-top: 18px;">
             <button class="primary-btn" id="choose-import-csv-btn" type="button">Import CSV</button>
           </div>
@@ -415,9 +432,9 @@
           <h4>Export</h4>
           <p class="muted">Download just your writing data, just your editing data, or the whole project.</p>
           <div class="list" style="margin-top: 18px;">
-            <button class="ghost-btn" id="export-write-modal-btn" type="button">Export Write</button>
-            <button class="ghost-btn" id="export-edit-modal-btn" type="button">Export Edit</button>
-            <button class="ghost-btn" id="export-all-modal-btn" type="button">Export All</button>
+            <button class="ghost-btn" id="export-write-modal-btn" type="button">Export write</button>
+            <button class="ghost-btn" id="export-edit-modal-btn" type="button">Export edit</button>
+            <button class="ghost-btn" id="export-all-modal-btn" type="button">Export all</button>
           </div>
         </section>
       </div>
@@ -462,7 +479,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="edit-session-title">Editing Session Complete</h3>
+          <h3 id="edit-session-title">Editing session complete</h3>
           <p id="edit-session-copy">Capture what you worked on, how much you edited, and anything you want to remember.</p>
         </div>
         <button class="ghost-btn" id="close-edit-session-btn" type="button">Close</button>
@@ -508,7 +525,7 @@
             <label>Words edited
               <input type="number" min="0" name="wordsEdited" value="0" />
             </label>
-            <label>Current manuscript word count
+            <label>Current word count
               <input type="number" min="0" name="sessionEndWordCount" />
             </label>
             <label>Blocker
@@ -542,7 +559,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="issue-modal-title">Add Open Issue</h3>
+          <h3 id="issue-modal-title">Add open issue</h3>
           <p id="issue-modal-copy">Capture it quickly. A short note is enough—we’ll place it for you. Paste the exact text if you want to return to it faster later.</p>
         </div>
         <button class="ghost-btn" id="close-issue-modal-btn" type="button">Close</button>
@@ -600,7 +617,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="edit2-chapter-modal-title">Add Structure Unit</h3>
+          <h3 id="edit2-chapter-modal-title">Add structure unit</h3>
           <p id="edit2-chapter-modal-copy">Create a structure anchor so issues and editing sessions have a place to live in the manuscript.</p>
         </div>
         <button class="ghost-btn" id="close-edit2-chapter-modal-btn" type="button">Close</button>
@@ -622,7 +639,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3 id="plot-entry-modal-title">Add Story Entry</h3>
+          <h3 id="plot-entry-modal-title">Add story entry</h3>
           <p id="plot-entry-modal-copy">Capture story references so your Story workspace stays useful as the manuscript grows.</p>
         </div>
         <button class="ghost-btn" id="close-plot-entry-modal-btn" type="button">Close</button>
@@ -654,7 +671,7 @@
     <div class="modal-card">
       <div class="section-head">
         <div>
-          <h3>Add Story Tab</h3>
+          <h3>Add story tab</h3>
           <p>Choose a category to add to this manuscript's Story workspace. Hidden tabs keep their saved entries.</p>
         </div>
         <button class="ghost-btn" id="close-plot-tab-modal-btn" type="button">Close</button>
@@ -671,11 +688,11 @@
     </div>
   </div>
 
-  <script src="static/js/state.js?v=edit-project-stats-20260509"></script>
-  <script src="static/js/dashboard.js?v=edit-project-stats-20260509"></script>
-  <script src="static/js/plot.js?v=edit-project-stats-20260509"></script>
-  <script src="static/js/edit.js?v=edit-project-stats-20260509"></script>
-  <script src="static/js/edit2.js?v=edit-project-stats-20260509"></script>
-  <script src="static/js/app.js?v=edit-project-stats-20260509"></script>
+  <script src="static/js/state.js?v=ui-polish-20260518"></script>
+  <script src="static/js/dashboard.js?v=ui-polish-20260518"></script>
+  <script src="static/js/plot.js?v=ui-polish-20260518"></script>
+  <script src="static/js/edit.js?v=ui-polish-20260518"></script>
+  <script src="static/js/edit2.js?v=ui-polish-20260518"></script>
+  <script src="static/js/app.js?v=ui-polish-20260518"></script>
 </body>
 </html>

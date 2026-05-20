@@ -35,7 +35,7 @@ function getEdit2WorkflowStatus(issue) {
 }
 
 function getEdit2WorkflowLabel(workflowStatus) {
-  if (workflowStatus === "in_progress") return "In Progress";
+  if (workflowStatus === "in_progress") return "In progress";
   if (workflowStatus === "resolved") return "Resolved";
   return "Open";
 }
@@ -535,10 +535,8 @@ function buildEdit2NextFocusRecommendations(bundle, chapters) {
   return {
     primary: {
       key: "add-anchor",
-      title: `Create the first ${unitLabel.toLowerCase()} anchor`,
-      reason: `${unitLabel} structure needs its first anchor before issue recommendations can stay useful.`,
-      progressContext: `No ${getStructureUnitPlural(bundle).toLowerCase()} are mapped yet`,
-      meta: `No ${getStructureUnitPlural(bundle).toLowerCase()} tracked yet`,
+      title: `Anchor your first ${unitLabel.toLowerCase()}`,
+      reason: `Add a ${unitLabel.toLowerCase()} to organize the issues you find while editing.`,
       primaryAction: "add-chapter",
       primaryLabel: `Add ${unitLabel.toLowerCase()}`,
     },
@@ -567,8 +565,17 @@ function renderEdit2NextFocusCards(recommendations) {
     <section class="card next-focus-card">
       <div class="section-head">
         <div>
-          <h3>Next Up</h3>
-          <p>One clear next move now, with backup options only if you need them.</p>
+          <div class="next-focus-heading-row">
+            <h3>Next up</h3>
+            <span
+              class="progress-info-icon next-focus-info"
+              tabindex="0"
+              role="img"
+              aria-label="How next up is chosen"
+              data-tooltip="Based on priority level, sections with the most issues, and other factors."
+            >?</span>
+          </div>
+          <p>Best issues to tackle first.</p>
         </div>
       </div>
       <div class="next-focus-carousel ${carouselCount <= 1 ? "is-single" : ""}" data-edit2-carousel data-active-index="0">
@@ -582,7 +589,7 @@ function renderEdit2NextFocusCards(recommendations) {
             <article class="next-focus-option ${getEdit2CarouselItemClass(index, carouselCount)} ${index === 0 ? "next-focus-primary" : ""}" data-edit2-carousel-item>
               <div class="next-focus-copy">
                 <p class="next-focus-kicker">${index === 0 ? "Recommended" : `Option ${formatNumber(index + 1)}`}</p>
-                <h4>${escapeHtml(index === 0 ? `Next step: ${recommendation.title}` : recommendation.title)}</h4>
+                <h4>${escapeHtml(recommendation.title)}</h4>
               </div>
               ${recommendation.meta ? `<p class="edit2-focus-meta">${escapeHtml(recommendation.meta)}</p>` : ""}
               ${recommendation.reason ? `<p class="next-focus-justification">${escapeHtml(recommendation.reason)}</p>` : ""}
@@ -743,7 +750,7 @@ function renderEdit2IssueGroups(chapter) {
   const resolvedIssues = chapter.issues.filter((issue) => getEdit2WorkflowStatus(issue) === "resolved");
   const activeIssueView = editIssueBoardView === "resolved" ? "resolved" : "current";
   const visibleIssues = activeIssueView === "resolved" ? resolvedIssues : currentIssues;
-  const title = activeIssueView === "resolved" ? "Archived Issues" : "Open Issues";
+  const title = activeIssueView === "resolved" ? "Archived issues" : "Open issues";
   const emptyCopy = activeIssueView === "resolved"
     ? `Archived issues will collect here once you resolve them.`
     : `No open issues are attached to this ${unitLower} right now.`;
@@ -838,9 +845,13 @@ function renderEdit2BoardSwitcher(activeBoardView, bundle, chapters) {
 
 function renderEdit2ChapterBoard(chapters) {
   const unitLabel = getStructureUnitLabel(currentBundle());
+  const unitLower = unitLabel.toLowerCase();
+  const unitPlural = getStructureUnitPlural(currentBundle());
   return `
     <div class="edit2-chapter-grid">
-      ${chapters.map((chapter, index) => renderEdit2ChapterCard(chapter, chapters, index, chapters.length, unitLabel)).join("")}
+      ${chapters.length
+        ? chapters.map((chapter, index) => renderEdit2ChapterCard(chapter, chapters, index, chapters.length, unitLabel)).join("")
+        : `<div class="empty">${escapeHtml(unitPlural)} will appear here.</div>`}
     </div>
   `;
 }
@@ -948,35 +959,28 @@ function formatEdit2NetWords(value) {
 
 function renderEdit2ProjectStatsStrip(bundle) {
   const stats = getEditProjectStats(bundle);
-  const sessionLabel = stats.sessionCount
-    ? `${formatNumber(stats.sessionCount)} editing session${stats.sessionCount === 1 ? "" : "s"}`
-    : "No editing sessions yet";
 
   return `
     <section class="card edit2-project-stats" aria-label="Editing project stats">
-      <div class="edit2-project-stats-head">
-        <p class="small-copy">Project edit stats</p>
-        <span class="pill">${escapeHtml(sessionLabel)}</span>
-      </div>
       <div class="edit2-project-stat-grid">
         <div class="edit2-project-stat edit2-project-stat--current">
-          <span>Current manuscript words</span>
+          <span>Word count</span>
           <strong>${formatNumber(bundle.project.currentWordCount)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Total words added</span>
+          <span>Words added</span>
           <strong>${formatNumber(stats.wordsAdded)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Total words removed</span>
+          <span>Words removed</span>
           <strong>${formatNumber(stats.wordsRemoved)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Net manuscript change</span>
+          <span>Net change</span>
           <strong>${formatEdit2NetWords(stats.netWordsChanged)}</strong>
         </div>
         <div class="edit2-project-stat">
-          <span>Editing time</span>
+          <span>Time spent editing</span>
           <strong>${formatHours(stats.totalMinutes)}</strong>
         </div>
       </div>
@@ -1003,10 +1007,10 @@ function renderEdit2Overview(bundle, manuscript, chapters) {
         </div>
         <div class="section-head edit2-board-head">
           <div>
-            <h3>${isIssueBoard ? "Issue Board" : "Manuscript Structure"}</h3>
+            <h3>${isIssueBoard ? "Issue board" : "Manuscript structure"}</h3>
             <p>${isIssueBoard
               ? `Switch into backlog mode without leaving the ${unitLower}-first Edit workspace.`
-              : `Stay in scan mode here. Each ${unitLower} row compresses recall and highlights where the most serious revision pressure is still sitting.`}</p>
+              : `Identify each ${unitLower}'s issues and spot which need the most revision.`}</p>
           </div>
           <div class="edit2-board-head-actions">
             ${!isIssueBoard ? `
@@ -1149,32 +1153,6 @@ function renderEdit2Dashboard(bundle) {
 
   const manuscript = buildEdit2Chapters(bundle);
   const chapters = manuscript.chapters;
-  const unitLabel = getStructureUnitLabel(bundle);
-  const unitLower = unitLabel.toLowerCase();
-  const unitPluralLower = getStructureUnitPlural(bundle).toLowerCase();
-
-  if (!chapters.length) {
-    edit2ViewMode = "overview";
-    view.innerHTML = `
-      <section class="stack">
-        ${renderEdit2ProjectStatsStrip(bundle)}
-        <section class="card edit2-empty-state">
-          <div class="section-head">
-            <div>
-              <h3>Manuscript Structure</h3>
-              <p>Add ${escapeHtml(unitPluralLower)} first so issues and editing sessions have a clear place to live in the manuscript structure.</p>
-            </div>
-            <div class="meta-line">
-              <button class="primary-btn" id="edit2-open-chapter-modal-btn" type="button">Add ${escapeHtml(unitLower)}</button>
-            </div>
-          </div>
-          <div class="empty">No ${escapeHtml(unitLower)} labels have been tracked yet.</div>
-        </section>
-      </section>
-    `;
-    bindEdit2DashboardEvents(bundle);
-    return;
-  }
 
   const selectedChapter = getEdit2SelectedChapter(chapters);
   if (edit2ViewMode === "detail" && selectedChapter) {

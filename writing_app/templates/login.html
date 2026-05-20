@@ -3,22 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>The Author Engine | Sign In</title>
+  <title>Scriptor | Sign In</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}" />
 </head>
 <body class="auth-page">
   <main class="auth-shell">
     <section class="auth-card">
-      <p class="auth-eyebrow">The Author Engine</p>
-      <h1>{{ "Create your owner account" if setup_mode else "Sign in to your workspace" }}</h1>
+      <p class="auth-eyebrow">Scriptor</p>
+      <h1>{{ "Create your owner account" if setup_mode else "Sign in" }}</h1>
+      {% if setup_mode %}
       <p class="auth-copy">
-        {% if setup_mode %}
         Set up the first account for your hosted writing workspace. After this, the same email and password will get you back into your saved projects.
-        {% else %}
-        Your writing and editing workspaces are waiting for you. Sign in to load your saved projects and session history.
-        {% endif %}
       </p>
+      {% endif %}
 
       {% if error %}
       <p class="auth-error" role="alert">{{ error }}</p>
@@ -45,13 +43,11 @@
       </p>
       {% endif %}
 
+      {% if setup_mode %}
       <p class="auth-supporting-copy">
-        {% if setup_mode %}
         This account will also unlock backend sync, so your data lives on the server instead of only in one browser.
-        {% else %}
-        Your saved data syncs with the backend when you use the hosted Flask app.
-        {% endif %}
       </p>
+      {% endif %}
     </section>
   </main>
 </body>
