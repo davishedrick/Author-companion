@@ -1,4 +1,5 @@
 import re
+from http.cookies import SimpleCookie
 from pathlib import Path
 
 from app import app
@@ -113,6 +114,28 @@ def test_login_cookie_supports_extension_api_credentials(tmp_path):
     set_cookie = response.headers["Set-Cookie"]
     assert "SameSite=None" in set_cookie
     assert "Secure" in set_cookie
+
+
+def test_extension_api_accepts_session_header_when_cookie_is_blocked(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+
+    login_response = register_and_login(client)
+    save_extension_test_state(client)
+    session_cookie = SimpleCookie(login_response.headers["Set-Cookie"])["session"].value
+
+    extension_client = app.test_client()
+    response = extension_client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(wordsWritten=959),
+        headers={
+            "Origin": "chrome-extension://scriptor",
+            "X-Scriptor-Session": session_cookie,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.get_json()["session"]["wordsWritten"] == 959
 
 
 def test_login_page_shows_forgot_password_link_after_accounts_exist(tmp_path):
@@ -1354,6 +1377,7 @@ def test_extension_api_allows_google_docs_origin(tmp_path):
     assert response.headers["Access-Control-Allow-Credentials"] == "true"
     assert preflight.status_code == 200
     assert preflight.headers["Access-Control-Allow-Origin"] == "https://docs.google.com"
+    assert "X-Scriptor-Session" in preflight.headers["Access-Control-Allow-Headers"]
 
 
 def extension_project(project_id, title, pass_name="Revision"):
