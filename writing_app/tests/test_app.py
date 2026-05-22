@@ -1104,18 +1104,13 @@ def test_session_history_cards_surface_handoff_summary():
     js = get_app_js()
 
     assert "function renderSessionCard(bundle, session)" in js
-    assert "function getEditingSessionWordBreakdown(session)" in js
-    assert "function deriveEditingWordBreakdown(wordsEdited, netWordsChanged)" in js
+    assert "function formatSessionNetWords(session)" in js
     assert "function formatEditingSessionWordTitle(session)" in js
-    assert "const derivedWordsAdded = (totalActivity + netWords) / 2;" in js
-    assert (
-        "return `+${formatNumber(breakdown.wordsAdded)} - ${formatNumber(breakdown.wordsRemoved)}`;"
-        in js
-    )
+    assert "return formatSessionNetWords(session);" in js
     assert "function formatEditingSessionWordDetail(session)" in js
-    assert "words added," in js
-    assert "total words edited" in js
-    assert 'return `${formatNumber(session.wordsEdited)} words edited`;' in js
+    assert "Net: ${formatSignedNumber(netWords)}" in js
+    assert 'return `${formatNumber(session.wordsEdited)} words edited`;' not in js
+    assert "total words edited" not in js
     assert "getSnapshotForSession(bundle, session.id)" in js
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
     assert "<strong>You:</strong>" in js
@@ -2082,6 +2077,64 @@ def test_extension_editing_session_derives_net_change_from_document_counts(tmp_p
     assert session["netWordsChanged"] == -112
 
 
+def test_extension_net_only_editing_payload_persists_net_without_words_edited(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="editing",
+            extensionSessionId="extension-session-edit-net-contract",
+            wordsEdited=0,
+            wordsAdded=0,
+            wordsRemoved=0,
+            netWordsChanged=100,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=714,
+            endDocumentWordCount=814,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["type"] == "edit"
+    assert session["wordsEdited"] == 0
+    assert session["wordsAdded"] == 0
+    assert session["wordsRemoved"] == 0
+    assert session["netWordsChanged"] == 100
+    assert session["startDocumentWordCount"] == 714
+    assert session["endDocumentWordCount"] == 814
+
+
+def test_extension_old_payload_derives_net_from_document_counts(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            sessionType="writing",
+            extensionSessionId="extension-session-old-counts",
+            wordsWritten=0,
+            wordCountMethod="google-docs-api",
+            startDocumentWordCount=1000,
+            endDocumentWordCount=1200,
+        ),
+    )
+    session = response.get_json()["session"]
+
+    assert response.status_code == 201
+    assert session["type"] == "write"
+    assert session["netWordsChanged"] == 200
+    assert session["startDocumentWordCount"] == 1000
+    assert session["endDocumentWordCount"] == 1200
+
+
 def test_extension_editing_session_derives_even_split_from_zero_net_change(tmp_path):
     use_temp_state_db(tmp_path)
     client = app.test_client()
@@ -2151,6 +2204,134 @@ def test_extension_document_binding_returns_same_project_after_save(tmp_path):
         "currentWordCount": 0,
         "status": "active",
     }
+
+
+def test_extension_surface_binding_stores_metadata_and_lists_bound_projects(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    response = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-a",
+            "tabTitle": "Draft V1",
+            "manuscriptSurfaceId": "google-doc-a:tab-a",
+            "projectId": "project-a",
+        },
+    )
+    picker_response = client.get("/api/extension/projects")
+    state = client.get("/api/state").get_json()
+
+    assert response.status_code == 200
+    assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["projectId"] == "project-a"
+    assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"] == "Draft V1"
+    project_rows = picker_response.get_json()["projects"]
+    assert next(row for row in project_rows if row["project"]["id"] == "project-a")["isBound"] is True
+    assert next(row for row in project_rows if row["project"]["id"] == "project-b")["isBound"] is False
+
+
+def test_extension_backend_rejects_project_bound_to_another_surface(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+
+    first = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-a",
+            "manuscriptSurfaceId": "google-doc-a:tab-a",
+            "projectId": "project-a",
+        },
+    )
+    second = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-b",
+            "manuscriptSurfaceId": "google-doc-a:tab-b",
+            "projectId": "project-a",
+        },
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.get_json() == {"error": "Project is already bound."}
+
+
+def test_extension_unbind_affects_only_current_surface_and_keeps_sessions(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-a",
+            "manuscriptSurfaceId": "google-doc-a:tab-a",
+            "projectId": "project-a",
+        },
+    )
+    client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-b",
+            "manuscriptSurfaceId": "google-doc-a:tab-b",
+            "projectId": "project-b",
+        },
+    )
+    session_response = client.post(
+        "/api/extension/sessions",
+        json=extension_session_payload(
+            tabId="tab-a",
+            tabTitle="Draft V1",
+            manuscriptSurfaceId="google-doc-a:tab-a",
+        ),
+    )
+
+    unbind_response = client.delete(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "manuscriptSurfaceId": "google-doc-a:tab-a"},
+    )
+    state = client.get("/api/state").get_json()
+    project_a = next(project for project in state["projects"] if project["id"] == "project-a")
+
+    assert session_response.status_code == 201
+    assert unbind_response.status_code == 200
+    assert "google-doc-a:tab-a" not in state["extensionDocumentBindings"]
+    assert state["extensionDocumentBindings"]["google-doc-a:tab-b"]["projectId"] == "project-b"
+    assert len(project_a["sessions"]) == 1
+
+
+def test_extension_create_project_route_accepts_widget_fields(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+
+    response = client.post(
+        "/api/extension/projects",
+        json={
+            "title": "The Hollow Orchard",
+            "manuscriptType": "Novel",
+            "structureUnit": "Chapter",
+            "targetWordCount": 80000,
+            "wordsWrittenSoFar": 528,
+            "deadline": "",
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    assert response.status_code == 201
+    project = response.get_json()["project"]
+    assert project["bookTitle"] == "The Hollow Orchard"
+    assert project["currentWordCount"] == 528
+    assert any(item["id"] == project["id"] for item in state["projects"])
 
 
 def test_state_api_preserves_extension_bindings_when_payload_omits_them(tmp_path):

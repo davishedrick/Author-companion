@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from copy import deepcopy
 from pathlib import Path
 
 from flask import current_app
@@ -91,11 +92,20 @@ def normalize_state_payload(payload):
     if not isinstance(extension_document_bindings, dict):
         extension_document_bindings = {}
     else:
-        extension_document_bindings = {
-            str(document_id): str(project_id)
-            for document_id, project_id in extension_document_bindings.items()
-            if document_id and project_id
-        }
+        normalized_bindings = {}
+        for document_id, binding in extension_document_bindings.items():
+            if not document_id or not binding:
+                continue
+            if isinstance(binding, dict):
+                project_id = binding.get("projectId")
+                if project_id:
+                    normalized_bindings[str(document_id)] = {
+                        **binding,
+                        "projectId": str(project_id),
+                    }
+                continue
+            normalized_bindings[str(document_id)] = str(binding)
+        extension_document_bindings = normalized_bindings
 
     deleted_extension_session_ids = payload.get("deletedExtensionSessionIds")
     if not isinstance(deleted_extension_session_ids, list):
@@ -121,7 +131,7 @@ def normalize_state_payload(payload):
 
 def load_state(user_id=None):
     if not user_id:
-        return dict(DEFAULT_PERSISTED_STATE)
+        return deepcopy(DEFAULT_PERSISTED_STATE)
 
     with get_connection() as connection:
         row = connection.execute(
@@ -139,12 +149,12 @@ def load_state(user_id=None):
                 ).fetchone()
 
     if not row:
-        return dict(DEFAULT_PERSISTED_STATE)
+        return deepcopy(DEFAULT_PERSISTED_STATE)
 
     try:
         payload = json.loads(row["state_json"])
     except json.JSONDecodeError:
-        return dict(DEFAULT_PERSISTED_STATE)
+        return deepcopy(DEFAULT_PERSISTED_STATE)
 
     return normalize_state_payload(payload)
 

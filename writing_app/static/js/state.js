@@ -1005,7 +1005,7 @@ function buildSnapshotFromSession(session, bundle = currentBundle()) {
     structureUnitType: getStructureUnitLower(bundle),
     wordsAdded: session.type === "edit" ? number(session.wordsAdded) : number(session.wordsWritten),
     wordsRemoved: session.type === "edit" ? number(session.wordsRemoved) : null,
-    netWords: session.type === "edit" ? number(session.netWordsChanged) : number(session.wordsWritten),
+    netWords: getSessionManuscriptWordDelta(session),
     intendedGoal: sessionType === "editing" ? "revise" : "draft",
     outcomeStatus: "partial",
     focusKey: session.focusKey || "",
@@ -1210,6 +1210,11 @@ function number(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat().format(Math.round(number(value)));
+}
+
+function formatSignedNumber(value) {
+  const rounded = Math.round(number(value));
+  return `${rounded > 0 ? "+" : ""}${formatNumber(rounded)}`;
 }
 
 function formatHours(minutes) {
@@ -1459,8 +1464,8 @@ function getEditProjectStats(bundle) {
     const breakdown = getEditingSessionWordBreakdown(session);
     stats.wordsAdded += breakdown.wordsAdded;
     stats.wordsRemoved += breakdown.wordsRemoved;
-    stats.netWordsChanged += breakdown.wordsAdded - breakdown.wordsRemoved;
-    stats.totalWordsEdited += breakdown.wordsEdited;
+    stats.netWordsChanged += getSessionManuscriptWordDelta(session);
+    stats.totalWordsEdited += Math.abs(getSessionManuscriptWordDelta(session));
     stats.totalMinutes += number(session.durationMinutes);
     return stats;
   }, {
@@ -1617,7 +1622,7 @@ function getEditStats(bundle) {
     const key = dateKey(session.date);
     const duration = number(session.durationMinutes);
     totalMinutes += duration;
-    totalWordsEdited += number(session.wordsEdited);
+    totalWordsEdited += Math.abs(getSessionManuscriptWordDelta(session));
     if (key === todayKey) minutesToday += duration;
     if (startOfDay(new Date(session.date)) >= weekStart) minutesWeek += duration;
     if (normalizeEditFocusKey(session.focusKey, session.passName) === activeFocusKey) activeFocusMinutes += duration;

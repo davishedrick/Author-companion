@@ -28,8 +28,11 @@ from extension_bridge import (
     ExtensionBridgeError,
     append_extension_issue,
     append_extension_session,
+    create_extension_project,
+    delete_document_binding,
     get_active_projects,
     get_document_binding,
+    get_extension_projects,
     get_extension_issues,
     preserve_extension_sessions,
     save_document_binding,
@@ -375,19 +378,47 @@ def get_projects():
     return jsonify({"projects": get_active_projects(state)})
 
 
+@app.get("/api/extension/projects")
+@login_required
+def get_extension_project_picker():
+    state = load_state(current_user_id())
+    return jsonify({"projects": get_extension_projects(state)})
+
+
+@app.post("/api/extension/projects")
+@login_required
+def post_extension_project():
+    user_id = current_user_id()
+    state = load_state(user_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        project = create_extension_project(state, payload)
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    save_state(state, user_id)
+    return jsonify({"project": project}), 201
+
+
 @app.get("/api/extension/document-binding")
 @login_required
 def get_extension_document_binding():
     user_id = current_user_id()
     state = load_state(user_id)
     document_id = request.args.get("documentId", "")
+    manuscript_surface_id = request.args.get("manuscriptSurfaceId", "")
     try:
-        project, changed = get_document_binding(state, document_id)
+        project, changed = get_document_binding(state, document_id, manuscript_surface_id)
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
     if changed:
         save_state(state, user_id)
-    return jsonify({"documentId": document_id, "project": project})
+    return jsonify(
+        {
+            "documentId": document_id,
+            "manuscriptSurfaceId": manuscript_surface_id,
+            "project": project,
+        }
+    )
 
 
 @app.put("/api/extension/document-binding")
@@ -401,11 +432,44 @@ def put_extension_document_binding():
             state,
             payload.get("documentId", ""),
             payload.get("projectId", ""),
+            payload.get("manuscriptSurfaceId", ""),
+            payload.get("tabId", ""),
+            payload.get("tabTitle", ""),
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
     save_state(state, user_id)
-    return jsonify({"documentId": payload.get("documentId", ""), "project": project})
+    return jsonify(
+        {
+            "documentId": payload.get("documentId", ""),
+            "manuscriptSurfaceId": payload.get("manuscriptSurfaceId", ""),
+            "project": project,
+        }
+    )
+
+
+@app.delete("/api/extension/document-binding")
+@login_required
+def delete_extension_document_binding():
+    user_id = current_user_id()
+    state = load_state(user_id)
+    payload = request.get_json(silent=True) or {}
+    document_id = payload.get("documentId") or request.args.get("documentId", "")
+    manuscript_surface_id = payload.get("manuscriptSurfaceId") or request.args.get(
+        "manuscriptSurfaceId", ""
+    )
+    try:
+        removed = delete_document_binding(state, document_id, manuscript_surface_id)
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    save_state(state, user_id)
+    return jsonify(
+        {
+            "documentId": document_id,
+            "manuscriptSurfaceId": manuscript_surface_id,
+            "removed": removed,
+        }
+    )
 
 
 @app.post("/api/extension/sessions")
@@ -413,12 +477,34 @@ def put_extension_document_binding():
 def post_extension_session():
     user_id = current_user_id()
     state = load_state(user_id)
+    payload = request.get_json(silent=True) or {}
+    app.logger.info(
+        "[ACE] extension session received: type=%s start=%s end=%s net=%s legacy=(edited=%s added=%s removed=%s)",
+        payload.get("sessionType"),
+        payload.get("startDocumentWordCount"),
+        payload.get("endDocumentWordCount"),
+        payload.get("netWordsChanged"),
+        payload.get("wordsEdited"),
+        payload.get("wordsAdded"),
+        payload.get("wordsRemoved"),
+    )
     try:
         created_session, project, duplicate = append_extension_session(
-            state, request.get_json(silent=True) or {}
+            state, payload
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
+    app.logger.info(
+        "[ACE] extension session persisted: id=%s type=%s start=%s end=%s net=%s legacy=(edited=%s added=%s removed=%s)",
+        created_session.get("id"),
+        created_session.get("type"),
+        created_session.get("startDocumentWordCount"),
+        created_session.get("endDocumentWordCount"),
+        created_session.get("netWordsChanged"),
+        created_session.get("wordsEdited"),
+        created_session.get("wordsAdded"),
+        created_session.get("wordsRemoved"),
+    )
     save_state(state, user_id)
     return jsonify(
         {
@@ -435,13 +521,23 @@ def get_extension_issue_list():
     user_id = current_user_id()
     state = load_state(user_id)
     document_id = request.args.get("documentId", "")
+    manuscript_surface_id = request.args.get("manuscriptSurfaceId", "")
     try:
-        issues, project, changed = get_extension_issues(state, document_id)
+        issues, project, changed = get_extension_issues(
+            state, document_id, manuscript_surface_id
+        )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
     if changed:
         save_state(state, user_id)
-    return jsonify({"documentId": document_id, "project": project, "issues": issues})
+    return jsonify(
+        {
+            "documentId": document_id,
+            "manuscriptSurfaceId": manuscript_surface_id,
+            "project": project,
+            "issues": issues,
+        }
+    )
 
 
 @app.post("/api/extension/issues")

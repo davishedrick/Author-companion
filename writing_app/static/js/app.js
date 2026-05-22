@@ -1553,14 +1553,15 @@ function renderActivityTimeline(sessions, expanded = false) {
     const isEdit = session.type === "edit";
     const title = isEdit
       ? `Edited for ${formatNumber(session.durationMinutes)} minutes`
-      : `Wrote ${formatNumber(session.wordsWritten)} words`;
+      : `Wrote for ${formatNumber(session.durationMinutes)} minutes`;
+    const netCopy = formatSessionNetWords(session);
     return `
       <article class="activity-timeline-item ${isEdit ? "editing" : "writing"}">
         <span class="activity-timeline-dot">${renderActivityLineIcon(isEdit ? "editing" : "writing")}</span>
         <div>
           <time>${escapeHtml(formatRelativeTime(session.date))}</time>
           <strong>${escapeHtml(title)}</strong>
-          <p>${formatNumber(session.durationMinutes)}m${session.sectionLabel ? ` · ${escapeHtml(session.sectionLabel)}` : ""}</p>
+          <p>${escapeHtml(netCopy)} · ${formatNumber(session.durationMinutes)}m${session.sectionLabel ? ` · ${escapeHtml(session.sectionLabel)}` : ""}</p>
         </div>
       </article>
     `;
@@ -2029,18 +2030,17 @@ function renderIssueCard(issue, options = {}) {
   `;
 }
 
+function formatSessionNetWords(session) {
+  const netWords = getSessionManuscriptWordDelta(session);
+  return `Net: ${formatSignedNumber(netWords)} ${Math.abs(netWords) === 1 ? "word" : "words"}`;
+}
+
 function formatEditingSessionWordTitle(session) {
-  const breakdown = getEditingSessionWordBreakdown(session);
-  if (breakdown.hasBreakdown) {
-    return `+${formatNumber(breakdown.wordsAdded)} - ${formatNumber(breakdown.wordsRemoved)}`;
-  }
-  return `${formatNumber(session.wordsEdited)} words edited`;
+  return formatSessionNetWords(session);
 }
 
 function formatEditingSessionWordDetail(session) {
-  const breakdown = getEditingSessionWordBreakdown(session);
-  if (!breakdown.hasBreakdown) return "";
-  return `${formatNumber(breakdown.wordsAdded)} words added, ${formatNumber(breakdown.wordsRemoved)} removed - ${formatNumber(breakdown.wordsEdited)} total words edited`;
+  return "";
 }
 
 function renderSessionCard(bundle, session) {
@@ -2048,7 +2048,7 @@ function renderSessionCard(bundle, session) {
   const snapshot = getSnapshotForSession(bundle, session.id);
   const title = isEditSession
     ? formatEditingSessionWordTitle(session)
-    : `${formatNumber(session.wordsWritten)} words written`;
+    : formatSessionNetWords(session);
   const editingWordDetail = isEditSession ? formatEditingSessionWordDetail(session) : "";
   const sectionPill = session.sectionLabel ? `<span class="pill">${escapeHtml(session.sectionLabel)}</span>` : "";
   const statusPill = snapshot
