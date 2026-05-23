@@ -1278,6 +1278,7 @@ def test_state_api_returns_default_state_when_empty(tmp_path):
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
         "deletedExtensionSessionIds": [],
+        "deletedExtensionProjectIds": [],
     }
 
 
@@ -1329,6 +1330,7 @@ def test_state_api_persists_snapshot_to_sqlite(tmp_path):
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
         "deletedExtensionSessionIds": [],
+        "deletedExtensionProjectIds": [],
     }
 
     put_response = client.put("/api/state", json=payload)
@@ -2331,7 +2333,84 @@ def test_extension_create_project_route_accepts_widget_fields(tmp_path):
     project = response.get_json()["project"]
     assert project["bookTitle"] == "The Hollow Orchard"
     assert project["currentWordCount"] == 528
+    created_project = next(item for item in state["projects"] if item["id"] == project["id"])
+    assert created_project["source"] == "chrome-extension"
+
+
+def test_state_api_preserves_extension_created_project_from_stale_app_save(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    create_response = client.post(
+        "/api/extension/projects",
+        json={
+            "title": "The Hollow Orchard",
+            "manuscriptType": "Novel",
+            "structureUnit": "Chapter",
+            "targetWordCount": 80000,
+            "wordsWrittenSoFar": 528,
+            "deadline": "",
+        },
+    )
+    project = create_response.get_json()["project"]
+    bind_response = client.put(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "projectId": project["id"]},
+    )
+    stale_response = client.put(
+        "/api/state",
+        json={
+            "projects": [],
+            "activeProjectId": None,
+            "activeView": "dashboard",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    assert create_response.status_code == 201
+    assert bind_response.status_code == 200
+    assert stale_response.status_code == 200
     assert any(item["id"] == project["id"] for item in state["projects"])
+    assert state["extensionDocumentBindings"]["google-doc-a"] == project["id"]
+
+
+def test_state_api_allows_extension_created_project_delete_tombstone(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    create_response = client.post(
+        "/api/extension/projects",
+        json={
+            "title": "The Hollow Orchard",
+            "manuscriptType": "Novel",
+            "structureUnit": "Chapter",
+            "targetWordCount": 80000,
+            "wordsWrittenSoFar": 528,
+        },
+    )
+    project = create_response.get_json()["project"]
+    client.put(
+        "/api/extension/document-binding",
+        json={"documentId": "google-doc-a", "projectId": project["id"]},
+    )
+    delete_response = client.put(
+        "/api/state",
+        json={
+            "projects": [],
+            "activeProjectId": None,
+            "activeView": "projects",
+            "lastWorkspaceView": "dashboard",
+            "deletedExtensionProjectIds": [project["id"]],
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    assert create_response.status_code == 201
+    assert delete_response.status_code == 200
+    assert not any(item["id"] == project["id"] for item in state["projects"])
+    assert "google-doc-a" not in state["extensionDocumentBindings"]
+    assert state["deletedExtensionProjectIds"] == [project["id"]]
 
 
 def test_state_api_preserves_extension_bindings_when_payload_omits_them(tmp_path):
@@ -2688,6 +2767,7 @@ def test_state_is_isolated_per_signed_in_user(tmp_path):
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
         "deletedExtensionSessionIds": [],
+        "deletedExtensionProjectIds": [],
     }
 
 

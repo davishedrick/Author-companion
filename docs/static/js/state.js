@@ -438,7 +438,8 @@ const defaultState = {
   themePreference: "light",
   profilePhoto: "",
   sidebarCollapsed: false,
-  deletedExtensionSessionIds: []
+  deletedExtensionSessionIds: [],
+  deletedExtensionProjectIds: []
 };
 
 let persistenceMode = "local";
@@ -574,7 +575,8 @@ function normalizeLoadedState(snapshot) {
       themePreference: normalizeThemePreference(snapshot.themePreference),
       profilePhoto: normalizeProfilePhoto(snapshot.profilePhoto),
       sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
-      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
+      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds),
+      deletedExtensionProjectIds: normalizeDeletedExtensionProjectIds(snapshot.deletedExtensionProjectIds)
     };
   }
 
@@ -597,7 +599,8 @@ function normalizeLoadedState(snapshot) {
       themePreference: normalizeThemePreference(snapshot.themePreference),
       profilePhoto: normalizeProfilePhoto(snapshot.profilePhoto),
       sidebarCollapsed: normalizeSidebarCollapsed(snapshot.sidebarCollapsed),
-      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds)
+      deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(snapshot.deletedExtensionSessionIds),
+      deletedExtensionProjectIds: normalizeDeletedExtensionProjectIds(snapshot.deletedExtensionProjectIds)
     };
   }
 
@@ -639,6 +642,11 @@ function normalizeDeletedExtensionSessionIds(value) {
   return [...new Set(value.map((sessionId) => String(sessionId || "").trim()).filter(Boolean))];
 }
 
+function normalizeDeletedExtensionProjectIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((projectId) => String(projectId || "").trim()).filter(Boolean))];
+}
+
 function normalizePersistedSnapshot(snapshot) {
   const normalizedState = normalizeLoadedState(snapshot);
   return {
@@ -669,6 +677,8 @@ function normalizeProjectBundle(bundle) {
   const status = bundle.status === "archived" || bundle.project?.status === "archived" ? "archived" : "active";
   return {
     id: bundle.id || createId(),
+    source: String(bundle.source || ""),
+    extensionCreatedAt: String(bundle.extensionCreatedAt || ""),
     status,
     archivedAt: status === "archived" ? (bundle.archivedAt || bundle.project?.archivedAt || new Date().toISOString()) : "",
     project: {
@@ -1113,6 +1123,7 @@ function serializeStateSnapshot() {
     profilePhoto: normalizeProfilePhoto(state.profilePhoto),
     sidebarCollapsed: normalizeSidebarCollapsed(state.sidebarCollapsed),
     deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds),
+    deletedExtensionProjectIds: normalizeDeletedExtensionProjectIds(state.deletedExtensionProjectIds),
     activeView,
     lastWorkspaceView
   };
@@ -1405,6 +1416,20 @@ function markExtensionSessionDeleted(session) {
   state.deletedExtensionSessionIds = normalizeDeletedExtensionSessionIds([
     ...(state.deletedExtensionSessionIds || []),
     sessionId
+  ]);
+}
+
+function extensionProjectIdForDeletion(project) {
+  if (!project || project.source !== "chrome-extension") return "";
+  return String(project.id || "").trim();
+}
+
+function markExtensionProjectDeleted(project) {
+  const projectId = extensionProjectIdForDeletion(project);
+  if (!projectId) return;
+  state.deletedExtensionProjectIds = normalizeDeletedExtensionProjectIds([
+    ...(state.deletedExtensionProjectIds || []),
+    projectId
   ]);
 }
 

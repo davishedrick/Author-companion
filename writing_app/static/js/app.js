@@ -1902,6 +1902,7 @@ function bindProjectEvents() {
       if (!isProjectArchived(bundle)) return;
       const confirmed = window.confirm(`Permanently delete "${bundle.project.bookTitle}"? This cannot be undone.`);
       if (!confirmed) return;
+      markExtensionProjectDeleted(bundle);
       state.projects = state.projects.filter((project) => project.id !== projectId);
       persistAndRender();
       showToast("Project deleted", `${bundle.project.bookTitle || "This project"} was permanently deleted.`);

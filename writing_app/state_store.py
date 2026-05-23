@@ -13,6 +13,7 @@ DEFAULT_PERSISTED_STATE = {
     "lastWorkspaceView": "dashboard",
     "extensionDocumentBindings": {},
     "deletedExtensionSessionIds": [],
+    "deletedExtensionProjectIds": [],
 }
 
 
@@ -117,6 +118,16 @@ def normalize_state_payload(payload):
             if session_id
         ]
 
+    deleted_extension_project_ids = payload.get("deletedExtensionProjectIds")
+    if not isinstance(deleted_extension_project_ids, list):
+        deleted_extension_project_ids = []
+    else:
+        deleted_extension_project_ids = [
+            str(project_id)
+            for project_id in deleted_extension_project_ids
+            if project_id
+        ]
+
     return {
         "projects": payload.get("projects")
         if isinstance(payload.get("projects"), list)
@@ -126,6 +137,7 @@ def normalize_state_payload(payload):
         "lastWorkspaceView": last_workspace_view,
         "extensionDocumentBindings": extension_document_bindings,
         "deletedExtensionSessionIds": deleted_extension_session_ids,
+        "deletedExtensionProjectIds": deleted_extension_project_ids,
     }
 
 

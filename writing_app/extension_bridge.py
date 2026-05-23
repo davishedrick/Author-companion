@@ -290,6 +290,26 @@ def _deleted_extension_session_ids(state: dict[str, Any]) -> set[str]:
     return {_clean_text(session_id) for session_id in session_ids if _clean_text(session_id)}
 
 
+def _deleted_extension_project_ids(state: dict[str, Any]) -> set[str]:
+    project_ids = state.get("deletedExtensionProjectIds")
+    if not isinstance(project_ids, list):
+        return set()
+    return {_clean_text(project_id) for project_id in project_ids if _clean_text(project_id)}
+
+
+def _extension_binding_project_ids(state: dict[str, Any]) -> set[str]:
+    project_ids: set[str] = set()
+    for binding in _bindings(state).values():
+        project_id = _binding_project_id(binding)
+        if project_id:
+            project_ids.add(project_id)
+    return project_ids
+
+
+def _is_extension_created_project(project: dict[str, Any]) -> bool:
+    return _clean_text(project.get("source")) == "chrome-extension"
+
+
 def _parse_iso(value: Any, field_name: str) -> str:
     text = _clean_text(value)
     if not text:
@@ -602,6 +622,8 @@ def create_extension_project(state: dict[str, Any], payload: dict[str, Any]) -> 
     project_id = f"project-{uuid4()}"
     project = {
         "id": project_id,
+        "source": "chrome-extension",
+        "extensionCreatedAt": datetime.now(timezone.utc).isoformat(),
         "status": "active",
         "archivedAt": "",
         "project": {
@@ -1036,6 +1058,32 @@ def preserve_extension_sessions(
         for project in existing_projects
         if isinstance(project, dict) and project.get("id")
     }
+    incoming_ids = {
+        project.get("id")
+        for project in incoming_projects
+        if isinstance(project, dict) and project.get("id")
+    }
+    deleted_project_ids = _deleted_extension_project_ids(incoming_state)
+    bound_project_ids = _extension_binding_project_ids(existing_state)
+
+    if deleted_project_ids:
+        bindings = _bindings(incoming_state)
+        for key, binding in list(bindings.items()):
+            if _binding_project_id(binding) in deleted_project_ids:
+                bindings.pop(key, None)
+
+    for project_id, existing_project in existing_by_id.items():
+        if (
+            project_id
+            and project_id not in incoming_ids
+            and project_id not in deleted_project_ids
+            and (
+                _is_extension_created_project(existing_project)
+                or project_id in bound_project_ids
+            )
+        ):
+            incoming_projects.append(existing_project)
+            incoming_ids.add(project_id)
 
     for incoming_project in incoming_projects:
         if not isinstance(incoming_project, dict):
