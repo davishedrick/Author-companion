@@ -36,6 +36,7 @@ from extension_bridge import (
     get_extension_issues,
     preserve_extension_sessions,
     save_document_binding,
+    update_document_binding_status,
 )
 from state_store import load_state, save_state
 
@@ -79,7 +80,9 @@ def current_user_id():
 
 
 def extension_session_user_id():
-    if not (request.path.startswith("/api/extension/") or request.path == "/api/projects"):
+    if not (
+        request.path.startswith("/api/extension/") or request.path == "/api/projects"
+    ):
         return None
     cookie_value = request.headers.get(SCRIPTOR_SESSION_HEADER, "").strip()
     if not cookie_value:
@@ -141,7 +144,9 @@ def add_extension_cors_headers(response):
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Vary"] = "Origin"
-    response.headers["Access-Control-Allow-Headers"] = f"Content-Type, {SCRIPTOR_SESSION_HEADER}"
+    response.headers["Access-Control-Allow-Headers"] = (
+        f"Content-Type, {SCRIPTOR_SESSION_HEADER}"
+    )
     response.headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, OPTIONS"
     return response
 
@@ -411,7 +416,9 @@ def get_extension_document_binding():
     document_id = request.args.get("documentId", "")
     manuscript_surface_id = request.args.get("manuscriptSurfaceId", "")
     try:
-        project, changed = get_document_binding(state, document_id, manuscript_surface_id)
+        project, changed = get_document_binding(
+            state, document_id, manuscript_surface_id
+        )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
     if changed:
@@ -476,6 +483,29 @@ def delete_extension_document_binding():
     )
 
 
+@app.patch("/api/extension/document-binding/status")
+@login_required
+def patch_extension_document_binding_status():
+    user_id = current_user_id()
+    state = load_state(user_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        binding = update_document_binding_status(
+            state,
+            payload.get("documentId", ""),
+            payload.get("manuscriptSurfaceId", ""),
+            payload.get("status", "active"),
+            payload.get("staleReason", ""),
+            payload.get("tabId", ""),
+            payload.get("tabTitle", ""),
+        )
+    except ExtensionBridgeError as exc:
+        return jsonify({"error": str(exc)}), exc.status_code
+    if binding:
+        save_state(state, user_id)
+    return jsonify({"binding": binding})
+
+
 @app.post("/api/extension/sessions")
 @login_required
 def post_extension_session():
@@ -493,9 +523,7 @@ def post_extension_session():
         payload.get("wordsRemoved"),
     )
     try:
-        created_session, project, duplicate = append_extension_session(
-            state, payload
-        )
+        created_session, project, duplicate = append_extension_session(state, payload)
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code
     app.logger.info(

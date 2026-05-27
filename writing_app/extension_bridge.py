@@ -112,7 +112,9 @@ def _parse_issue_section_number(value: Any) -> str:
         for token in _normalize_issue_comparison_text(normalized_value).split(" ")
         if token
     ]
-    if not word_tokens or not all(token in ISSUE_SECTION_NUMBER_WORDS for token in word_tokens):
+    if not word_tokens or not all(
+        token in ISSUE_SECTION_NUMBER_WORDS for token in word_tokens
+    ):
         return normalized_value
     return str(sum(ISSUE_SECTION_NUMBER_WORDS[token] for token in word_tokens))
 
@@ -218,6 +220,17 @@ def _binding_project_id(binding: Any) -> str:
     return _clean_text(binding)
 
 
+def _binding_status(binding: Any) -> str:
+    if isinstance(binding, dict):
+        status = _clean_text(binding.get("status"))
+        return status or "active"
+    return "active" if _binding_project_id(binding) else "unbound"
+
+
+def _is_stale_binding(binding: Any) -> bool:
+    return _binding_status(binding).startswith("stale_")
+
+
 def _binding_record(
     *,
     document_id: str,
@@ -233,13 +246,18 @@ def _binding_record(
     tab_id = _clean_text(tab_id) or (
         "default" if manuscript_surface_id == _default_surface_id(document_id) else ""
     )
+    now = datetime.now(timezone.utc).isoformat()
     return {
         "documentId": document_id,
         "tabId": tab_id,
         "tabTitle": _clean_text(tab_title),
         "manuscriptSurfaceId": manuscript_surface_id,
         "projectId": _clean_text(project_id),
-        "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "status": "active",
+        "staleReason": "",
+        "lastValidatedAt": "",
+        "createdAt": now,
+        "updatedAt": now,
     }
 
 
@@ -251,11 +269,15 @@ def _default_surface_id(document_id: str) -> str:
     return f"{_clean_text(document_id)}:default" if _clean_text(document_id) else ""
 
 
-def _binding_lookup_keys(document_id: str, manuscript_surface_id: str = "") -> list[str]:
+def _binding_lookup_keys(
+    document_id: str, manuscript_surface_id: str = ""
+) -> list[str]:
     document_id = _clean_text(document_id)
     manuscript_surface_id = _clean_text(manuscript_surface_id)
     keys = [manuscript_surface_id] if manuscript_surface_id else []
-    if not manuscript_surface_id or manuscript_surface_id == _default_surface_id(document_id):
+    if not manuscript_surface_id or manuscript_surface_id == _default_surface_id(
+        document_id
+    ):
         keys.append(document_id)
     return [key for index, key in enumerate(keys) if key and key not in keys[:index]]
 
@@ -283,18 +305,29 @@ def _project_binding_key(
     return ""
 
 
+def _project_binding_entry(
+    bindings: dict[str, Any], project_id: str, except_key: str = ""
+) -> tuple[str, Any]:
+    key = _project_binding_key(bindings, project_id, except_key)
+    return key, bindings.get(key) if key else None
+
+
 def _deleted_extension_session_ids(state: dict[str, Any]) -> set[str]:
     session_ids = state.get("deletedExtensionSessionIds")
     if not isinstance(session_ids, list):
         return set()
-    return {_clean_text(session_id) for session_id in session_ids if _clean_text(session_id)}
+    return {
+        _clean_text(session_id) for session_id in session_ids if _clean_text(session_id)
+    }
 
 
 def _deleted_extension_project_ids(state: dict[str, Any]) -> set[str]:
     project_ids = state.get("deletedExtensionProjectIds")
     if not isinstance(project_ids, list):
         return set()
-    return {_clean_text(project_id) for project_id in project_ids if _clean_text(project_id)}
+    return {
+        _clean_text(project_id) for project_id in project_ids if _clean_text(project_id)
+    }
 
 
 def _extension_binding_project_ids(state: dict[str, Any]) -> set[str]:
@@ -341,6 +374,18 @@ def _non_negative_int(value: Any) -> int:
     return round(parsed)
 
 
+def _parse_non_negative_int(value: Any, field_name: str) -> int:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ExtensionBridgeError(
+            f"{field_name} must be a non-negative number."
+        ) from exc
+    if parsed < 0:
+        raise ExtensionBridgeError(f"{field_name} must be a non-negative number.")
+    return round(parsed)
+
+
 def _int_value(value: Any) -> int:
     try:
         return round(float(value))
@@ -348,7 +393,9 @@ def _int_value(value: Any) -> int:
         return 0
 
 
-def _derive_word_breakdown(total_activity: int, net_words_changed: int) -> tuple[int, int]:
+def _derive_word_breakdown(
+    total_activity: int, net_words_changed: int
+) -> tuple[int, int]:
     if total_activity <= 0:
         return 0, 0
     words_added = (total_activity + net_words_changed) / 2
@@ -396,7 +443,15 @@ def _session_end_word_count(session: dict[str, Any]) -> int | None:
         return None
     if session.get("measurementPending"):
         return None
-    if _clean_text(session.get("wordCountMethod")) != "google-docs-api":
+    trusted_methods = {
+        "google-docs-api",
+        "google-docs-net-count",
+        "stable-visible",
+        "stable-visible-count",
+        "visible-fallback",
+        "catch-up",
+    }
+    if _clean_text(session.get("wordCountMethod")) not in trusted_methods:
         return None
     if "endDocumentWordCount" not in session:
         return None
@@ -427,13 +482,18 @@ def _sync_project_word_count_to_latest_extension_snapshot(
             session
             for session in sessions
             if isinstance(session, dict)
-            and (session.get("source") == "chrome-extension" or session.get("extensionSessionId"))
+            and (
+                session.get("source") == "chrome-extension"
+                or session.get("extensionSessionId")
+            )
             and _session_end_word_count(session) is not None
         ),
         key=_session_timestamp,
         default=None,
     )
-    latest_word_count = _session_end_word_count(latest_session) if latest_session else None
+    latest_word_count = (
+        _session_end_word_count(latest_session) if latest_session else None
+    )
     if latest_word_count is not None:
         _set_project_current_word_count(project, latest_word_count)
 
@@ -446,7 +506,9 @@ def _preserve_extension_session_metrics(
     session_type = _clean_text(
         existing_session.get("type") or incoming_session.get("type")
     )
-    existing_has_word_count_snapshot = _session_end_word_count(existing_session) is not None
+    existing_has_word_count_snapshot = (
+        _session_end_word_count(existing_session) is not None
+    )
 
     if not existing_has_word_count_snapshot:
         if session_type == "write":
@@ -507,16 +569,28 @@ def get_active_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def get_extension_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
     bindings = _bindings(state)
-    return [
-        {
-            "project": _project_summary(project),
-            "isBound": bool(
-                _project_binding_key(bindings, _clean_text(project.get("id")))
-            ),
-        }
-        for project in state.get("projects", [])
-        if isinstance(project, dict) and _project_allows_extension_sessions(project)
-    ]
+    rows = []
+    for project in state.get("projects", []):
+        if not isinstance(project, dict) or not _project_allows_extension_sessions(
+            project
+        ):
+            continue
+        binding_key, binding = _project_binding_entry(
+            bindings, _clean_text(project.get("id"))
+        )
+        binding_status = _binding_status(binding) if binding_key else "unbound"
+        rows.append(
+            {
+                "project": _project_summary(project),
+                "isBound": bool(binding_key),
+                "bindingStatus": binding_status,
+                "staleReason": _clean_text(binding.get("staleReason"))
+                if isinstance(binding, dict)
+                else "",
+                "binding": binding if isinstance(binding, dict) else None,
+            }
+        )
+    return rows
 
 
 def get_document_binding(
@@ -602,16 +676,85 @@ def delete_document_binding(
     return removed
 
 
-def create_extension_project(state: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def update_document_binding_status(
+    state: dict[str, Any],
+    document_id: str,
+    manuscript_surface_id: str = "",
+    status: str = "active",
+    stale_reason: str = "",
+    tab_id: str = "",
+    tab_title: str = "",
+) -> dict[str, Any] | None:
+    document_id = _clean_text(document_id)
+    manuscript_surface_id = _clean_text(manuscript_surface_id)
+    status = _clean_text(status) or "active"
+    if status not in {
+        "active",
+        "stale_missing_doc",
+        "stale_inaccessible",
+        "stale_missing_tab",
+    }:
+        raise ExtensionBridgeError("Invalid binding status.")
+    if not document_id:
+        raise ExtensionBridgeError("documentId is required.")
+
+    bindings = _bindings(state)
+    for key in _binding_lookup_keys(document_id, manuscript_surface_id):
+        binding = bindings.get(key)
+        project_id = _binding_project_id(binding)
+        if not project_id:
+            continue
+        if not isinstance(binding, dict):
+            binding = _binding_record(
+                document_id=document_id,
+                tab_id=tab_id,
+                tab_title=tab_title,
+                manuscript_surface_id=manuscript_surface_id,
+                project_id=project_id,
+            )
+        now = datetime.now(timezone.utc).isoformat()
+        binding.update(
+            {
+                "documentId": _clean_text(binding.get("documentId")) or document_id,
+                "tabId": _clean_text(binding.get("tabId")) or _clean_text(tab_id),
+                "tabTitle": _clean_text(binding.get("tabTitle"))
+                or _clean_text(tab_title),
+                "manuscriptSurfaceId": _clean_text(binding.get("manuscriptSurfaceId"))
+                or manuscript_surface_id
+                or _binding_key(document_id, manuscript_surface_id),
+                "projectId": project_id,
+                "status": status,
+                "staleReason": "" if status == "active" else _clean_text(stale_reason),
+                "lastValidatedAt": now,
+                "createdAt": _clean_text(binding.get("createdAt")) or now,
+                "updatedAt": now,
+            }
+        )
+        bindings[key] = binding
+        return binding
+    return None
+
+
+def create_extension_project(
+    state: dict[str, Any], payload: dict[str, Any]
+) -> dict[str, Any]:
     title = _clean_text(payload.get("title") or payload.get("bookTitle"))
     manuscript_type = _clean_text(payload.get("manuscriptType")) or "Novel"
-    structure_unit_label = _clean_text(
-        payload.get("structureUnit") or payload.get("structureUnitLabel")
-    ) or "Chapter"
-    target_word_count = _non_negative_int(payload.get("targetWordCount") or 80000)
-    current_word_count = _non_negative_int(
-        payload.get("wordsWrittenSoFar") or payload.get("currentWordCount")
+    structure_unit_label = (
+        _clean_text(payload.get("structureUnit") or payload.get("structureUnitLabel"))
+        or "Chapter"
     )
+    target_word_count = _non_negative_int(payload.get("targetWordCount") or 80000)
+    if "wordsWrittenSoFar" in payload:
+        current_word_count = _parse_non_negative_int(
+            payload.get("wordsWrittenSoFar"), "wordsWrittenSoFar"
+        )
+    elif "currentWordCount" in payload:
+        current_word_count = _parse_non_negative_int(
+            payload.get("currentWordCount"), "currentWordCount"
+        )
+    else:
+        current_word_count = 0
     deadline = _clean_text(payload.get("deadline"))
 
     if not title:
@@ -653,13 +796,22 @@ def create_extension_project(state: dict[str, Any], payload: dict[str, Any]) -> 
 
 
 def _project_for_extension_issue(
-    state: dict[str, Any], document_id: str, project_id: str, manuscript_surface_id: str = ""
+    state: dict[str, Any],
+    document_id: str,
+    project_id: str,
+    manuscript_surface_id: str = "",
+    tab_id: str = "",
+    tab_title: str = "",
 ) -> dict[str, Any]:
     bindings = _bindings(state)
     binding_key = _binding_key(document_id, manuscript_surface_id)
-    bound_project_id = _lookup_bound_project_id(bindings, document_id, manuscript_surface_id)
+    bound_project_id = _lookup_bound_project_id(
+        bindings, document_id, manuscript_surface_id
+    )
     if bound_project_id and project_id and bound_project_id != project_id:
         raise DocumentBindingConflictError("Document is bound to a different project.")
+    if manuscript_surface_id and not bound_project_id:
+        raise DocumentBindingConflictError("Manuscript surface is not bound.")
 
     resolved_project_id = bound_project_id or project_id
     if not resolved_project_id:
@@ -677,6 +829,8 @@ def _project_for_extension_issue(
             document_id=document_id,
             project_id=resolved_project_id,
             manuscript_surface_id=manuscript_surface_id,
+            tab_id=tab_id,
+            tab_title=tab_title,
         )
     else:
         bindings[binding_key] = resolved_project_id
@@ -690,13 +844,15 @@ def _normalize_extension_issue(
     if not note:
         raise ExtensionBridgeError("note is required.")
 
-    issue_id = _clean_text(payload.get("extensionIssueId")) or _clean_text(
-        payload.get("id")
-    ) or f"extension-issue-{uuid4()}"
+    issue_id = (
+        _clean_text(payload.get("extensionIssueId"))
+        or _clean_text(payload.get("id"))
+        or f"extension-issue-{uuid4()}"
+    )
     snippet = _clean_text(payload.get("snippet"))
-    created_at = _clean_text(payload.get("createdAt")) or datetime.now(
-        timezone.utc
-    ).isoformat()
+    created_at = (
+        _clean_text(payload.get("createdAt")) or datetime.now(timezone.utc).isoformat()
+    )
     raw_status = _clean_text(payload.get("workflowStatus") or payload.get("status"))
     workflow_status = (
         "resolved"
@@ -712,7 +868,8 @@ def _normalize_extension_issue(
 
     return {
         "id": issue_id,
-        "title": _clean_text(payload.get("title")) or _derive_issue_title_from_note(note),
+        "title": _clean_text(payload.get("title"))
+        or _derive_issue_title_from_note(note),
         "type": _clean_text(payload.get("type")) or _derive_issue_type_from_note(note),
         "sectionLabel": _normalize_chapter_label(
             payload.get("sectionLabel") or _derive_issue_section_from_note(note)
@@ -754,12 +911,14 @@ def append_extension_issue(
 
     document_id = _clean_text(payload.get("documentId"))
     manuscript_surface_id = _clean_text(payload.get("manuscriptSurfaceId"))
+    tab_id = _clean_text(payload.get("tabId"))
+    tab_title = _clean_text(payload.get("tabTitle"))
     project_id = _clean_text(payload.get("projectId"))
     if not document_id:
         raise ExtensionBridgeError("documentId is required.")
 
     project = _project_for_extension_issue(
-        state, document_id, project_id, manuscript_surface_id
+        state, document_id, project_id, manuscript_surface_id, tab_id, tab_title
     )
     issue_payload = {
         **payload,
@@ -783,7 +942,11 @@ def append_extension_issue(
     )
     if existing_issue:
         for key, value in issue.items():
-            if key in ISSUE_META_FIELDS or key not in existing_issue or existing_issue.get(key) in {"", None}:
+            if (
+                key in ISSUE_META_FIELDS
+                or key not in existing_issue
+                or existing_issue.get(key) in {"", None}
+            ):
                 existing_issue[key] = value
         return existing_issue, _project_summary(project), True
 
@@ -800,16 +963,16 @@ def get_extension_issues(
         return [], None, changed
 
     project_bundle = _find_project(state, project["id"])
+
     def issue_matches_surface(issue: dict[str, Any]) -> bool:
         if not manuscript_surface_id:
             return True
         issue_surface_id = _clean_text(issue.get("manuscriptSurfaceId"))
         if issue_surface_id:
             return issue_surface_id == manuscript_surface_id
-        return (
-            manuscript_surface_id == _default_surface_id(document_id)
-            and _clean_text(issue.get("documentId")) == _clean_text(document_id)
-        )
+        return manuscript_surface_id == _default_surface_id(
+            document_id
+        ) and _clean_text(issue.get("documentId")) == _clean_text(document_id)
 
     issues = [
         issue
@@ -853,19 +1016,37 @@ def append_extension_session(
     source = _clean_text(payload.get("source")) or "chrome-extension"
     word_count_method = _clean_text(payload.get("wordCountMethod"))
     measurement_pending = bool(payload.get("measurementPending"))
-    start_document_word_count = _non_negative_int(payload.get("startDocumentWordCount"))
-    end_document_word_count = _non_negative_int(payload.get("endDocumentWordCount"))
+    has_start_document_word_count = "startDocumentWordCount" in payload
+    has_end_document_word_count = "endDocumentWordCount" in payload
+    if has_start_document_word_count != has_end_document_word_count:
+        raise ExtensionBridgeError(
+            "startDocumentWordCount and endDocumentWordCount are required together."
+        )
+    start_document_word_count = (
+        _parse_non_negative_int(
+            payload.get("startDocumentWordCount"), "startDocumentWordCount"
+        )
+        if has_start_document_word_count
+        else 0
+    )
+    end_document_word_count = (
+        _parse_non_negative_int(
+            payload.get("endDocumentWordCount"), "endDocumentWordCount"
+        )
+        if has_end_document_word_count
+        else 0
+    )
     words_added = _non_negative_int(payload.get("wordsAdded"))
     words_removed = _non_negative_int(payload.get("wordsRemoved"))
     has_document_word_counts = (
-        "startDocumentWordCount" in payload or "endDocumentWordCount" in payload
+        has_start_document_word_count and has_end_document_word_count
     )
     has_net_words_changed = "netWordsChanged" in payload or has_document_word_counts
     net_words_changed = (
-        _int_value(payload.get("netWordsChanged"))
-        if "netWordsChanged" in payload
-        else end_document_word_count - start_document_word_count
+        end_document_word_count - start_document_word_count
         if has_document_word_counts
+        else _int_value(payload.get("netWordsChanged"))
+        if "netWordsChanged" in payload
         else 0
     )
     has_word_breakdown = "wordsAdded" in payload or "wordsRemoved" in payload
@@ -901,6 +1082,8 @@ def append_extension_session(
     )
     if bound_project_id and bound_project_id != project_id:
         raise DocumentBindingConflictError("Document is bound to a different project.")
+    if manuscript_surface_id and not bound_project_id:
+        raise DocumentBindingConflictError("Manuscript surface is not bound.")
     lookup_keys = _binding_lookup_keys(document_id, manuscript_surface_id)
     existing_project_key = _project_binding_key(bindings, project_id, binding_key)
     if existing_project_key and existing_project_key not in lookup_keys:
@@ -922,7 +1105,9 @@ def append_extension_session(
         None,
     )
     if existing_session:
-        existing_has_word_count_snapshot = _session_end_word_count(existing_session) is not None
+        existing_has_word_count_snapshot = (
+            _session_end_word_count(existing_session) is not None
+        )
         existing_net_words_changed = (
             _int_value(existing_session.get("netWordsChanged"))
             if not existing_has_word_count_snapshot
@@ -1032,7 +1217,9 @@ def append_extension_session(
 
     if "endDocumentWordCount" in payload and not measurement_pending:
         _set_project_current_word_count(project, end_document_word_count)
-    elif normalized_type == "edit" and has_net_words_changed and not measurement_pending:
+    elif (
+        normalized_type == "edit" and has_net_words_changed and not measurement_pending
+    ):
         _apply_project_word_delta(project, net_words_changed)
 
     sessions.append(session)
@@ -1137,9 +1324,9 @@ def preserve_extension_sessions(
         for incoming_session in incoming_sessions:
             if not isinstance(incoming_session, dict):
                 continue
-            session_id = incoming_session.get("extensionSessionId") or incoming_session.get(
-                "id"
-            )
+            session_id = incoming_session.get(
+                "extensionSessionId"
+            ) or incoming_session.get("id")
             existing_session = extension_sessions_by_id.get(session_id)
             if not existing_session:
                 continue

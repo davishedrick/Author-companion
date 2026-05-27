@@ -255,8 +255,7 @@ def test_html_references_separate_css_and_js_assets():
 
     asset_version = "pythonanywhere-ui-20260520"
     assert (
-        f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />'
-        in html
+        f'<link rel="stylesheet" href="static/css/app.css?v={asset_version}" />' in html
     )
     for filename in JS_FILES:
         assert f'<script src="static/js/{filename}?v={asset_version}"></script>' in html
@@ -604,7 +603,10 @@ def test_sidebar_start_session_menu_launches_global_session_flows():
     assert "openPreviousSessionChoiceModal();" in js
     assert "openSessionModal();" in js
     assert 'nav.querySelectorAll("button[data-view]")' in js
-    assert '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>' not in js
+    assert (
+        '<span class="nav-icon nav-session-icon">${getNavIcon("session")}</span>'
+        not in js
+    )
     assert "<span>Start session</span>" in js
     assert ".global-header {" in css
     assert ".nav-session-shell {" in css
@@ -816,7 +818,10 @@ def test_edit2_dashboard_view_and_navigation_are_present():
     assert 'edit2: "Edit 2.0"' not in js
     assert "function renderEdit2Dashboard(bundle)" in edit2_js
     assert "${escapeHtml(unitPlural)} will appear here." in edit2_js
-    assert "Identify each ${unitLower}'s issues and spot which need the most revision." in edit2_js
+    assert (
+        "Identify each ${unitLower}'s issues and spot which need the most revision."
+        in edit2_js
+    )
     assert '"Manuscript structure"' in edit2_js
     assert "${escapeHtml(unitLabel)} Issues" in edit2_js
     assert 'data-edit2-board-view="chapters"' in edit2_js
@@ -837,11 +842,11 @@ def test_edit2_dashboard_view_and_navigation_are_present():
     assert "<h4>Summary</h4>" in js
     assert "<h3>Next up</h3>" in edit2_js
     assert 'data-edit2-next-focus-action="' in edit2_js
+    assert "Best issues to tackle first." in edit2_js
     assert (
-        "Best issues to tackle first."
+        "Based on priority level, sections with the most issues, and other factors."
         in edit2_js
     )
-    assert "Based on priority level, sections with the most issues, and other factors." in edit2_js
     assert "Next step:" not in edit2_js
     assert "Other options (" not in edit2_js
     assert 'data-edit2-carousel data-active-index="0"' in edit2_js
@@ -936,14 +941,17 @@ def test_goals_dashboard_view_and_vertical_navigation_are_present():
     assert 'label: "Activity", view: "sessions"' in js
     assert 'label: "Tracker"' in js
     assert 'label: "Activity", view: "sessions"' in js
-    assert 'activeView = button.dataset.globalView;' in js
+    assert "activeView = button.dataset.globalView;" in js
     assert "<h2>Activity</h2>" in js
     assert "static/js/app.js?v=pythonanywhere-ui-20260520" in html
     assert "function renderGoalsDashboard(bundle)" in js
     assert 'data-goal-filter="all"' in js
     assert 'data-goal-filter="writing"' in js
     assert 'data-goal-filter="editing"' in js
-    assert 'const structureGoals = activeGoals.filter((goal) => goal.type === "structure_units_completed");' in js
+    assert (
+        'const structureGoals = activeGoals.filter((goal) => goal.type === "structure_units_completed");'
+        in js
+    )
     assert "const editingGoals = [...structureGoals, ...issueGoals];" in js
 
 
@@ -1109,7 +1117,7 @@ def test_session_history_cards_surface_handoff_summary():
     assert "return formatSessionNetWords(session);" in js
     assert "function formatEditingSessionWordDetail(session)" in js
     assert "Net: ${formatSignedNumber(netWords)}" in js
-    assert 'return `${formatNumber(session.wordsEdited)} words edited`;' not in js
+    assert "return `${formatNumber(session.wordsEdited)} words edited`;" not in js
     assert "total words edited" not in js
     assert "getSnapshotForSession(bundle, session.id)" in js
     assert "getEditFocusLabel(snapshot?.focusKey || session.focusKey" not in js
@@ -1120,9 +1128,14 @@ def test_session_history_cards_surface_handoff_summary():
 def test_edit_session_end_word_count_reconciles_project_total():
     js = get_js_asset("edit.js")
 
-    assert "const submittedEndWordCount = nullableNumber(formData.get(\"sessionEndWordCount\"));" in js
+    assert (
+        'const submittedEndWordCount = nullableNumber(formData.get("sessionEndWordCount"));'
+        in js
+    )
     assert "currentWordCount: submittedEndWordCount !== null" in js
-    assert "deriveEditingWordBreakdown(submittedWordsEdited, sessionNetWordsChanged)" in js
+    assert (
+        "deriveEditingWordBreakdown(submittedWordsEdited, sessionNetWordsChanged)" in js
+    )
 
 
 def test_session_delete_reconciles_manuscript_total_and_tombstones_extension_sessions():
@@ -1130,8 +1143,14 @@ def test_session_delete_reconciles_manuscript_total_and_tombstones_extension_ses
 
     assert "function getSessionManuscriptWordDelta(session)" in js
     assert "markExtensionSessionDeleted(deletedSession);" in js
-    assert "number(projectBundle.project.currentWordCount) - getSessionManuscriptWordDelta(session)" in js
-    assert "deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds)" in js
+    assert (
+        "number(projectBundle.project.currentWordCount) - getSessionManuscriptWordDelta(session)"
+        in js
+    )
+    assert (
+        "deletedExtensionSessionIds: normalizeDeletedExtensionSessionIds(state.deletedExtensionSessionIds)"
+        in js
+    )
 
 
 def test_edit_dashboard_includes_next_focus_hotspots_and_issue_filters():
@@ -1207,7 +1226,10 @@ def test_last_workspace_tab_is_persisted_separately_from_active_view():
     js = get_app_js()
 
     assert 'const PRIMARY_WORKSPACE_VIEWS = ["dashboard", "plot", "edit"];' in js
-    assert 'const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals", "sessions"];' in js
+    assert (
+        'const WORKSPACE_VIEWS = ["dashboard", "plot", "edit", "goals", "sessions"];'
+        in js
+    )
     assert 'snapshot?.activeView === "edit2" ? "edit" : snapshot?.activeView' in js
     assert "function loadLastWorkspaceView()" in js
     assert "lastWorkspaceView" in js
@@ -1508,7 +1530,9 @@ def test_extension_issue_requires_project_for_unbound_document(tmp_path):
     )
 
     assert response.status_code == 400
-    assert response.get_json() == {"error": "projectId is required for unbound documents."}
+    assert response.get_json() == {
+        "error": "projectId is required for unbound documents."
+    }
 
 
 def test_extension_issue_can_bind_unbound_document_to_project(tmp_path):
@@ -1531,6 +1555,44 @@ def test_extension_issue_can_bind_unbound_document_to_project(tmp_path):
     assert project_a["issues"][0]["sectionLabel"] == "Scene 21"
     assert project_a["issues"][0]["type"] == "Pacing"
     assert project_a["issues"][0]["priority"] == "High"
+
+
+def test_extension_issue_binding_preserves_surface_metadata(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "google-doc-a",
+            "tabId": "tab-a",
+            "tabTitle": "Draft V1",
+            "manuscriptSurfaceId": "google-doc-a:tab-a",
+            "projectId": "project-a",
+        },
+    )
+
+    response = client.post(
+        "/api/extension/issues",
+        json=extension_issue_payload(
+            tabId="tab-a",
+            tabTitle="Draft V1",
+            manuscriptSurfaceId="google-doc-a:tab-a",
+        ),
+    )
+    state = client.get("/api/state").get_json()
+
+    assert response.status_code == 201
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["projectId"]
+        == "project-a"
+    )
+    assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabId"] == "tab-a"
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"]
+        == "Draft V1"
+    )
 
 
 def test_extension_issue_list_returns_current_doc_open_issues(tmp_path):
@@ -1614,7 +1676,9 @@ def test_extension_duplicate_issue_id_does_not_create_duplicate(tmp_path):
     register_and_login(client)
     save_extension_test_state(client)
 
-    first_response = client.post("/api/extension/issues", json=extension_issue_payload())
+    first_response = client.post(
+        "/api/extension/issues", json=extension_issue_payload()
+    )
     duplicate_response = client.post(
         "/api/extension/issues",
         json=extension_issue_payload(note="chapter three dialogue stiff"),
@@ -1990,7 +2054,9 @@ def test_extension_editing_session_persists_google_docs_word_breakdown(tmp_path)
     assert project_a["project"]["currentWordCount"] == 1113
 
 
-def test_extension_editing_session_derives_breakdown_from_total_and_net_change(tmp_path):
+def test_extension_editing_session_derives_breakdown_from_total_and_net_change(
+    tmp_path,
+):
     use_temp_state_db(tmp_path)
     client = app.test_client()
     register_and_login(client)
@@ -2228,11 +2294,27 @@ def test_extension_surface_binding_stores_metadata_and_lists_bound_projects(tmp_
     state = client.get("/api/state").get_json()
 
     assert response.status_code == 200
-    assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["projectId"] == "project-a"
-    assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"] == "Draft V1"
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["projectId"]
+        == "project-a"
+    )
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"]
+        == "Draft V1"
+    )
     project_rows = picker_response.get_json()["projects"]
-    assert next(row for row in project_rows if row["project"]["id"] == "project-a")["isBound"] is True
-    assert next(row for row in project_rows if row["project"]["id"] == "project-b")["isBound"] is False
+    assert (
+        next(row for row in project_rows if row["project"]["id"] == "project-a")[
+            "isBound"
+        ]
+        is True
+    )
+    assert (
+        next(row for row in project_rows if row["project"]["id"] == "project-b")[
+            "isBound"
+        ]
+        is False
+    )
 
 
 def test_extension_backend_rejects_project_bound_to_another_surface(tmp_path):
@@ -2263,6 +2345,97 @@ def test_extension_backend_rejects_project_bound_to_another_surface(tmp_path):
     assert first.status_code == 200
     assert second.status_code == 409
     assert second.get_json() == {"error": "Project is already bound."}
+
+
+def test_extension_project_picker_lists_stale_binding_status(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "deleted-doc",
+            "tabId": "tab-a",
+            "tabTitle": "Draft V1",
+            "manuscriptSurfaceId": "deleted-doc:tab-a",
+            "projectId": "project-a",
+        },
+    )
+
+    stale_response = client.patch(
+        "/api/extension/document-binding/status",
+        json={
+            "documentId": "deleted-doc",
+            "manuscriptSurfaceId": "deleted-doc:tab-a",
+            "status": "stale_missing_doc",
+            "staleReason": "E-GOOGLE-API-404: Requested entity was not found.",
+        },
+    )
+    picker_response = client.get("/api/extension/projects")
+    project_a = next(
+        row
+        for row in picker_response.get_json()["projects"]
+        if row["project"]["id"] == "project-a"
+    )
+
+    assert stale_response.status_code == 200
+    assert project_a["isBound"] is True
+    assert project_a["bindingStatus"] == "stale_missing_doc"
+    assert project_a["binding"]["documentId"] == "deleted-doc"
+
+
+def test_extension_backend_allows_binding_project_after_stale_binding_cleared(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    save_extension_test_state(client)
+    client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "deleted-doc",
+            "tabId": "tab-a",
+            "manuscriptSurfaceId": "deleted-doc:tab-a",
+            "projectId": "project-a",
+        },
+    )
+    conflict = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "new-doc",
+            "tabId": "tab-b",
+            "manuscriptSurfaceId": "new-doc:tab-b",
+            "projectId": "project-a",
+        },
+    )
+    client.patch(
+        "/api/extension/document-binding/status",
+        json={
+            "documentId": "deleted-doc",
+            "manuscriptSurfaceId": "deleted-doc:tab-a",
+            "status": "stale_missing_doc",
+        },
+    )
+    clear_response = client.delete(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "deleted-doc",
+            "manuscriptSurfaceId": "deleted-doc:tab-a",
+        },
+    )
+    rebound = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "new-doc",
+            "tabId": "tab-b",
+            "manuscriptSurfaceId": "new-doc:tab-b",
+            "projectId": "project-a",
+        },
+    )
+
+    assert conflict.status_code == 409
+    assert clear_response.status_code == 200
+    assert rebound.status_code == 200
 
 
 def test_extension_unbind_affects_only_current_surface_and_keeps_sessions(tmp_path):
@@ -2299,15 +2472,23 @@ def test_extension_unbind_affects_only_current_surface_and_keeps_sessions(tmp_pa
 
     unbind_response = client.delete(
         "/api/extension/document-binding",
-        json={"documentId": "google-doc-a", "manuscriptSurfaceId": "google-doc-a:tab-a"},
+        json={
+            "documentId": "google-doc-a",
+            "manuscriptSurfaceId": "google-doc-a:tab-a",
+        },
     )
     state = client.get("/api/state").get_json()
-    project_a = next(project for project in state["projects"] if project["id"] == "project-a")
+    project_a = next(
+        project for project in state["projects"] if project["id"] == "project-a"
+    )
 
     assert session_response.status_code == 201
     assert unbind_response.status_code == 200
     assert "google-doc-a:tab-a" not in state["extensionDocumentBindings"]
-    assert state["extensionDocumentBindings"]["google-doc-a:tab-b"]["projectId"] == "project-b"
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-b"]["projectId"]
+        == "project-b"
+    )
     assert len(project_a["sessions"]) == 1
 
 
@@ -2333,7 +2514,9 @@ def test_extension_create_project_route_accepts_widget_fields(tmp_path):
     project = response.get_json()["project"]
     assert project["bookTitle"] == "The Hollow Orchard"
     assert project["currentWordCount"] == 528
-    created_project = next(item for item in state["projects"] if item["id"] == project["id"])
+    created_project = next(
+        item for item in state["projects"] if item["id"] == project["id"]
+    )
     assert created_project["source"] == "chrome-extension"
 
 
