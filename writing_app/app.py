@@ -446,6 +446,7 @@ def put_extension_document_binding():
             payload.get("manuscriptSurfaceId", ""),
             payload.get("tabId", ""),
             payload.get("tabTitle", ""),
+            payload.get("documentUrl", ""),
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code

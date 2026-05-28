@@ -86,6 +86,7 @@ def seed_state(client, projects=None, bindings=None, active_project_id="project-
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": bindings or {},
+        "extensionDeletedBindings": {},
         "deletedExtensionSessionIds": [],
         "deletedExtensionProjectIds": [],
     }

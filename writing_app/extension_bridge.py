@@ -214,6 +214,14 @@ def _bindings(state: dict[str, Any]) -> dict[str, Any]:
     return bindings
 
 
+def _deleted_bindings(state: dict[str, Any]) -> dict[str, Any]:
+    deleted_bindings = state.setdefault("extensionDeletedBindings", {})
+    if not isinstance(deleted_bindings, dict):
+        deleted_bindings = {}
+        state["extensionDeletedBindings"] = deleted_bindings
+    return deleted_bindings
+
+
 def _binding_project_id(binding: Any) -> str:
     if isinstance(binding, dict):
         return _clean_text(binding.get("projectId"))
@@ -238,6 +246,7 @@ def _binding_record(
     manuscript_surface_id: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_url: str = "",
 ) -> dict[str, Any]:
     document_id = _clean_text(document_id)
     manuscript_surface_id = _clean_text(manuscript_surface_id) or _binding_key(
@@ -252,6 +261,7 @@ def _binding_record(
         "tabId": tab_id,
         "tabTitle": _clean_text(tab_title),
         "manuscriptSurfaceId": manuscript_surface_id,
+        "documentUrl": _clean_text(document_url),
         "projectId": _clean_text(project_id),
         "status": "active",
         "staleReason": "",
@@ -312,6 +322,43 @@ def _project_binding_entry(
     return key, bindings.get(key) if key else None
 
 
+def _deleted_binding_record(
+    binding: Any,
+    status: str,
+    stale_reason: str = "",
+    *,
+    document_id: str = "",
+    manuscript_surface_id: str = "",
+    tab_id: str = "",
+    tab_title: str = "",
+) -> dict[str, Any]:
+    binding_dict = binding if isinstance(binding, dict) else {}
+    resolved_document_id = _clean_text(binding_dict.get("documentId")) or _clean_text(
+        document_id
+    )
+    resolved_tab_title = _clean_text(binding_dict.get("tabTitle")) or _clean_text(
+        tab_title
+    )
+    resolved_url = _clean_text(binding_dict.get("documentUrl"))
+    if not resolved_url and resolved_document_id:
+        resolved_url = f"https://docs.google.com/document/d/{resolved_document_id}/edit"
+    return {
+        "projectId": _binding_project_id(binding),
+        "documentId": resolved_document_id,
+        "tabId": _clean_text(binding_dict.get("tabId")) or _clean_text(tab_id),
+        "tabTitle": resolved_tab_title,
+        "title": resolved_tab_title,
+        "manuscriptSurfaceId": _clean_text(binding_dict.get("manuscriptSurfaceId"))
+        or _clean_text(manuscript_surface_id)
+        or _binding_key(resolved_document_id, manuscript_surface_id),
+        "url": resolved_url,
+        "documentUrl": resolved_url,
+        "status": status,
+        "staleReason": _clean_text(stale_reason),
+        "detectedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def _deleted_extension_session_ids(state: dict[str, Any]) -> set[str]:
     session_ids = state.get("deletedExtensionSessionIds")
     if not isinstance(session_ids, list):
@@ -336,6 +383,9 @@ def _extension_binding_project_ids(state: dict[str, Any]) -> set[str]:
         project_id = _binding_project_id(binding)
         if project_id:
             project_ids.add(project_id)
+    for project_id in _deleted_bindings(state):
+        if _clean_text(project_id):
+            project_ids.add(_clean_text(project_id))
     return project_ids
 
 
@@ -569,16 +619,21 @@ def get_active_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def get_extension_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
     bindings = _bindings(state)
+    deleted_bindings = _deleted_bindings(state)
     rows = []
     for project in state.get("projects", []):
         if not isinstance(project, dict) or not _project_allows_extension_sessions(
             project
         ):
             continue
+        project_id = _clean_text(project.get("id"))
         binding_key, binding = _project_binding_entry(
-            bindings, _clean_text(project.get("id"))
+            bindings, project_id
         )
         binding_status = _binding_status(binding) if binding_key else "unbound"
+        deleted_binding = deleted_bindings.get(project_id)
+        if isinstance(deleted_binding, dict) and not binding_key:
+            binding_status = _clean_text(deleted_binding.get("status")) or "stale_missing_doc"
         rows.append(
             {
                 "project": _project_summary(project),
@@ -586,8 +641,13 @@ def get_extension_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
                 "bindingStatus": binding_status,
                 "staleReason": _clean_text(binding.get("staleReason"))
                 if isinstance(binding, dict)
+                else _clean_text(deleted_binding.get("staleReason"))
+                if isinstance(deleted_binding, dict)
                 else "",
                 "binding": binding if isinstance(binding, dict) else None,
+                "deletedBinding": deleted_binding
+                if isinstance(deleted_binding, dict)
+                else None,
             }
         )
     return rows
@@ -623,6 +683,7 @@ def save_document_binding(
     manuscript_surface_id: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_url: str = "",
 ) -> dict[str, Any]:
     document_id = _clean_text(document_id)
     project_id = _clean_text(project_id)
@@ -634,6 +695,7 @@ def save_document_binding(
 
     project = _require_project(state, project_id)
     bindings = _bindings(state)
+    deleted_bindings = _deleted_bindings(state)
     binding_key = _binding_key(document_id, manuscript_surface_id)
     existing_project_id = _binding_project_id(bindings.get(binding_key))
     if existing_project_id and existing_project_id != project_id:
@@ -652,9 +714,11 @@ def save_document_binding(
             tab_title=tab_title,
             manuscript_surface_id=manuscript_surface_id,
             project_id=project_id,
+            document_url=document_url,
         )
     else:
         bindings[binding_key] = project_id
+    deleted_bindings.pop(project_id, None)
     return _project_summary(project)
 
 
@@ -667,12 +731,28 @@ def delete_document_binding(
         raise ExtensionBridgeError("documentId is required.")
 
     bindings = _bindings(state)
+    deleted_bindings = _deleted_bindings(state)
     removed = False
     for key in _binding_lookup_keys(document_id, manuscript_surface_id):
         if key in bindings:
+            project_id = _binding_project_id(bindings.get(key))
             bindings.pop(key, None)
+            if project_id:
+                deleted_bindings.pop(project_id, None)
             removed = True
             break
+    if not removed:
+        for project_id, deleted_binding in list(deleted_bindings.items()):
+            if not isinstance(deleted_binding, dict):
+                continue
+            if _clean_text(deleted_binding.get("documentId")) == document_id and (
+                not manuscript_surface_id
+                or _clean_text(deleted_binding.get("manuscriptSurfaceId"))
+                == manuscript_surface_id
+            ):
+                deleted_bindings.pop(project_id, None)
+                removed = True
+                break
     return removed
 
 
@@ -699,6 +779,7 @@ def update_document_binding_status(
         raise ExtensionBridgeError("documentId is required.")
 
     bindings = _bindings(state)
+    deleted_bindings = _deleted_bindings(state)
     for key in _binding_lookup_keys(document_id, manuscript_surface_id):
         binding = bindings.get(key)
         project_id = _binding_project_id(binding)
@@ -730,7 +811,20 @@ def update_document_binding_status(
                 "updatedAt": now,
             }
         )
-        bindings[key] = binding
+        if status == "active":
+            bindings[key] = binding
+            deleted_bindings.pop(project_id, None)
+        else:
+            deleted_bindings[project_id] = _deleted_binding_record(
+                binding,
+                status,
+                stale_reason,
+                document_id=document_id,
+                manuscript_surface_id=manuscript_surface_id,
+                tab_id=tab_id,
+                tab_title=tab_title,
+            )
+            bindings.pop(key, None)
         return binding
     return None
 

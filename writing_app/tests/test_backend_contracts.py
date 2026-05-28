@@ -11,6 +11,7 @@ from backend_contract_helpers import (
     create_second_user,
     extension_session_payload,
     get_project,
+    get_state,
     login_client,
     post_extension_session,
     post_issue,
@@ -228,7 +229,8 @@ def test_binding_lifecycle_stale_clear_keeps_history_and_makes_project_available
             "staleReason": "404",
         },
     )
-    conflict = client.put(
+    stale_state = get_state(client)
+    rebound_after_stale = client.put(
         "/api/extension/document-binding",
         json={
             **surface(document_id="new-doc", tab_id="tab-b"),
@@ -244,11 +246,17 @@ def test_binding_lifecycle_stale_clear_keeps_history_and_makes_project_available
         },
     )
     project = get_project(client, "project-a")
+    picker = client.get("/api/extension/projects").get_json()["projects"]
+    project_row = next(row for row in picker if row["project"]["id"] == "project-a")
 
     assert stale.status_code == 200
-    assert conflict.status_code == 409
+    assert deleted_surface["manuscriptSurfaceId"] not in stale_state["extensionDocumentBindings"]
+    assert stale_state["extensionDeletedBindings"]["project-a"]["documentId"] == "deleted-doc"
+    assert rebound_after_stale.status_code == 200
     assert clear.status_code == 200
     assert rebound.status_code == 200
+    assert project_row["bindingStatus"] == "active"
+    assert project_row["deletedBinding"] is None
     assert len(project["sessions"]) == 1
     assert len(project["issues"]) == 1
 
@@ -338,7 +346,7 @@ def test_sqlite_persists_sessions_bindings_issues_and_stale_status_after_reload(
         domain="localhost",
     )
     state = reloaded_client.get("/api/state").get_json()
-    binding = state["extensionDocumentBindings"]["google-doc-a:tab-a"]
+    binding = state["extensionDeletedBindings"]["project-a"]
     project = next(
         project for project in state["projects"] if project["id"] == "project-a"
     )

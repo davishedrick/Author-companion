@@ -1299,6 +1299,7 @@ def test_state_api_returns_default_state_when_empty(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "extensionDeletedBindings": {},
         "deletedExtensionSessionIds": [],
         "deletedExtensionProjectIds": [],
     }
@@ -1351,6 +1352,7 @@ def test_state_api_persists_snapshot_to_sqlite(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "extensionDeletedBindings": {},
         "deletedExtensionSessionIds": [],
         "deletedExtensionProjectIds": [],
     }
@@ -1438,6 +1440,7 @@ def save_extension_test_state(client):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "extensionDeletedBindings": {},
     }
     response = client.put("/api/state", json=payload)
     assert response.status_code == 200
@@ -2373,6 +2376,7 @@ def test_extension_project_picker_lists_stale_binding_status(tmp_path):
         },
     )
     picker_response = client.get("/api/extension/projects")
+    state = client.get("/api/state").get_json()
     project_a = next(
         row
         for row in picker_response.get_json()["projects"]
@@ -2380,9 +2384,12 @@ def test_extension_project_picker_lists_stale_binding_status(tmp_path):
     )
 
     assert stale_response.status_code == 200
-    assert project_a["isBound"] is True
+    assert project_a["isBound"] is False
     assert project_a["bindingStatus"] == "stale_missing_doc"
-    assert project_a["binding"]["documentId"] == "deleted-doc"
+    assert project_a["binding"] is None
+    assert project_a["deletedBinding"]["documentId"] == "deleted-doc"
+    assert "deleted-doc:tab-a" not in state["extensionDocumentBindings"]
+    assert state["extensionDeletedBindings"]["project-a"]["documentId"] == "deleted-doc"
 
 
 def test_extension_backend_allows_binding_project_after_stale_binding_cleared(tmp_path):
@@ -2416,6 +2423,16 @@ def test_extension_backend_allows_binding_project_after_stale_binding_cleared(tm
             "status": "stale_missing_doc",
         },
     )
+    rebound_after_stale = client.put(
+        "/api/extension/document-binding",
+        json={
+            "documentId": "new-doc",
+            "tabId": "tab-b",
+            "manuscriptSurfaceId": "new-doc:tab-b",
+            "projectId": "project-a",
+        },
+    )
+    rebound_state = client.get("/api/state").get_json()
     clear_response = client.delete(
         "/api/extension/document-binding",
         json={
@@ -2434,8 +2451,14 @@ def test_extension_backend_allows_binding_project_after_stale_binding_cleared(tm
     )
 
     assert conflict.status_code == 409
+    assert rebound_after_stale.status_code == 200
     assert clear_response.status_code == 200
     assert rebound.status_code == 200
+    assert "project-a" not in rebound_state["extensionDeletedBindings"]
+    assert (
+        rebound_state["extensionDocumentBindings"]["new-doc:tab-b"]["projectId"]
+        == "project-a"
+    )
 
 
 def test_extension_unbind_affects_only_current_surface_and_keeps_sessions(tmp_path):
@@ -2949,6 +2972,7 @@ def test_state_is_isolated_per_signed_in_user(tmp_path):
         "activeView": "dashboard",
         "lastWorkspaceView": "dashboard",
         "extensionDocumentBindings": {},
+        "extensionDeletedBindings": {},
         "deletedExtensionSessionIds": [],
         "deletedExtensionProjectIds": [],
     }
