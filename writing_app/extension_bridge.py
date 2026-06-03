@@ -166,6 +166,17 @@ def _project_summary(bundle: dict[str, Any]) -> dict[str, Any]:
         "bookTitle": _clean_text(project.get("bookTitle")) or "Untitled project",
         "manuscriptType": _clean_text(project.get("manuscriptType")),
         "currentWordCount": _non_negative_int(project.get("currentWordCount")),
+        "startingWordCount": (
+            _non_negative_int(project.get("startingWordCount"))
+            if project.get("startingWordCount") not in (None, "")
+            else None
+        ),
+        "baselineEstablished": bool(project.get("baselineEstablished"))
+        or project.get("startingWordCount") not in (None, ""),
+        "startingWordCountSource": _clean_text(project.get("startingWordCountSource")),
+        "startingWordCountEstablishedAt": _clean_text(
+            project.get("startingWordCountEstablishedAt")
+        ),
         "status": _clean_text(bundle.get("status")) or "active",
     }
 
@@ -488,6 +499,90 @@ def _set_project_current_word_count(project: dict[str, Any], word_count: int) ->
         project_bundle["currentWordCount"] = _non_negative_int(word_count)
 
 
+def _optional_non_negative_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return round(parsed)
+
+
+def _session_manuscript_delta(session: dict[str, Any]) -> int:
+    if not isinstance(session, dict):
+        return 0
+    parsed_net = _int_value(session.get("netWordsChanged"))
+    if parsed_net is not None:
+        return parsed_net
+    start_count = _optional_non_negative_int(session.get("startDocumentWordCount"))
+    end_count = _optional_non_negative_int(session.get("endDocumentWordCount"))
+    if start_count is not None and end_count is not None:
+        return end_count - start_count
+    if session.get("type") == "edit":
+        return _non_negative_int(session.get("wordsAdded")) - _non_negative_int(
+            session.get("wordsRemoved")
+        )
+    return _non_negative_int(session.get("wordsWritten"))
+
+
+def _establish_project_starting_word_count(
+    project: dict[str, Any],
+    word_count: int,
+    source: str = "google-docs-binding",
+) -> None:
+    project_bundle = project.get("project")
+    if not isinstance(project_bundle, dict):
+        return
+
+    verified_word_count = _non_negative_int(word_count)
+    previous_current_word_count = _non_negative_int(
+        project_bundle.get("currentWordCount")
+    )
+    existing_starting_count = _optional_non_negative_int(
+        project_bundle.get("startingWordCount")
+    )
+    if existing_starting_count is not None and project_bundle.get(
+        "baselineEstablished"
+    ):
+        project_bundle["startingWordCount"] = existing_starting_count
+        project_bundle["currentWordCount"] = verified_word_count
+        return
+
+    sessions = (
+        project.get("sessions") if isinstance(project.get("sessions"), list) else []
+    )
+    if sessions:
+        tracked_delta = sum(_session_manuscript_delta(session) for session in sessions)
+        project_bundle["startingWordCount"] = max(
+            0, previous_current_word_count - tracked_delta
+        )
+        project_bundle["currentWordCount"] = verified_word_count
+        project_bundle["baselineEstablished"] = True
+        existing_source = _clean_text(project_bundle.get("startingWordCountSource"))
+        project_bundle["startingWordCountSource"] = (
+            existing_source
+            if existing_source and existing_source != "provisional"
+            else "migration_estimated_from_sessions"
+        )
+        project_bundle["startingWordCountEstablishedAt"] = _clean_text(
+            project_bundle.get("startingWordCountEstablishedAt")
+        )
+        return
+
+    project_bundle["currentWordCount"] = verified_word_count
+    project_bundle["startingWordCount"] = verified_word_count
+    project_bundle["baselineEstablished"] = True
+    project_bundle["startingWordCountSource"] = (
+        _clean_text(source) or "google-docs-binding"
+    )
+    project_bundle["startingWordCountEstablishedAt"] = datetime.now(
+        timezone.utc
+    ).isoformat()
+
+
 def _session_end_word_count(session: dict[str, Any]) -> int | None:
     if not isinstance(session, dict):
         return None
@@ -627,13 +722,13 @@ def get_extension_projects(state: dict[str, Any]) -> list[dict[str, Any]]:
         ):
             continue
         project_id = _clean_text(project.get("id"))
-        binding_key, binding = _project_binding_entry(
-            bindings, project_id
-        )
+        binding_key, binding = _project_binding_entry(bindings, project_id)
         binding_status = _binding_status(binding) if binding_key else "unbound"
         deleted_binding = deleted_bindings.get(project_id)
         if isinstance(deleted_binding, dict) and not binding_key:
-            binding_status = _clean_text(deleted_binding.get("status")) or "stale_missing_doc"
+            binding_status = (
+                _clean_text(deleted_binding.get("status")) or "stale_missing_doc"
+            )
         rows.append(
             {
                 "project": _project_summary(project),
@@ -684,6 +779,8 @@ def save_document_binding(
     tab_id: str = "",
     tab_title: str = "",
     document_url: str = "",
+    verified_word_count: Any = None,
+    verified_word_count_source: str = "google-docs-binding",
 ) -> dict[str, Any]:
     document_id = _clean_text(document_id)
     project_id = _clean_text(project_id)
@@ -719,6 +816,13 @@ def save_document_binding(
     else:
         bindings[binding_key] = project_id
     deleted_bindings.pop(project_id, None)
+    parsed_verified_word_count = _optional_non_negative_int(verified_word_count)
+    if parsed_verified_word_count is not None:
+        _establish_project_starting_word_count(
+            project,
+            parsed_verified_word_count,
+            verified_word_count_source,
+        )
     return _project_summary(project)
 
 
@@ -869,6 +973,10 @@ def create_extension_project(
             "structureUnitLabel": structure_unit_label,
             "targetWordCount": target_word_count,
             "currentWordCount": current_word_count,
+            "startingWordCount": None,
+            "baselineEstablished": False,
+            "startingWordCountSource": "provisional",
+            "startingWordCountEstablishedAt": "",
             "deadline": deadline,
             "dailyTarget": 1000,
             "projectStartDate": datetime.now(timezone.utc).date().isoformat(),

@@ -119,10 +119,16 @@ def surface(
     }
 
 
-def bind_surface(client, project_id="project-a", **surface_overrides):
+def bind_surface(client, project_id="project-a", **overrides):
+    binding_overrides = {
+        key: overrides.pop(key)
+        for key in list(overrides.keys())
+        if key not in {"document_id", "tab_id", "tab_title"}
+    }
     payload = {
-        **surface(**surface_overrides),
+        **surface(**overrides),
         "projectId": project_id,
+        **binding_overrides,
     }
     response = client.put("/api/extension/document-binding", json=payload)
     assert response.status_code == 200

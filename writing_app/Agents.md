@@ -20,4 +20,4 @@ Rules:
 - Explain tradeoffs before large refactors.
 - Keep functions short and readable.
 - Follow standard Python naming and import conventions.
-- If `templates/index.html` or `static/` changes, run `../sync-pages.sh` from `writing_app` or `./sync-pages.sh` from the repo root so `docs/` stays current.
+- If `templates/index.html` or `static/` changes, run `../sync-pages.sh` from the Scriptor app directory or `./sync-pages.sh` from the repo root so `docs/` stays current.

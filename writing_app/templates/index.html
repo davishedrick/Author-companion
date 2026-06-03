@@ -6,7 +6,10 @@
   <title>Scriptor</title>
   <script>
     try {
-      const storedSnapshot = JSON.parse(localStorage.getItem("author-engine-mvp"));
+      const storedSnapshot = JSON.parse(
+        localStorage.getItem("scriptor-mvp")
+        || localStorage.getItem("author-engine-mvp")
+      );
       const themePreference = storedSnapshot && storedSnapshot.themePreference === "dark" ? "dark" : "light";
       document.documentElement.dataset.theme = themePreference;
     } catch (error) {

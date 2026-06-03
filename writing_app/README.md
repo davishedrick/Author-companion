@@ -11,8 +11,10 @@ the split JavaScript and CSS assets in `static/`. Authentication pages are
 separate Jinja templates.
 
 Runtime data is stored in SQLite. By default Flask writes the database to the app
-instance directory as `author_engine_state.sqlite3`; tests override that path with
-`STATE_DB_PATH`.
+instance directory as `scriptor_state.sqlite3`; tests override that path with
+`STATE_DB_PATH`. Existing installs that already have `author_engine_state.sqlite3`
+continue to use that file until migrated, so local data is not stranded by the
+rename.
 
 ## Project Structure
 
@@ -27,7 +29,7 @@ instance directory as `author_engine_state.sqlite3`; tests override that path wi
 
 ## Local Setup
 
-From the `writing_app` directory, install dependencies and start the Flask app:
+From the Scriptor app directory, install dependencies and start the Flask app:
 
 ```bash
 pip install -r requirements.txt
@@ -44,7 +46,7 @@ link.
 
 ## Useful Commands
 
-Run tests from `writing_app`:
+Run tests from the Scriptor app directory:
 
 ```bash
 pytest
@@ -99,7 +101,9 @@ When present, reset emails are appended there instead of being sent through SMTP
 
 GitHub Pages only serves static files from the configured Pages source (typically the repository root, `/docs`, or the `gh-pages` branch). It does **not** run Flask, so updates to `app.py` never appear on Pages by themselves.
 
-In this repository, the Pages artifact lives under `docs/`. If you edit `writing_app/templates/index.html` or anything in `writing_app/static/`, sync the Pages copy before pushing if you want the GitHub Pages site to reflect the change.
+In this repository, the Pages artifact lives under `docs/`. If you edit
+`templates/index.html` or anything in `static/`, sync the Pages copy before
+pushing if you want the GitHub Pages site to reflect the change.
 
 From the repository root:
 
@@ -107,6 +111,5 @@ From the repository root:
 ./sync-pages.sh
 ```
 
-That copies `writing_app/templates/index.html` to `docs/index.html` and mirrors
-`writing_app/static/` to `docs/static/`. The test suite checks that both copies
-stay in sync.
+That copies `templates/index.html` to `docs/index.html` and mirrors `static/` to
+`docs/static/`. The test suite checks that both copies stay in sync.

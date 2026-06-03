@@ -4,9 +4,11 @@ from pathlib import Path
 
 from app import app
 from auth_store import authenticate_user, create_user
+from state_store import get_db_path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+APP_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = APP_DIR.parent
 JS_FILES = [
     "state.js",
     "dashboard.js",
@@ -27,9 +29,7 @@ CSS_FILES = [
 
 
 def get_html():
-    return (REPO_ROOT / "writing_app" / "templates" / "index.html").read_text(
-        encoding="utf-8"
-    )
+    return (APP_DIR / "templates" / "index.html").read_text(encoding="utf-8")
 
 
 def get_js_asset(filename):
@@ -55,12 +55,36 @@ def get_app_css():
 
 
 def use_temp_state_db(tmp_path):
-    app.config["STATE_DB_PATH"] = str(tmp_path / "author-engine-test.sqlite3")
+    app.config["STATE_DB_PATH"] = str(tmp_path / "scriptor-test.sqlite3")
     app.config["SECRET_KEY"] = "test-secret"
     app.config["MAIL_OUTBOX"] = []
     app.config["MAIL_HOST"] = ""
     app.config["MAIL_SENDER"] = ""
     app.config["PASSWORD_RESET_TOKEN_TTL_SECONDS"] = 3600
+
+
+def test_default_state_db_uses_scriptor_name_with_legacy_fallback(tmp_path):
+    original_instance_path = app.instance_path
+    original_state_db_path = app.config.get("STATE_DB_PATH")
+    try:
+        app.config.pop("STATE_DB_PATH", None)
+        app.instance_path = str(tmp_path / "new-install")
+        with app.app_context():
+            assert get_db_path().name == "scriptor_state.sqlite3"
+
+        legacy_instance = tmp_path / "legacy-install"
+        legacy_instance.mkdir()
+        legacy_file = legacy_instance / "author_engine_state.sqlite3"
+        legacy_file.write_text("", encoding="utf-8")
+        app.instance_path = str(legacy_instance)
+        with app.app_context():
+            assert get_db_path() == legacy_file
+    finally:
+        app.instance_path = original_instance_path
+        if original_state_db_path is None:
+            app.config.pop("STATE_DB_PATH", None)
+        else:
+            app.config["STATE_DB_PATH"] = original_state_db_path
 
 
 def register_and_login(client, email="writer@example.com", password="verysecure"):
@@ -288,7 +312,9 @@ def test_static_assets_load():
     assert ".edit-columns {" in get_css_asset("edit.css")
     assert ".open-issues-focus .section-head {" in get_css_asset("edit.css")
     assert ".edit-stage-roadmap {" in get_css_asset("edit.css")
-    assert 'const STORAGE_KEY = "author-engine-mvp";' in get_js_asset("state.js")
+    assert 'const STORAGE_KEY = "scriptor-mvp";' in get_js_asset("state.js")
+    assert 'const LEGACY_STORAGE_KEY = "author-engine-mvp";' in get_js_asset("state.js")
+    assert "localStorage.getItem(LEGACY_STORAGE_KEY)" in get_js_asset("state.js")
     assert 'const STATE_API_ENDPOINT = "/api/state";' in get_js_asset("state.js")
     assert (
         'const DEFAULT_PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];'
@@ -296,6 +322,11 @@ def test_static_assets_load():
     )
     assert '"memoirPeople"' in get_js_asset("state.js")
     assert '"research"' in get_js_asset("state.js")
+    assert "startingWordCount" in get_js_asset("state.js")
+    assert "wordsWrittenSinceTrackingBegan" in get_js_asset("state.js")
+    assert "Since tracking began" in get_js_asset("dashboard.js")
+    assert "Starting word count" in get_app_js()
+    assert "Starting word count" in get_js_asset("dashboard.js")
     assert "fetchRemoteState()" in get_js_asset("app.js")
     assert "function renderDashboard(bundle)" in get_js_asset("dashboard.js")
     assert "function renderCompletedManuscriptDashboard(bundle, stats)" in get_js_asset(
@@ -304,6 +335,19 @@ def test_static_assets_load():
     assert "function launchManuscriptCompleteConfetti()" in get_js_asset("dashboard.js")
     assert "function renderGoalsDashboard(bundle)" in get_js_asset("dashboard.js")
     assert "function renderPlotDashboard(bundle)" in get_js_asset("plot.js")
+
+
+def test_starting_word_count_labels_only_render_for_nonzero_baselines():
+    app_js = get_app_js()
+    dashboard_js = get_js_asset("dashboard.js")
+    dashboard_css = get_css_asset("dashboard.css")
+
+    assert "function renderStartingWordCountIndicator(bundle)" in app_js
+    assert "startingWordCount === null || startingWordCount <= 0" in app_js
+    assert "activity-timeline-baseline" in app_js
+    assert "stats.baselineEstablished && stats.startingWordCount > 0" in dashboard_js
+    assert "tracker-baseline-stat" in dashboard_js
+    assert "repeat(auto-fit, minmax(180px, 1fr))" in dashboard_css
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
     assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
     assert "Word count" in get_js_asset("edit2.js")
@@ -1317,6 +1361,10 @@ def test_state_api_persists_snapshot_to_sqlite(tmp_path):
                     "bookTitle": "The Hollow Orchard",
                     "targetWordCount": 80000,
                     "currentWordCount": 1250,
+                    "startingWordCount": None,
+                    "baselineEstablished": False,
+                    "startingWordCountSource": "provisional",
+                    "startingWordCountEstablishedAt": "",
                     "deadline": "",
                     "dailyTarget": 1000,
                     "projectStartDate": "2026-04-01",
@@ -2273,6 +2321,10 @@ def test_extension_document_binding_returns_same_project_after_save(tmp_path):
         "bookTitle": "Project A",
         "manuscriptType": "Novel",
         "currentWordCount": 0,
+        "startingWordCount": 0,
+        "baselineEstablished": True,
+        "startingWordCountSource": "migration_bound_no_sessions",
+        "startingWordCountEstablishedAt": "",
         "status": "active",
     }
 
@@ -2979,20 +3031,20 @@ def test_state_is_isolated_per_signed_in_user(tmp_path):
 
 
 def test_pages_artifact_matches_flask_template():
-    template_file = REPO_ROOT / "writing_app" / "templates" / "index.html"
+    template_file = APP_DIR / "templates" / "index.html"
     pages_file = REPO_ROOT / "docs" / "index.html"
 
     assert pages_file.read_text(encoding="utf-8") == template_file.read_text(
         encoding="utf-8"
     )
     for filename in ["app.css", *CSS_FILES]:
-        template_css_file = REPO_ROOT / "writing_app" / "static" / "css" / filename
+        template_css_file = APP_DIR / "static" / "css" / filename
         pages_css_file = REPO_ROOT / "docs" / "static" / "css" / filename
         assert pages_css_file.read_text(
             encoding="utf-8"
         ) == template_css_file.read_text(encoding="utf-8")
     for filename in JS_FILES:
-        template_js_file = REPO_ROOT / "writing_app" / "static" / "js" / filename
+        template_js_file = APP_DIR / "static" / "js" / filename
         pages_js_file = REPO_ROOT / "docs" / "static" / "js" / filename
         assert pages_js_file.read_text(encoding="utf-8") == template_js_file.read_text(
             encoding="utf-8"

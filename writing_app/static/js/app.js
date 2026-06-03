@@ -1546,10 +1546,32 @@ function renderActivityTrendChart(days, config = getActivityRangeConfig()) {
   `;
 }
 
-function renderActivityTimeline(sessions, expanded = false) {
-  if (!sessions.length) return `<div class="empty">No recent activity yet.</div>`;
+function renderStartingWordCountIndicator(bundle) {
+  const stats = bundle ? getStats(bundle) : null;
+  const startingWordCount = stats?.baselineEstablished ? nullableNumber(stats.startingWordCount) : null;
+  if (startingWordCount === null || startingWordCount <= 0) return "";
+  return `
+    <article class="activity-timeline-item activity-timeline-baseline">
+      <span class="activity-timeline-dot">S</span>
+      <div>
+        <time>Baseline</time>
+        <strong>Starting word count</strong>
+        <p>${formatNumber(startingWordCount)} words</p>
+      </div>
+    </article>
+  `;
+}
+
+function renderActivityTimeline(sessions, expanded = false, bundle = null) {
+  const startingWordCountIndicator = renderStartingWordCountIndicator(bundle);
+  if (!sessions.length) {
+    return `
+      ${startingWordCountIndicator}
+      <div class="empty">No recent activity yet.</div>
+    `;
+  }
   const visibleSessions = expanded ? sessions : sessions.slice(0, 5);
-  return visibleSessions.map((session) => {
+  return `${startingWordCountIndicator}${visibleSessions.map((session) => {
     const isEdit = session.type === "edit";
     const title = isEdit
       ? `Edited for ${formatNumber(session.durationMinutes)} minutes`
@@ -1565,7 +1587,7 @@ function renderActivityTimeline(sessions, expanded = false) {
         </div>
       </article>
     `;
-  }).join("");
+  }).join("")}`;
 }
 
 function bindActivityBoardActions(bundle) {
@@ -1690,7 +1712,7 @@ function renderSessions(bundle) {
             <button class="activity-text-btn" id="activity-view-all-btn" type="button">View all</button>
           </div>
           <div class="activity-timeline-list">
-            ${renderActivityTimeline(sessions, false)}
+            ${renderActivityTimeline(sessions, false, bundle)}
           </div>
         </aside>
       </div>

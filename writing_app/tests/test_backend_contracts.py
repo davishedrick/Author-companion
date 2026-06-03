@@ -69,7 +69,126 @@ def test_project_creation_validates_fields_and_persists_after_reload(tmp_path):
 
     assert row["project"]["bookTitle"] == "Backend Contract Novel"
     assert row["project"]["currentWordCount"] == 1200
+    assert row["project"]["startingWordCount"] is None
+    assert row["project"]["baselineEstablished"] is False
     assert row["isBound"] is False
+
+
+def test_first_document_binding_establishes_verified_manuscript_baseline(tmp_path):
+    client = client_for(tmp_path)
+    seed_state(
+        client,
+        projects=[project_bundle("project-a", "Project A", current_word_count=10000)],
+    )
+
+    bind_surface(
+        client, verifiedWordCount=10305, verifiedWordCountSource="stable-visible"
+    )
+    project = get_project(client)
+
+    assert project["project"]["startingWordCount"] == 10305
+    assert project["project"]["currentWordCount"] == 10305
+    assert project["project"]["baselineEstablished"] is True
+    assert project["project"]["startingWordCountSource"] == "stable-visible"
+    assert project["sessions"] == []
+
+
+def test_rebinding_preserves_starting_word_count_but_updates_current_count(tmp_path):
+    client = client_for(tmp_path)
+    seed_state(client)
+
+    bind_surface(client, verifiedWordCount=10305)
+    bind_surface(client, verifiedWordCount=22000)
+    project = get_project(client)
+
+    assert project["project"]["startingWordCount"] == 10305
+    assert project["project"]["currentWordCount"] == 22000
+
+
+def test_verified_bind_does_not_overwrite_baseline_when_sessions_exist(tmp_path):
+    client = client_for(tmp_path)
+    seeded_project = project_bundle("project-a", "Project A", current_word_count=10000)
+    seeded_project["sessions"] = [
+        {
+            "id": "session-1",
+            "type": "write",
+            "startDocumentWordCount": 8000,
+            "endDocumentWordCount": 10000,
+            "netWordsChanged": 2000,
+            "wordsWritten": 2000,
+        }
+    ]
+    seed_state(client, projects=[seeded_project])
+
+    bind_surface(client, verifiedWordCount=10305)
+    project = get_project(client)
+
+    assert project["project"]["startingWordCount"] == 8000
+    assert project["project"]["currentWordCount"] == 10305
+    assert project["project"]["baselineEstablished"] is True
+    assert (
+        project["project"]["startingWordCountSource"]
+        == "migration_estimated_from_sessions"
+    )
+    assert len(project["sessions"]) == 1
+
+
+def test_bound_project_without_sessions_migrates_starting_count_to_current_count(
+    tmp_path,
+):
+    client = client_for(tmp_path)
+    seed_state(
+        client,
+        projects=[project_bundle("project-a", "Project A", current_word_count=15000)],
+        bindings={"google-doc-a:tab-a": {"projectId": "project-a"}},
+    )
+
+    project = get_project(client)
+
+    assert project["project"]["startingWordCount"] == 15000
+    assert project["project"]["baselineEstablished"] is True
+    assert (
+        project["project"]["startingWordCountSource"] == "migration_bound_no_sessions"
+    )
+
+
+def test_bound_project_with_sessions_migrates_starting_count_from_tracked_delta(
+    tmp_path,
+):
+    client = client_for(tmp_path)
+    seeded_project = project_bundle("project-a", "Project A", current_word_count=12000)
+    seeded_project["sessions"] = [
+        {
+            "id": "session-1",
+            "type": "write",
+            "startDocumentWordCount": 10305,
+            "endDocumentWordCount": 11000,
+            "netWordsChanged": 695,
+            "wordsWritten": 695,
+        },
+        {
+            "id": "session-2",
+            "type": "write",
+            "startDocumentWordCount": 11000,
+            "endDocumentWordCount": 12000,
+            "netWordsChanged": 1000,
+            "wordsWritten": 1000,
+        },
+    ]
+    seed_state(
+        client,
+        projects=[seeded_project],
+        bindings={"google-doc-a:tab-a": {"projectId": "project-a"}},
+    )
+
+    project = get_project(client)
+
+    assert project["project"]["startingWordCount"] == 10305
+    assert project["project"]["baselineEstablished"] is True
+    assert (
+        project["project"]["startingWordCountSource"]
+        == "migration_estimated_from_sessions"
+    )
 
 
 def test_extension_session_ingests_canonical_net_cases(tmp_path):
@@ -250,8 +369,14 @@ def test_binding_lifecycle_stale_clear_keeps_history_and_makes_project_available
     project_row = next(row for row in picker if row["project"]["id"] == "project-a")
 
     assert stale.status_code == 200
-    assert deleted_surface["manuscriptSurfaceId"] not in stale_state["extensionDocumentBindings"]
-    assert stale_state["extensionDeletedBindings"]["project-a"]["documentId"] == "deleted-doc"
+    assert (
+        deleted_surface["manuscriptSurfaceId"]
+        not in stale_state["extensionDocumentBindings"]
+    )
+    assert (
+        stale_state["extensionDeletedBindings"]["project-a"]["documentId"]
+        == "deleted-doc"
+    )
     assert rebound_after_stale.status_code == 200
     assert clear.status_code == 200
     assert rebound.status_code == 200

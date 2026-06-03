@@ -199,6 +199,16 @@ function renderActiveManuscriptDashboard(bundle, stats, momentumState, deadlineL
             <span>Current words</span>
             <strong>${formatNumber(currentWordCount)}</strong>
           </article>
+          ${stats.baselineEstablished && stats.startingWordCount > 0 ? `
+            <article class="tracker-baseline-stat">
+              <span>Starting word count</span>
+              <strong>${formatNumber(stats.startingWordCount)}</strong>
+            </article>
+          ` : ""}
+          <article>
+            <span>Since tracking began</span>
+            <strong>${stats.baselineEstablished ? formatSignedNumber(stats.wordsWrittenSinceTrackingBegan) : formatNumber(stats.totalWritten)}</strong>
+          </article>
           <article>
             <span>Completion</span>
             <strong>${stats.totalProgress.toFixed(1)}%</strong>

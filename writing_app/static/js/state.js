@@ -1,4 +1,5 @@
-const STORAGE_KEY = "author-engine-mvp";
+const STORAGE_KEY = "scriptor-mvp";
+const LEGACY_STORAGE_KEY = "author-engine-mvp";
 const STATE_API_ENDPOINT = "/api/state";
 const DEFAULT_VIEW = "dashboard";
 const DEFAULT_PLOT_SECTION_IDS = ["characters", "locations", "glossary", "worldRules", "history", "mythology"];
@@ -45,6 +46,10 @@ const requiredImportColumns = [
   "project_title",
   "project_target_word_count",
   "project_current_word_count",
+  "project_starting_word_count",
+  "project_baseline_established",
+  "project_starting_word_count_source",
+  "project_starting_word_count_established_at",
   "project_deadline",
   "project_daily_target",
   "project_start_date",
@@ -417,6 +422,10 @@ const defaultProjectTemplate = {
     structureUnitLabel: "Chapter",
     targetWordCount: 80000,
     currentWordCount: 0,
+    startingWordCount: null,
+    baselineEstablished: false,
+    startingWordCountSource: "provisional",
+    startingWordCountEstablishedAt: "",
     deadline: "",
     dailyTarget: 1000,
     projectStartDate: new Date().toISOString().slice(0, 10)
@@ -534,6 +543,10 @@ function createProjectBundle(title, targetWordCount, currentWordCount, deadline,
       structureUnitLabel,
       targetWordCount: number(targetWordCount) || 80000,
       currentWordCount: number(currentWordCount),
+      startingWordCount: null,
+      baselineEstablished: false,
+      startingWordCountSource: "provisional",
+      startingWordCountEstablishedAt: "",
       deadline: deadline || "",
       dailyTarget: 1000,
       projectStartDate: new Date().toISOString().slice(0, 10)
@@ -552,7 +565,17 @@ function createProjectBundle(title, targetWordCount, currentWordCount, deadline,
 
 function readStoredSnapshot() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const storedSnapshot = localStorage.getItem(STORAGE_KEY);
+    if (storedSnapshot) {
+      return JSON.parse(storedSnapshot);
+    }
+    const legacySnapshot = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacySnapshot) {
+      const parsedSnapshot = JSON.parse(legacySnapshot);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedSnapshot));
+      return parsedSnapshot;
+    }
+    return null;
   } catch (error) {
     return null;
   }
@@ -675,6 +698,7 @@ function normalizeProjectBundle(bundle) {
   const mergedProject = { ...cloneValue(defaultProjectTemplate.project), ...(bundle.project || {}) };
   const manuscriptType = normalizeProjectType(mergedProject.manuscriptType || mergedProject.projectType);
   const status = bundle.status === "archived" || bundle.project?.status === "archived" ? "archived" : "active";
+  const startingWordCount = nullableNumber(mergedProject.startingWordCount);
   return {
     id: bundle.id || createId(),
     source: String(bundle.source || ""),
@@ -684,7 +708,12 @@ function normalizeProjectBundle(bundle) {
     project: {
       ...mergedProject,
       manuscriptType,
-      structureUnitLabel: normalizeStructureUnitLabel(mergedProject.structureUnitLabel, manuscriptType)
+      structureUnitLabel: normalizeStructureUnitLabel(mergedProject.structureUnitLabel, manuscriptType),
+      currentWordCount: number(mergedProject.currentWordCount),
+      startingWordCount,
+      baselineEstablished: Boolean(mergedProject.baselineEstablished) || startingWordCount !== null,
+      startingWordCountSource: String(mergedProject.startingWordCountSource || (startingWordCount !== null ? "existing" : "provisional")),
+      startingWordCountEstablishedAt: String(mergedProject.startingWordCountEstablishedAt || "")
     },
     completion: normalizeCompletionState(bundle.completion),
     publication: normalizePublicationState(bundle.publication),
@@ -1588,6 +1617,11 @@ function getStats(bundle) {
   const avgSession = totalWritten / Math.max(1, writingSessions.length);
   const targetWords = number(bundle.project.targetWordCount);
   const currentWords = number(bundle.project.currentWordCount);
+  const startingWords = nullableNumber(bundle.project.startingWordCount);
+  const baselineEstablished = Boolean(bundle.project.baselineEstablished) && startingWords !== null;
+  const wordsWrittenSinceTrackingBegan = baselineEstablished
+    ? currentWords - startingWords
+    : totalWritten;
   const distanceToGoal = Math.max(targetWords - currentWords, 0);
   const estimatedCompletionDate = dailyAverage > 0
     ? new Date(Date.now() + (distanceToGoal / dailyAverage) * 86400000)
@@ -1610,6 +1644,9 @@ function getStats(bundle) {
     wordsWeek,
     wordsMonth,
     totalWritten,
+    wordsWrittenSinceTrackingBegan,
+    startingWordCount: startingWords,
+    baselineEstablished,
     totalEdited,
     totalDuration,
     dailyAverage,
@@ -2258,6 +2295,10 @@ function projectExportBaseRow(bundle) {
     project_archived_at: bundle.archivedAt || "",
     project_target_word_count: number(bundle.project.targetWordCount),
     project_current_word_count: number(bundle.project.currentWordCount),
+    project_starting_word_count: nullableNumber(bundle.project.startingWordCount) ?? "",
+    project_baseline_established: bundle.project.baselineEstablished ? "true" : "false",
+    project_starting_word_count_source: bundle.project.startingWordCountSource || "",
+    project_starting_word_count_established_at: bundle.project.startingWordCountEstablishedAt || "",
     project_deadline: bundle.project.deadline || "",
     project_daily_target: number(bundle.project.dailyTarget),
     project_start_date: bundle.project.projectStartDate || "",
@@ -2518,6 +2559,10 @@ function buildBundleFromImportedRows(rows) {
       structureUnitLabel: projectRow.project_structure_unit_label || defaultStructureUnitForProjectType(projectRow.project_manuscript_type || "Novel"),
       targetWordCount: number(projectRow.project_target_word_count),
       currentWordCount: number(projectRow.project_current_word_count),
+      startingWordCount: nullableNumber(projectRow.project_starting_word_count),
+      baselineEstablished: ["true", "1", "yes"].includes(String(projectRow.project_baseline_established || "").toLowerCase()),
+      startingWordCountSource: projectRow.project_starting_word_count_source || "provisional",
+      startingWordCountEstablishedAt: projectRow.project_starting_word_count_established_at || "",
       deadline: projectRow.project_deadline || "",
       dailyTarget: number(projectRow.project_daily_target) || defaultProjectTemplate.project.dailyTarget,
       projectStartDate: projectRow.project_start_date || new Date().toISOString().slice(0, 10)

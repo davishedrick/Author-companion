@@ -42,7 +42,7 @@ from state_store import load_state, save_state
 
 app = Flask(__name__)
 SCRIPTOR_SESSION_HEADER = "X-Scriptor-Session"
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "author-engine-dev-secret")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "scriptor-dev-secret")
 app.config["SESSION_COOKIE_SAMESITE"] = os.environ.get(
     "SESSION_COOKIE_SAMESITE", "None"
 )
@@ -447,6 +447,8 @@ def put_extension_document_binding():
             payload.get("tabId", ""),
             payload.get("tabTitle", ""),
             payload.get("documentUrl", ""),
+            payload.get("verifiedWordCount", payload.get("baselineWordCount")),
+            payload.get("verifiedWordCountSource", "google-docs-binding"),
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code

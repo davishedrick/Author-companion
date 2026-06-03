@@ -18,12 +18,145 @@ DEFAULT_PERSISTED_STATE = {
 }
 
 
+def _non_negative_int(value, default=0):
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < 0:
+        return default
+    return round(parsed)
+
+
+def _optional_non_negative_int(value):
+    if value in (None, ""):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0:
+        return None
+    return round(parsed)
+
+
+def _int_value(value, default=0):
+    try:
+        return round(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _binding_project_id(binding):
+    if isinstance(binding, dict):
+        return str(binding.get("projectId") or "").strip()
+    return str(binding or "").strip()
+
+
+def _bound_project_ids(extension_document_bindings, extension_deleted_bindings):
+    project_ids = set()
+    for binding in extension_document_bindings.values():
+        project_id = _binding_project_id(binding)
+        if project_id:
+            project_ids.add(project_id)
+    for project_id, binding in extension_deleted_bindings.items():
+        if isinstance(binding, dict) and binding:
+            project_ids.add(str(project_id))
+    return project_ids
+
+
+def _session_manuscript_delta(session):
+    if not isinstance(session, dict):
+        return 0
+    start = _optional_non_negative_int(session.get("startDocumentWordCount"))
+    end = _optional_non_negative_int(session.get("endDocumentWordCount"))
+    if start is not None and end is not None:
+        return end - start
+    net_words = session.get("netWordsChanged")
+    try:
+        parsed_net = float(net_words)
+    except (TypeError, ValueError):
+        parsed_net = None
+    if parsed_net is not None:
+        return round(parsed_net)
+    if session.get("type") == "edit":
+        return _non_negative_int(session.get("wordsAdded")) - _non_negative_int(
+            session.get("wordsRemoved")
+        )
+    return _non_negative_int(session.get("wordsWritten"))
+
+
+def _normalize_project_baselines(projects, bound_project_ids):
+    normalized_projects = projects if isinstance(projects, list) else []
+    for project_bundle in normalized_projects:
+        if not isinstance(project_bundle, dict):
+            continue
+        project_id = str(project_bundle.get("id") or "").strip()
+        project = project_bundle.get("project")
+        if not isinstance(project, dict):
+            continue
+
+        current_word_count = _non_negative_int(project.get("currentWordCount"))
+        project["currentWordCount"] = current_word_count
+        existing_starting_count = _optional_non_negative_int(
+            project.get("startingWordCount")
+        )
+        if existing_starting_count is not None:
+            project["startingWordCount"] = existing_starting_count
+            project["baselineEstablished"] = bool(
+                project.get("baselineEstablished", True)
+            )
+            project["startingWordCountSource"] = str(
+                project.get("startingWordCountSource") or "existing"
+            )
+            project["startingWordCountEstablishedAt"] = str(
+                project.get("startingWordCountEstablishedAt") or ""
+            )
+            continue
+
+        if project_id not in bound_project_ids:
+            project["startingWordCount"] = None
+            project["baselineEstablished"] = False
+            project["startingWordCountSource"] = str(
+                project.get("startingWordCountSource") or "provisional"
+            )
+            project["startingWordCountEstablishedAt"] = str(
+                project.get("startingWordCountEstablishedAt") or ""
+            )
+            continue
+
+        sessions = (
+            project_bundle.get("sessions")
+            if isinstance(project_bundle.get("sessions"), list)
+            else []
+        )
+        if sessions:
+            tracked_delta = sum(
+                _session_manuscript_delta(session) for session in sessions
+            )
+            project["startingWordCount"] = max(0, current_word_count - tracked_delta)
+            project["startingWordCountSource"] = "migration_estimated_from_sessions"
+        else:
+            project["startingWordCount"] = current_word_count
+            project["startingWordCountSource"] = "migration_bound_no_sessions"
+        project["baselineEstablished"] = True
+        project["startingWordCountEstablishedAt"] = str(
+            project.get("startingWordCountEstablishedAt") or ""
+        )
+
+    return normalized_projects
+
+
 def get_db_path() -> Path:
     configured_path = current_app.config.get("STATE_DB_PATH")
     if configured_path:
         path = Path(configured_path)
     else:
-        path = Path(current_app.instance_path) / "author_engine_state.sqlite3"
+        instance_path = Path(current_app.instance_path)
+        path = instance_path / "scriptor_state.sqlite3"
+        legacy_path = instance_path / "author_engine_state.sqlite3"
+        if legacy_path.exists() and not path.exists():
+            path = legacy_path
     path.parent.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -143,10 +276,13 @@ def normalize_state_payload(payload):
             if project_id
         ]
 
+    projects = _normalize_project_baselines(
+        payload.get("projects") if isinstance(payload.get("projects"), list) else [],
+        _bound_project_ids(extension_document_bindings, extension_deleted_bindings),
+    )
+
     return {
-        "projects": payload.get("projects")
-        if isinstance(payload.get("projects"), list)
-        else [],
+        "projects": projects,
         "activeProjectId": active_project_id,
         "activeView": active_view,
         "lastWorkspaceView": last_workspace_view,
