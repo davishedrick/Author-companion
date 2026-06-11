@@ -199,7 +199,7 @@ function renderActiveManuscriptDashboard(bundle, stats, momentumState, deadlineL
             <span>Current words</span>
             <strong>${formatNumber(currentWordCount)}</strong>
           </article>
-          ${stats.baselineEstablished && stats.startingWordCount > 0 ? `
+          ${stats.startingWordCount > 0 ? `
             <article class="tracker-baseline-stat">
               <span>Starting word count</span>
               <strong>${formatNumber(stats.startingWordCount)}</strong>

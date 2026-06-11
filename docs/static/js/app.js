@@ -21,6 +21,9 @@ let publishCelebrationTimer = null;
 let pendingReopenProjectId = null;
 let activityRangeKey = "7";
 let activityScreenMode = "summary";
+let remoteStateRefreshBound = false;
+let remoteStateRefreshPromise = Promise.resolve();
+let lastRemoteStateRefreshAt = 0;
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -250,6 +253,59 @@ async function initializeApp() {
   }
   render();
   remoteSyncSuspended = false;
+  bindRemoteStateRefresh();
+}
+
+function bindRemoteStateRefresh() {
+  if (remoteStateRefreshBound) return;
+  remoteStateRefreshBound = true;
+  window.addEventListener("focus", () => {
+    refreshRemoteStateFromServer("window-focus");
+  });
+  window.addEventListener("pageshow", () => {
+    refreshRemoteStateFromServer("pageshow");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshRemoteStateFromServer("visibilitychange");
+    }
+  });
+}
+
+async function refreshRemoteStateFromServer(reason = "manual") {
+  if (persistenceMode !== "remote" || remoteSyncSuspended) return false;
+  const now = Date.now();
+  if (now - lastRemoteStateRefreshAt < 1000) return false;
+  lastRemoteStateRefreshAt = now;
+  remoteStateRefreshPromise = remoteStateRefreshPromise.then(async () => {
+    if (persistenceMode !== "remote" || remoteSyncSuspended) return false;
+    remoteSyncSuspended = true;
+    try {
+      await remoteSyncPromise;
+      const activeViewBeforeRefresh = activeView;
+      const lastWorkspaceViewBeforeRefresh = lastWorkspaceView;
+      const before = JSON.stringify(serializeStateSnapshot());
+      const remoteSnapshot = await fetchRemoteState();
+      applyPersistedSnapshot({
+        ...remoteSnapshot,
+        activeView: activeViewBeforeRefresh,
+        lastWorkspaceView: lastWorkspaceViewBeforeRefresh
+      });
+      const after = JSON.stringify(serializeStateSnapshot());
+      if (before !== after) {
+        console.info("[Scriptor] Remote state refreshed.", { reason });
+        render();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn("Remote state refresh failed.", error);
+      return false;
+    } finally {
+      remoteSyncSuspended = false;
+    }
+  });
+  return remoteStateRefreshPromise;
 }
 
 function applyThemePreference() {
@@ -1547,8 +1603,7 @@ function renderActivityTrendChart(days, config = getActivityRangeConfig()) {
 }
 
 function renderStartingWordCountIndicator(bundle) {
-  const stats = bundle ? getStats(bundle) : null;
-  const startingWordCount = stats?.baselineEstablished ? nullableNumber(stats.startingWordCount) : null;
+  const startingWordCount = nullableNumber(bundle?.project?.startingWordCount);
   if (startingWordCount === null || startingWordCount <= 0) return "";
   return `
     <article class="activity-timeline-item activity-timeline-baseline">

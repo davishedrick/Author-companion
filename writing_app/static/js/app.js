@@ -21,6 +21,9 @@ let publishCelebrationTimer = null;
 let pendingReopenProjectId = null;
 let activityRangeKey = "7";
 let activityScreenMode = "summary";
+let remoteStateRefreshBound = false;
+let remoteStateRefreshPromise = Promise.resolve();
+let lastRemoteStateRefreshAt = 0;
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -250,6 +253,59 @@ async function initializeApp() {
   }
   render();
   remoteSyncSuspended = false;
+  bindRemoteStateRefresh();
+}
+
+function bindRemoteStateRefresh() {
+  if (remoteStateRefreshBound) return;
+  remoteStateRefreshBound = true;
+  window.addEventListener("focus", () => {
+    refreshRemoteStateFromServer("window-focus");
+  });
+  window.addEventListener("pageshow", () => {
+    refreshRemoteStateFromServer("pageshow");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      refreshRemoteStateFromServer("visibilitychange");
+    }
+  });
+}
+
+async function refreshRemoteStateFromServer(reason = "manual") {
+  if (persistenceMode !== "remote" || remoteSyncSuspended) return false;
+  const now = Date.now();
+  if (now - lastRemoteStateRefreshAt < 1000) return false;
+  lastRemoteStateRefreshAt = now;
+  remoteStateRefreshPromise = remoteStateRefreshPromise.then(async () => {
+    if (persistenceMode !== "remote" || remoteSyncSuspended) return false;
+    remoteSyncSuspended = true;
+    try {
+      await remoteSyncPromise;
+      const activeViewBeforeRefresh = activeView;
+      const lastWorkspaceViewBeforeRefresh = lastWorkspaceView;
+      const before = JSON.stringify(serializeStateSnapshot());
+      const remoteSnapshot = await fetchRemoteState();
+      applyPersistedSnapshot({
+        ...remoteSnapshot,
+        activeView: activeViewBeforeRefresh,
+        lastWorkspaceView: lastWorkspaceViewBeforeRefresh
+      });
+      const after = JSON.stringify(serializeStateSnapshot());
+      if (before !== after) {
+        console.info("[Scriptor] Remote state refreshed.", { reason });
+        render();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn("Remote state refresh failed.", error);
+      return false;
+    } finally {
+      remoteSyncSuspended = false;
+    }
+  });
+  return remoteStateRefreshPromise;
 }
 
 function applyThemePreference() {
@@ -1250,6 +1306,59 @@ function renderProjectCardLifecycle(bundle) {
   `;
 }
 
+
+function projectCardBindingEntry(bundle) {
+  const projectId = String(bundle?.id || bundle?.project?.id || "").trim();
+  if (!projectId) return null;
+  const bindings = state.extensionDocumentBindings && typeof state.extensionDocumentBindings === "object"
+    ? state.extensionDocumentBindings
+    : {};
+  const activeBinding = Object.values(bindings).find((binding) => {
+    if (binding && typeof binding === "object") return String(binding.projectId || "").trim() === projectId;
+    return String(binding || "").trim() === projectId;
+  });
+  if (activeBinding) return { status: "active", binding: activeBinding };
+  const deletedBindings = state.extensionDeletedBindings && typeof state.extensionDeletedBindings === "object"
+    ? state.extensionDeletedBindings
+    : {};
+  const deletedBinding = deletedBindings[projectId];
+  if (deletedBinding && typeof deletedBinding === "object") {
+    return { status: String(deletedBinding.status || "stale_missing_doc"), binding: deletedBinding };
+  }
+  return null;
+}
+
+function projectCardBindingDocumentTitle(binding) {
+  return String(binding?.documentTitle || binding?.documentName || "").trim();
+}
+
+function projectCardBindingTabTitle(binding) {
+  return String(binding?.tabTitle || binding?.manuscriptSurfaceLabel || "").trim();
+}
+
+function renderProjectCardBindingSummary(bundle) {
+  const entry = projectCardBindingEntry(bundle);
+  if (!entry) {
+    return `<div class="project-card-binding" aria-label="Document binding"><p>No document bound</p></div>`;
+  }
+  const documentTitle = projectCardBindingDocumentTitle(entry.binding) || "Unknown document";
+  const tabTitle = projectCardBindingTabTitle(entry.binding) || "Current manuscript";
+  if (entry.status !== "active") {
+    return `
+      <div class="project-card-binding project-card-binding--stale" aria-label="Document binding">
+        <p>Bound document unavailable: <strong>${escapeHtml(documentTitle)}</strong></p>
+        <p>Last tab: <strong>${escapeHtml(tabTitle)}</strong></p>
+      </div>
+    `;
+  }
+  return `
+    <div class="project-card-binding" aria-label="Document binding">
+      <p>Bound document: <strong>${escapeHtml(documentTitle)}</strong></p>
+      <p>Bound tab: <strong>${escapeHtml(tabTitle)}</strong></p>
+    </div>
+  `;
+}
+
 function renderProjectCard(bundle, options = {}) {
   const { archived = false } = options;
   const stats = getStats(bundle);
@@ -1286,6 +1395,7 @@ function renderProjectCard(bundle, options = {}) {
       <h3>${escapeHtml(bundle.project.bookTitle || "Untitled project")}</h3>
       ${archived ? `<p class="project-card-status-copy">Archived ${escapeHtml(formatDate(bundle.archivedAt || new Date().toISOString()))}</p>` : ""}
       ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
+      ${renderProjectCardBindingSummary(bundle)}
       ${renderProjectCardLifecycle(bundle)}
       <div class="project-card-stat-row" aria-label="Project overview stats">
         <article>
@@ -1547,8 +1657,7 @@ function renderActivityTrendChart(days, config = getActivityRangeConfig()) {
 }
 
 function renderStartingWordCountIndicator(bundle) {
-  const stats = bundle ? getStats(bundle) : null;
-  const startingWordCount = stats?.baselineEstablished ? nullableNumber(stats.startingWordCount) : null;
+  const startingWordCount = nullableNumber(bundle?.project?.startingWordCount);
   if (startingWordCount === null || startingWordCount <= 0) return "";
   return `
     <article class="activity-timeline-item activity-timeline-baseline">

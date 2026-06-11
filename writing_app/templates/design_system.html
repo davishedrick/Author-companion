@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scriptor Design System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+  <style>
+    .design-system-shell {
+      min-height: 100vh;
+      padding: clamp(20px, 4vw, 48px);
+      background: linear-gradient(180deg, var(--neutral-50), var(--neutral-100));
+    }
+
+    .design-system-page {
+      display: grid;
+      gap: 24px;
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+
+    .design-system-hero {
+      display: grid;
+      gap: 10px;
+      padding: clamp(24px, 4vw, 42px);
+      border-radius: var(--radius);
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.58);
+      box-shadow: var(--shadow);
+    }
+
+    .design-system-hero h1,
+    .design-system-hero p,
+    .design-system-section h2,
+    .design-system-section p {
+      margin: 0;
+    }
+
+    .design-system-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .design-system-section {
+      display: grid;
+      gap: 16px;
+    }
+
+    .design-system-swatch-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .design-system-swatch {
+      min-height: 104px;
+      display: grid;
+      align-content: end;
+      gap: 4px;
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--swatch);
+      color: var(--swatch-ink, var(--ink));
+    }
+
+    .design-system-swatch strong,
+    .design-system-swatch span {
+      display: block;
+    }
+
+    .design-system-component-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .design-system-equal-action-row .inline-btn {
+      min-width: 104px;
+      text-align: center;
+    }
+
+    .design-system-modal-sample {
+      position: relative;
+      display: grid;
+      background: transparent;
+      border-radius: 0;
+      padding: 0;
+    }
+
+    .design-system-modal-sample .modal-card {
+      position: static;
+      transform: none;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 18px;
+      border-radius: 12px;
+      border-color: var(--line);
+      background: var(--neutral-0);
+      box-shadow: none;
+    }
+
+    .design-system-timer-sample {
+      position: static;
+      transform: none;
+      display: grid;
+      opacity: 1;
+      pointer-events: auto;
+      max-width: 360px;
+    }
+
+    .design-system-variants {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .design-system-variant {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      min-height: 100%;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .design-system-variant > h3,
+    .design-system-variant > p {
+      margin: 0;
+    }
+
+    .design-system-variant > p {
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .design-system-preview {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .design-system-split {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .design-system-compact-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .design-system-nav-shell {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .design-system-form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .design-system-modal-sample .section-head {
+      align-items: start;
+      gap: 12px;
+    }
+
+    .design-system-dialog-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .design-system-dialog-actions > .primary-btn,
+    .design-system-dialog-actions > .ghost-btn {
+      width: 100%;
+    }
+
+    .design-system-dialog-metrics {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .design-system-dialog-metrics .metric {
+      padding: 12px;
+      border-radius: 10px;
+    }
+
+    .design-system-dialog-metrics .metric .value {
+      font-size: 1.45rem;
+    }
+
+    .design-system-full-surface {
+      width: 100%;
+    }
+
+    .design-system-stat-panel {
+      display: grid;
+      gap: 6px;
+      width: 100%;
+      min-height: 132px;
+      align-content: center;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .design-system-stat-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .design-system-stat-value {
+      margin: 0;
+      color: var(--ink);
+      font-size: clamp(2rem, 3.5vw, 2.8rem);
+      font-weight: 800;
+      line-height: 0.95;
+    }
+
+    .design-system-stat-help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.35;
+    }
+
+    .design-system-metrics-fill {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      width: 100%;
+      margin-top: 0;
+      gap: 10px;
+    }
+
+    .design-system-metrics-fill .metric {
+      min-height: 96px;
+      display: grid;
+      align-content: center;
+      gap: 3px;
+      padding: 14px 16px;
+      border-radius: 12px;
+    }
+
+    .design-system-metrics-fill .metric .label,
+    .design-system-metrics-fill .metric .hint {
+      margin: 0;
+      font-size: 0.82rem;
+    }
+
+    .design-system-metrics-fill .metric .value {
+      font-size: 1.75rem;
+    }
+
+    .design-system-alert-panel {
+      display: grid;
+      gap: 6px;
+      width: 100%;
+      min-height: 160px;
+      align-content: center;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--warning);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .design-system-alert-panel strong,
+    .design-system-alert-panel p {
+      margin: 0;
+    }
+
+    .design-system-alert-panel strong {
+      color: var(--ink);
+      font-size: 1rem;
+    }
+
+    .design-system-alert-panel p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.4;
+    }
+
+    .design-system-field-pair {
+      align-items: end;
+    }
+
+    .design-system-field-label {
+      display: block;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .design-system-select-control {
+      position: relative;
+    }
+
+    .design-system-select-control select {
+      min-height: 48px;
+    }
+
+    .design-system-help-stack {
+      display: grid;
+      gap: 6px;
+    }
+
+    .design-system-help-line {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .design-system-help-line strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .design-system-meta-table {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+    }
+
+    .design-system-meta-item {
+      display: grid;
+      gap: 4px;
+      padding-block: 2px;
+      border-top: 1px solid var(--line);
+    }
+
+    .design-system-meta-item span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+    }
+
+    .design-system-meta-item strong {
+      color: var(--ink);
+      font-size: 1rem;
+    }
+
+  </style>
+</head>
+<body>
+  <main class="design-system-shell">
+    <div class="design-system-page">
+      <section class="design-system-hero">
+        <p class="pill">Developer reference</p>
+        <h1 class="hero-title">Scriptor Design System</h1>
+        <p class="muted">A hidden showroom for the current Scriptor interface language. This page uses production classes and should be updated whenever a reusable UI pattern changes.</p>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Typography</h2>
+            <p>Use compact hierarchy, clear labels, and restrained emphasis.</p>
+          </div>
+        </div>
+        <h1 class="hero-title">Current manuscript</h1>
+        <h2>Writing tracker</h2>
+        <p class="small-copy">Metadata and helper text stay quiet and direct.</p>
+        <p class="muted">Muted text explains state without becoming instruction-heavy.</p>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Color Palette</h2>
+            <p>Use tokens first; hard-coded workspace colors should be documented before reuse.</p>
+          </div>
+        </div>
+        <div class="design-system-swatch-grid">
+          <div class="design-system-swatch" style="--swatch: var(--brand-primary); --swatch-ink: #fffaf5;"><strong>Brand primary</strong><span>#c66f4d</span></div>
+          <div class="design-system-swatch" style="--swatch: var(--brand-secondary); --swatch-ink: #fffaf5;"><strong>Brand secondary</strong><span>#44312b</span></div>
+          <div class="design-system-swatch" style="--swatch: var(--brand-tertiary); --swatch-ink: #fffaf5;"><strong>Brand tertiary</strong><span>#8a7a6e</span></div>
+          <div class="design-system-swatch" style="--swatch: var(--neutral-50);"><strong>Neutral 50</strong><span>#fff9f3</span></div>
+          <div class="design-system-swatch" style="--swatch: var(--neutral-900); --swatch-ink: #fffaf5;"><strong>Neutral 900</strong><span>#211711</span></div>
+          <div class="design-system-swatch" style="--swatch: var(--success); --swatch-ink: #fffaf5;"><strong>Success</strong><span>#2f7d4a</span></div>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Buttons</h2>
+            <p>Choose button weight by decision importance, not visual variety.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Primary plus secondary</h3>
+            <p class="small-copy">Choose this when one action commits the current flow and the other is a safe alternative. It creates a clear path forward without hiding the escape hatch.</p>
+            <div class="design-system-component-row">
+              <button class="primary-btn" type="button">Start writing</button>
+              <button class="ghost-btn" type="button">Start editing</button>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Compact row actions</h3>
+            <p class="small-copy">Choose this inside history rows, issue rows, and project lists where the surrounding item already supplies context. It keeps repeated actions scannable and low-noise.</p>
+            <div class="design-system-component-row design-system-equal-action-row">
+              <button class="inline-btn" type="button">View all</button>
+              <button class="inline-btn" type="button">Resolve</button>
+              <button class="inline-btn" type="button">Export</button>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Route and mode chips</h3>
+            <p class="small-copy">Choose this for switching sections or modes rather than submitting data. It makes navigation feel tactile while staying smaller than a full command button.</p>
+            <div class="design-system-component-row">
+              <button class="route-chip" type="button"><span class="route-chip-icon">W</span>Write</button>
+              <button class="route-chip" type="button"><span class="route-chip-icon">E</span>Edit</button>
+              <button class="route-chip" type="button"><span class="route-chip-icon">S</span>Story</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Cards</h2>
+            <p>Cards organize work units; choose the quietest frame that still helps scanning.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Single stat card</h3>
+            <p class="small-copy">Choose this when one manuscript fact should lead a compact summary. Keep the label short, make the value clear, and use one quiet verification line.</p>
+            <div class="design-system-stat-panel">
+              <p class="design-system-stat-label">Current words</p>
+              <p class="design-system-stat-value">60,240</p>
+              <p class="design-system-stat-help">Verified from Google Docs.</p>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Metric pair or set</h3>
+            <p class="small-copy">Choose this when related numbers need equal comparison, like words and focus time. Let the metric set fill its container so the cards read as the component, not tiny samples.</p>
+            <div class="metrics design-system-metrics-fill">
+              <article class="metric">
+                <p class="label">Today</p>
+                <p class="value">812</p>
+                <p class="hint">Net words</p>
+              </article>
+              <article class="metric">
+                <p class="label">Time</p>
+                <p class="value">45m</p>
+                <p class="hint">Tracked focus</p>
+              </article>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Inline alert panel</h3>
+            <p class="small-copy">Choose this for a page-level warning inside the current workflow. It is not a toast, dialog, or notification; it stays in context when work can continue but the user should resolve the issue before syncing.</p>
+            <div class="design-system-alert-panel">
+              <strong>Binding needs review</strong>
+              <p>Document identity changed before sync. Review the binding before logging this session.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Status</h2>
+            <p>Status language should usually be text-first; reserve pills for dense repeated lists where compact scanning matters.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Context help text</h3>
+            <p class="small-copy">Choose this instead of pills when metadata supports a heading or form field. It removes visual clutter and lets the primary object stay dominant.</p>
+            <div class="design-system-help-stack">
+              <p class="design-system-help-line"><strong>Hollowfield v7</strong> is the active manuscript.</p>
+              <p class="design-system-help-line">Current project context updates sessions, goals, and manuscript progress.</p>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Context label/value text</h3>
+            <p class="small-copy">Choose this when several metadata values need equal weight. It gives structure without the boxed feeling of chips.</p>
+            <div class="design-system-meta-table">
+              <div class="design-system-meta-item"><span>Manuscript</span><strong>Hollowfield</strong></div>
+              <div class="design-system-meta-item"><span>Version</span><strong>7</strong></div>
+              <div class="design-system-meta-item"><span>State</span><strong>Active</strong></div>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Priority pills</h3>
+            <p class="small-copy">Choose pills only for priority components where severity changes triage order. The color and compact shape help high, medium, and low scan quickly in repeated issue lists.</p>
+            <div class="design-system-component-row">
+              <span class="pill issue-priority priority-high">High</span>
+              <span class="pill issue-priority priority-medium">Medium</span>
+              <span class="pill issue-priority priority-low">Low</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Forms</h2>
+            <p>Forms should pair visible labels, compact grouping, and clear final actions.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Paired short fields</h3>
+            <p class="small-copy">Choose this for project metadata that users can review side by side. It reduces vertical churn while preserving explicit labels.</p>
+            <form class="form-grid design-system-field-pair">
+              <label><span class="design-system-field-label">Project title</span>
+                <input type="text" value="Hollowfield v7" />
+              </label>
+              <label><span class="design-system-field-label">Manuscript type</span>
+                <span class="design-system-select-control">
+                  <select>
+                    <option>Novel</option>
+                    <option>Memoir</option>
+                  </select>
+                </span>
+              </label>
+            </form>
+          </article>
+          <article class="design-system-variant">
+            <h3>Full-width narrative field</h3>
+            <p class="small-copy">Choose this when the answer is prose, notes, or context. It gives the writer room to think without cramming text into a metric-style field.</p>
+            <form class="form-grid">
+              <label class="full">Session note
+                <textarea>Checked Chapter 8 continuity and revised the ending beat.</textarea>
+              </label>
+            </form>
+          </article>
+          <article class="design-system-variant">
+            <h3>Goal inputs with final action</h3>
+            <p class="small-copy">Choose this when structured values culminate in one save decision. The right-aligned action row makes review-before-commit feel deliberate.</p>
+            <form class="form-grid">
+              <label>Target words
+                <input type="number" value="90000" />
+              </label>
+              <label>Due date
+                <input type="date" value="2026-07-01" />
+              </label>
+              <div class="full design-system-form-actions">
+                <button class="ghost-btn" type="button">Cancel</button>
+                <button class="primary-btn" type="button">Save target</button>
+              </div>
+            </form>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Progress</h2>
+            <p>Use progress rails only for one measurable target with a known percent. Counts, checkpoints, and categorical states need separate list, stepper, or heatmap patterns.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Simple completion rail</h3>
+            <p class="small-copy">Choose this for a single measurable target, such as manuscript completion or a monthly word goal. The label names the target, the percentage states the value, and the rail visualizes the same value once.</p>
+            <div class="progress-block">
+              <div class="progress-label-row">
+                <strong>Manuscript target</strong>
+                <span>67%</span>
+              </div>
+              <div class="progress-rail"><div class="progress-fill" style="width: 67%;"></div></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Navigation</h2>
+            <p>Navigation should make location, mode, and project context legible.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Sidebar route list</h3>
+            <p class="small-copy">Choose this only where the existing workspace shell still uses the sidebar pattern. It gives persistent location cues for dense app areas.</p>
+            <nav class="nav" aria-label="Design system sidebar sample">
+              <button class="active" type="button"><span class="nav-icon">W</span><span class="nav-label">Write</span></button>
+              <button type="button"><span class="nav-icon">S</span><span class="nav-label">Story</span></button>
+              <button type="button"><span class="nav-icon">E</span><span class="nav-label">Edit</span></button>
+            </nav>
+          </article>
+          <article class="design-system-variant">
+            <h3>Header route chips</h3>
+            <p class="small-copy">Choose this for the current compact global navigation. It keeps primary destinations accessible without consuming the full left rail.</p>
+            <div class="design-system-nav-shell" aria-label="Design system route chips">
+              <button class="route-chip" type="button"><span class="route-chip-icon">D</span>Dashboard</button>
+              <button class="route-chip" type="button"><span class="route-chip-icon">G</span>Goals</button>
+              <button class="route-chip" type="button"><span class="route-chip-icon">A</span>Activity</button>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Project context selector</h3>
+            <p class="small-copy">Choose this when navigation depends on the active project. It prevents workspace actions from feeling detached from the manuscript they affect.</p>
+            <div class="project-selector-shell">
+              <button class="project-selector-btn" type="button">
+                <span>Hollowfield v7</span>
+                <span class="pill">Active</span>
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Modals</h2>
+            <p>Dialogs block the flow only when the next choice changes data, recovery, or tracking state.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Compact confirmation dialog</h3>
+            <p class="small-copy">Choose this over a wide dialog when the user is confirming one known consequence. It keeps the interruption brief and keeps the decision focused.</p>
+            <div class="design-system-modal-sample is-compact">
+              <div class="modal-card">
+                <div class="section-head">
+                  <div>
+                    <h3>Clear binding?</h3>
+                    <p>This document is missing. History stays saved.</p>
+                  </div>
+                </div>
+                <div class="design-system-dialog-actions">
+                  <button class="ghost-btn" type="button">Cancel</button>
+                  <button class="primary-btn" type="button">Clear</button>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Recovery decision dialog</h3>
+            <p class="small-copy">Choose this when the system detected state that may be recoverable but needs user consent. It explains the finding, shows confidence context, and offers a safe decline.</p>
+            <div class="design-system-modal-sample">
+              <div class="modal-card">
+                <div class="section-head">
+                  <div>
+                    <h3>Recover session?</h3>
+                    <p>Scriptor found an unfinished writing session for this document.</p>
+                  </div>
+                </div>
+                <p class="design-system-help-line"><strong>Duration:</strong> 1 min pending recovery.</p>
+                <div class="progress-block">
+                  <div class="progress-label-row">
+                    <strong>Detected change</strong>
+                    <span>Pending verification</span>
+                  </div>
+                  <div class="progress-rail"><div class="progress-fill" style="width: 35%;"></div></div>
+                </div>
+                <div class="design-system-dialog-actions">
+                  <button class="ghost-btn" type="button">Discard</button>
+                  <button class="primary-btn" type="button">Recover</button>
+                </div>
+              </div>
+            </div>
+          </article>
+          <article class="design-system-variant">
+            <h3>Structured comparison dialog</h3>
+            <p class="small-copy">Choose this over the compact dialog when the choice depends on comparing values. It makes the reason for the action visible before asking the user to log or skip.</p>
+            <div class="design-system-modal-sample is-wide">
+              <div class="modal-card">
+                <div class="section-head">
+                  <div>
+                    <h3>Start catch-up?</h3>
+                    <p>Changes were detected outside a tracked session.</p>
+                  </div>
+                </div>
+                <div class="metrics design-system-dialog-metrics">
+                  <article class="metric">
+                    <p class="label">Previous</p>
+                    <p class="value">60,240</p>
+                  </article>
+                  <article class="metric">
+                    <p class="label">Current</p>
+                    <p class="value">60,812</p>
+                  </article>
+                </div>
+                <div class="design-system-dialog-actions">
+                  <button class="ghost-btn" type="button">Skip</button>
+                  <button class="primary-btn" type="button">Log catch-up</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="card design-system-section">
+        <div class="section-head">
+          <div>
+            <h2>Workspace Components</h2>
+            <p>Workspace components combine state, session context, and project-specific content.</p>
+          </div>
+        </div>
+        <div class="design-system-variants">
+          <article class="design-system-variant">
+            <h3>Story entry card</h3>
+            <p class="small-copy">Choose this for reusable manuscript knowledge like characters, places, or plot elements. It keeps reference material distinct from active task work.</p>
+            <article class="plot-entry-card">
+              <div class="item-top">
+                <div>
+                  <p class="small-copy">Character</p>
+                  <h4>Protagonist</h4>
+                </div>
+              </div>
+              <p class="small-copy">A saved story element with structured fields.</p>
+            </article>
+          </article>
+          <article class="design-system-variant">
+            <h3>Editing issue item</h3>
+            <p class="small-copy">Choose this for actionable revision work with category, priority, and lifecycle state. It helps users triage without opening every issue.</p>
+            <article class="item">
+              <div class="item-top">
+                <div>
+                  <p class="session-kind">Open issue</p>
+                  <h4 class="issue-title">Clarify the scene objective</h4>
+                </div>
+              </div>
+              <div class="meta-line">
+                <span class="pill">Continuity</span>
+                <span class="pill issue-priority priority-high">High</span>
+                <span class="pill status-open">Open</span>
+              </div>
+              <p class="small-copy">Editing items stay tied to the project and pass.</p>
+            </article>
+          </article>
+          <article class="design-system-variant">
+            <h3>Activity plus floating timer</h3>
+            <p class="small-copy">Choose this pairing when current focus state must remain visible beside historical activity. It connects what just happened with what is still running.</p>
+            <div class="design-system-compact-list">
+              <article class="activity-timeline-item">
+                <span class="activity-timeline-dot">W</span>
+                <div>
+                  <time>Today</time>
+                  <strong>Wrote for 45 minutes</strong>
+                  <p>+812 words - 45m</p>
+                </div>
+              </article>
+              <div class="floating-focus-timer design-system-timer-sample">
+                <p class="floating-focus-copyline">Writing session running</p>
+                <div class="floating-focus-copy">
+                  <strong>24:16</strong>
+                  <span>Stay in motion while you check the rest of the project.</span>
+                </div>
+                <div class="floating-focus-actions">
+                  <button class="primary-btn" type="button">Expand</button>
+                  <button class="ghost-btn" type="button">End session</button>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="empty-state">
+        <div class="empty-panel">
+          <p class="small-copy">Empty state</p>
+          <h2 class="hero-title">Create a project to track your progress</h2>
+          <p class="muted">Empty states explain the next concrete action without hype.</p>
+          <div class="meta-line" style="margin-top: 22px;">
+            <button class="primary-btn writing-launch-cta" type="button">Create first project</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

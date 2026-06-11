@@ -157,6 +157,12 @@ def home():
     return render_template("index.html")
 
 
+@app.route("/design-system")
+@login_required
+def design_system():
+    return render_template("design_system.html")
+
+
 def mail_is_configured():
     if isinstance(app.config.get("MAIL_OUTBOX"), list):
         return True
@@ -446,6 +452,7 @@ def put_extension_document_binding():
             payload.get("manuscriptSurfaceId", ""),
             payload.get("tabId", ""),
             payload.get("tabTitle", ""),
+            payload.get("documentTitle", ""),
             payload.get("documentUrl", ""),
             payload.get("verifiedWordCount", payload.get("baselineWordCount")),
             payload.get("verifiedWordCountSource", "google-docs-binding"),
@@ -501,6 +508,7 @@ def patch_extension_document_binding_status():
             payload.get("staleReason", ""),
             payload.get("tabId", ""),
             payload.get("tabTitle", ""),
+            payload.get("documentTitle", ""),
         )
     except ExtensionBridgeError as exc:
         return jsonify({"error": str(exc)}), exc.status_code

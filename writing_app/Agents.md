@@ -21,3 +21,22 @@ Rules:
 - Keep functions short and readable.
 - Follow standard Python naming and import conventions.
 - If `templates/index.html` or `static/` changes, run `../sync-pages.sh` from the Scriptor app directory or `./sync-pages.sh` from the repo root so `docs/` stays current.
+## Bug documentation rule
+
+If a task involves a bug, regression, broken behavior, unexpected behavior, data corruption, state mismatch, UI failure, or user-reported issue:
+
+1. Check BUGS.md for related prior bugs before editing code.
+2. If this is a new bug class, add a new BUGS.md entry.
+3. If this is related to an existing bug, update the existing BUGS.md entry instead of creating a duplicate.
+4. Include:
+   - symptom
+   - reproduction steps
+   - expected behavior
+   - actual behavior
+   - root cause, if identified
+   - files changed
+   - regression test added or reason no test was added
+   - verification commands run
+   - status
+5. Update QA_CHECKLIST.md if the bug affects a manual user flow.
+6. Do not mark the task complete until BUGS.md has been updated or you explicitly state why no BUGS.md update was needed.

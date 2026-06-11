@@ -257,6 +257,7 @@ def _binding_record(
     manuscript_surface_id: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_title: str = "",
     document_url: str = "",
 ) -> dict[str, Any]:
     document_id = _clean_text(document_id)
@@ -269,6 +270,7 @@ def _binding_record(
     now = datetime.now(timezone.utc).isoformat()
     return {
         "documentId": document_id,
+        "documentTitle": _clean_text(document_title),
         "tabId": tab_id,
         "tabTitle": _clean_text(tab_title),
         "manuscriptSurfaceId": manuscript_surface_id,
@@ -342,10 +344,14 @@ def _deleted_binding_record(
     manuscript_surface_id: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_title: str = "",
 ) -> dict[str, Any]:
     binding_dict = binding if isinstance(binding, dict) else {}
     resolved_document_id = _clean_text(binding_dict.get("documentId")) or _clean_text(
         document_id
+    )
+    resolved_document_title = _clean_text(binding_dict.get("documentTitle")) or _clean_text(
+        document_title
     )
     resolved_tab_title = _clean_text(binding_dict.get("tabTitle")) or _clean_text(
         tab_title
@@ -356,6 +362,7 @@ def _deleted_binding_record(
     return {
         "projectId": _binding_project_id(binding),
         "documentId": resolved_document_id,
+        "documentTitle": resolved_document_title,
         "tabId": _clean_text(binding_dict.get("tabId")) or _clean_text(tab_id),
         "tabTitle": resolved_tab_title,
         "title": resolved_tab_title,
@@ -778,6 +785,7 @@ def save_document_binding(
     manuscript_surface_id: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_title: str = "",
     document_url: str = "",
     verified_word_count: Any = None,
     verified_word_count_source: str = "google-docs-binding",
@@ -809,6 +817,7 @@ def save_document_binding(
             document_id=document_id,
             tab_id=tab_id,
             tab_title=tab_title,
+            document_title=document_title,
             manuscript_surface_id=manuscript_surface_id,
             project_id=project_id,
             document_url=document_url,
@@ -868,6 +877,7 @@ def update_document_binding_status(
     stale_reason: str = "",
     tab_id: str = "",
     tab_title: str = "",
+    document_title: str = "",
 ) -> dict[str, Any] | None:
     document_id = _clean_text(document_id)
     manuscript_surface_id = _clean_text(manuscript_surface_id)
@@ -894,6 +904,7 @@ def update_document_binding_status(
                 document_id=document_id,
                 tab_id=tab_id,
                 tab_title=tab_title,
+                document_title=document_title,
                 manuscript_surface_id=manuscript_surface_id,
                 project_id=project_id,
             )
@@ -901,6 +912,8 @@ def update_document_binding_status(
         binding.update(
             {
                 "documentId": _clean_text(binding.get("documentId")) or document_id,
+                "documentTitle": _clean_text(binding.get("documentTitle"))
+                or _clean_text(document_title),
                 "tabId": _clean_text(binding.get("tabId")) or _clean_text(tab_id),
                 "tabTitle": _clean_text(binding.get("tabTitle"))
                 or _clean_text(tab_title),
@@ -927,6 +940,7 @@ def update_document_binding_status(
                 manuscript_surface_id=manuscript_surface_id,
                 tab_id=tab_id,
                 tab_title=tab_title,
+                document_title=document_title,
             )
             bindings.pop(key, None)
         return binding
@@ -1026,6 +1040,12 @@ def _project_for_extension_issue(
         raise DocumentBindingConflictError("Project is already bound.")
 
     project = _require_project(state, resolved_project_id)
+    existing_binding = bindings.get(binding_key)
+    existing_document_title = (
+        _clean_text(existing_binding.get("documentTitle"))
+        if isinstance(existing_binding, dict)
+        else ""
+    )
     if manuscript_surface_id:
         bindings[binding_key] = _binding_record(
             document_id=document_id,
@@ -1033,6 +1053,7 @@ def _project_for_extension_issue(
             manuscript_surface_id=manuscript_surface_id,
             tab_id=tab_id,
             tab_title=tab_title,
+            document_title=existing_document_title,
         )
     else:
         bindings[binding_key] = resolved_project_id
@@ -1371,10 +1392,17 @@ def append_extension_session(
         return existing_session, _project_summary(project), True
 
     if manuscript_surface_id:
+        existing_binding = bindings.get(binding_key)
+        existing_document_title = (
+            _clean_text(existing_binding.get("documentTitle"))
+            if isinstance(existing_binding, dict)
+            else ""
+        )
         bindings[binding_key] = _binding_record(
             document_id=document_id,
             tab_id=tab_id,
             tab_title=tab_title,
+            document_title=existing_document_title,
             manuscript_surface_id=manuscript_surface_id,
             project_id=project_id,
         )

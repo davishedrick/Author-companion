@@ -302,6 +302,11 @@ def test_static_assets_load():
     assert ".stack > * {" in get_css_asset("layout.css")
     assert ".hero > * {" in get_css_asset("layout.css")
     assert "width: 100%;" in get_css_asset("layout.css")
+    assert "background-color: var(--field-surface);" in get_css_asset("layout.css")
+    assert "background-color: var(--neutral-0);" in get_css_asset("layout.css")
+    assert "padding-right: 40px;" in get_css_asset("layout.css")
+    assert "background-position: right 14px center;" in get_css_asset("layout.css")
+    assert "background-size: 16px 16px;" in get_css_asset("layout.css")
     assert ".resume-card {" in get_css_asset("dashboard.css")
     assert ".manuscript-complete-hero {" in get_css_asset("dashboard.css")
     assert ".published-hero {" in get_css_asset("dashboard.css")
@@ -344,10 +349,26 @@ def test_starting_word_count_labels_only_render_for_nonzero_baselines():
 
     assert "function renderStartingWordCountIndicator(bundle)" in app_js
     assert "startingWordCount === null || startingWordCount <= 0" in app_js
+    assert "nullableNumber(bundle?.project?.startingWordCount)" in app_js
+    assert "stats?.baselineEstablished ? nullableNumber(stats.startingWordCount)" not in app_js
     assert "activity-timeline-baseline" in app_js
-    assert "stats.baselineEstablished && stats.startingWordCount > 0" in dashboard_js
+    assert "stats.startingWordCount > 0" in dashboard_js
+    assert "stats.baselineEstablished && stats.startingWordCount > 0" not in dashboard_js
     assert "tracker-baseline-stat" in dashboard_js
     assert "repeat(auto-fit, minmax(180px, 1fr))" in dashboard_css
+
+
+def test_open_app_refreshes_remote_state_after_extension_updates():
+    app_js = get_app_js()
+
+    assert "function refreshRemoteStateFromServer(reason = \"manual\")" in app_js
+    assert "window.addEventListener(\"focus\"" in app_js
+    assert "window.addEventListener(\"pageshow\"" in app_js
+    assert "document.addEventListener(\"visibilitychange\"" in app_js
+    assert "await remoteSyncPromise;" in app_js
+    assert "activeView: activeViewBeforeRefresh" in app_js
+    assert "lastWorkspaceView: lastWorkspaceViewBeforeRefresh" in app_js
+    assert "render();" in app_js
     assert "function renderEditDashboard(bundle)" in get_js_asset("edit.js")
     assert "function getEditProjectStats(bundle)" in get_js_asset("state.js")
     assert "Word count" in get_js_asset("edit2.js")
@@ -365,6 +386,78 @@ def test_starting_word_count_labels_only_render_for_nonzero_baselines():
     assert "Structural" not in get_js_asset("edit.js")
     assert 'option value="Structural"' not in get_html()
     assert "function renderProjects()" in get_js_asset("app.js")
+
+
+def test_design_system_docs_exist_and_cover_required_contracts():
+    required_docs = {
+        "DESIGN_SYSTEM.md": [
+            "Design Philosophy",
+            "Color System",
+            "Component Taxonomy",
+            "Inconsistencies Discovered During Audit",
+        ],
+        "BRAND_GUIDE.md": ["Product Personality", "Voice", "Copy Rules"],
+        "COMPONENT_LIBRARY.md": ["Buttons", "Modals", "Editing Components"],
+        "UX_PRINCIPLES.md": ["Navigation Principles", "Accessibility Principles"],
+        "CONTRIBUTION_RULES.md": ["Before Creating a Component", "Before Creating CSS"],
+        "DESIGN_SYSTEM_PAGE.md": ["Route: `/design-system`", "Future Additions"],
+    }
+
+    for filename, expected_strings in required_docs.items():
+        contents = (APP_DIR / filename).read_text(encoding="utf-8")
+        for expected in expected_strings:
+            assert expected in contents
+
+
+def test_design_system_route_is_hidden_and_uses_production_classes(tmp_path):
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+
+    signed_out = client.get("/design-system")
+    assert signed_out.status_code == 302
+    assert signed_out.headers["Location"].endswith("/login")
+
+    register_and_login(client)
+    response = client.get("/design-system")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Scriptor Design System" in html
+    assert "static/css/app.css" in html
+    assert "primary-btn" in html
+    assert "ghost-btn" in html
+    assert "modal-card" in html
+    assert "progress-rail" in html
+    assert "plot-entry-card" in html
+    assert "floating-focus-timer" in html
+    assert "Iteration" not in html
+    assert "Primary plus secondary" in html
+    assert "design-system-equal-action-row" in html
+    assert "<span class=\"route-chip-icon\">S</span>Story" in html
+    assert "Structured comparison dialog" in html
+    assert "Choose this over a wide dialog" in html
+    assert "design-system-dialog-actions" in html
+    assert "design-system-dialog-metrics" in html
+    assert "Duration:</strong> 1 min pending recovery." in html
+    assert "Choose this when one action commits the current flow" in html
+    assert "design-system-field-pair" in html
+    assert "design-system-select-control" in html
+    assert "Manuscript type" in html
+    assert "Inline alert panel" in html
+    assert "It is not a toast, dialog, or notification" in html
+    assert "Verified from Google Docs." in html
+    assert "design-system-metrics-fill" in html
+    assert "Simple completion rail" in html
+    assert "Checkpoint rail with legend" not in html
+    assert "Manuscript milestone meter" not in html
+    assert "Context pills and badges" not in html
+    assert "Context help text" in html
+    assert "Context label/value text" in html
+    assert "Workflow sentence" not in html
+    assert "Priority row emphasis" not in html
+    assert "Priority pills" in html
+    assert "priority-high" in html
+    assert "/design-system" not in get_html()
 
 
 def test_edit_dashboard_uses_the_same_start_timer_pattern_as_writing_sessions():
@@ -587,6 +680,18 @@ def test_projects_can_publish_into_a_locked_final_stats_mode():
     assert ".published-celebration-screen {" in layout_css
     assert ".project-card-status {" in dashboard_css
     assert ".published-summary-grid {" in dashboard_css
+
+
+def test_project_dashboard_renders_document_binding_summary():
+    app_js = get_app_js()
+    dashboard_css = get_css_asset("dashboard.css")
+
+    assert "function renderProjectCardBindingSummary(bundle)" in app_js
+    assert "Bound document:" in app_js
+    assert "Bound tab:" in app_js
+    assert "Bound document unavailable:" in app_js
+    assert "No document bound" in app_js
+    assert ".project-card-binding" in dashboard_css
 
 
 def test_settings_modal_replaces_separate_import_export_controls():
@@ -1619,6 +1724,7 @@ def test_extension_issue_binding_preserves_surface_metadata(tmp_path):
             "documentId": "google-doc-a",
             "tabId": "tab-a",
             "tabTitle": "Draft V1",
+            "documentTitle": "Hollowfield v7",
             "manuscriptSurfaceId": "google-doc-a:tab-a",
             "projectId": "project-a",
         },
@@ -1640,6 +1746,10 @@ def test_extension_issue_binding_preserves_surface_metadata(tmp_path):
         == "project-a"
     )
     assert state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabId"] == "tab-a"
+    assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["documentTitle"]
+        == "Hollowfield v7"
+    )
     assert (
         state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"]
         == "Draft V1"
@@ -2341,6 +2451,7 @@ def test_extension_surface_binding_stores_metadata_and_lists_bound_projects(tmp_
             "documentId": "google-doc-a",
             "tabId": "tab-a",
             "tabTitle": "Draft V1",
+            "documentTitle": "Hollowfield v7",
             "manuscriptSurfaceId": "google-doc-a:tab-a",
             "projectId": "project-a",
         },
@@ -2354,16 +2465,17 @@ def test_extension_surface_binding_stores_metadata_and_lists_bound_projects(tmp_
         == "project-a"
     )
     assert (
+        state["extensionDocumentBindings"]["google-doc-a:tab-a"]["documentTitle"]
+        == "Hollowfield v7"
+    )
+    assert (
         state["extensionDocumentBindings"]["google-doc-a:tab-a"]["tabTitle"]
         == "Draft V1"
     )
     project_rows = picker_response.get_json()["projects"]
-    assert (
-        next(row for row in project_rows if row["project"]["id"] == "project-a")[
-            "isBound"
-        ]
-        is True
-    )
+    project_a = next(row for row in project_rows if row["project"]["id"] == "project-a")
+    assert project_a["isBound"] is True
+    assert project_a["binding"]["documentTitle"] == "Hollowfield v7"
     assert (
         next(row for row in project_rows if row["project"]["id"] == "project-b")[
             "isBound"
@@ -2413,6 +2525,7 @@ def test_extension_project_picker_lists_stale_binding_status(tmp_path):
             "documentId": "deleted-doc",
             "tabId": "tab-a",
             "tabTitle": "Draft V1",
+            "documentTitle": "Deleted Draft",
             "manuscriptSurfaceId": "deleted-doc:tab-a",
             "projectId": "project-a",
         },
@@ -2440,8 +2553,10 @@ def test_extension_project_picker_lists_stale_binding_status(tmp_path):
     assert project_a["bindingStatus"] == "stale_missing_doc"
     assert project_a["binding"] is None
     assert project_a["deletedBinding"]["documentId"] == "deleted-doc"
+    assert project_a["deletedBinding"]["documentTitle"] == "Deleted Draft"
     assert "deleted-doc:tab-a" not in state["extensionDocumentBindings"]
     assert state["extensionDeletedBindings"]["project-a"]["documentId"] == "deleted-doc"
+    assert state["extensionDeletedBindings"]["project-a"]["documentTitle"] == "Deleted Draft"
 
 
 def test_extension_backend_allows_binding_project_after_stale_binding_cleared(tmp_path):
