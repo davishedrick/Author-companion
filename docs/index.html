@@ -82,6 +82,20 @@
           </section>
           <section class="start-session-step" id="session-config-step" aria-label="Set session timer">
             <div class="session-setup">
+              <fieldset class="session-mode-control" aria-label="Session timing mode">
+                <label class="session-mode-option">
+                  <input type="radio" name="sessionRunMode" value="timer" checked />
+                  <span>Timer</span>
+                </label>
+                <label class="session-mode-option">
+                  <input type="radio" name="sessionRunMode" value="stopwatch" />
+                  <span>Stopwatch</span>
+                </label>
+              </fieldset>
+              <div class="session-stopwatch-panel hidden" id="session-stopwatch-panel">
+                <strong>00:00</strong>
+                <span>Count up until you end the session.</span>
+              </div>
               <div class="session-dial-wrap" id="writing-session-dial-wrap">
                 <svg class="session-dial" id="session-dial" viewBox="0 0 320 220" aria-label="Writing session duration dial">
                   <path class="session-dial-rail" id="session-dial-rail" pathLength="100" d="M40 180 A120 120 0 0 1 280 180"></path>

@@ -30,6 +30,7 @@ function getActiveFocusSession() {
   if (activeWritingSession) {
     activeSessions.push({
       type: "write",
+      mode: activeWritingSession.mode || "timer",
       plannedMinutes: number(activeWritingSession.plannedMinutes),
       endsAt: number(activeWritingSession.endsAt),
       startedAt: number(activeWritingSession.startedAt),
@@ -39,6 +40,7 @@ function getActiveFocusSession() {
   if (activeEditingSession) {
     activeSessions.push({
       type: "edit",
+      mode: activeEditingSession.mode || "timer",
       plannedMinutes: number(activeEditingSession.plannedMinutes),
       endsAt: number(activeEditingSession.endsAt),
       startedAt: number(activeEditingSession.startedAt),
@@ -124,12 +126,18 @@ function syncFloatingFocusTimer() {
     return;
   }
 
-  const remainingSeconds = Math.max(0, Math.round((session.endsAt - Date.now()) / 1000));
+  const isStopwatch = session.mode === "stopwatch";
+  const displaySeconds = isStopwatch
+    ? Math.max(0, Math.round((Date.now() - session.startedAt) / 1000))
+    : Math.max(0, Math.round((session.endsAt - Date.now()) / 1000));
   const wasHidden = widget.classList.contains("hidden");
   widget.dataset.sessionType = session.type;
+  widget.dataset.sessionMode = session.mode || "timer";
   label.textContent = session.type === "edit" ? "Editing session running" : "Writing session running";
-  meta.textContent = `${describeMinutes(session.plannedMinutes)} planned. Keep the timer nearby while you review the rest of the project.`;
-  clock.textContent = formatClock(remainingSeconds);
+  meta.textContent = isStopwatch
+    ? "Stopwatch running. Keep it nearby until you end the session."
+    : `${describeMinutes(session.plannedMinutes)} planned. Keep the timer nearby while you review the rest of the project.`;
+  clock.textContent = formatClock(displaySeconds);
   returnButton.textContent = "Expand";
   endButton.textContent = session.type === "edit" ? "End editing session" : "End writing session";
   widget.classList.remove("hidden");

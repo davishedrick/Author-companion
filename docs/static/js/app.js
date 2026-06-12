@@ -30,6 +30,7 @@ function getActiveFocusSession() {
   if (activeWritingSession) {
     activeSessions.push({
       type: "write",
+      mode: activeWritingSession.mode || "timer",
       plannedMinutes: number(activeWritingSession.plannedMinutes),
       endsAt: number(activeWritingSession.endsAt),
       startedAt: number(activeWritingSession.startedAt),
@@ -39,6 +40,7 @@ function getActiveFocusSession() {
   if (activeEditingSession) {
     activeSessions.push({
       type: "edit",
+      mode: activeEditingSession.mode || "timer",
       plannedMinutes: number(activeEditingSession.plannedMinutes),
       endsAt: number(activeEditingSession.endsAt),
       startedAt: number(activeEditingSession.startedAt),
@@ -124,12 +126,18 @@ function syncFloatingFocusTimer() {
     return;
   }
 
-  const remainingSeconds = Math.max(0, Math.round((session.endsAt - Date.now()) / 1000));
+  const isStopwatch = session.mode === "stopwatch";
+  const displaySeconds = isStopwatch
+    ? Math.max(0, Math.round((Date.now() - session.startedAt) / 1000))
+    : Math.max(0, Math.round((session.endsAt - Date.now()) / 1000));
   const wasHidden = widget.classList.contains("hidden");
   widget.dataset.sessionType = session.type;
+  widget.dataset.sessionMode = session.mode || "timer";
   label.textContent = session.type === "edit" ? "Editing session running" : "Writing session running";
-  meta.textContent = `${describeMinutes(session.plannedMinutes)} planned. Keep the timer nearby while you review the rest of the project.`;
-  clock.textContent = formatClock(remainingSeconds);
+  meta.textContent = isStopwatch
+    ? "Stopwatch running. Keep it nearby until you end the session."
+    : `${describeMinutes(session.plannedMinutes)} planned. Keep the timer nearby while you review the rest of the project.`;
+  clock.textContent = formatClock(displaySeconds);
   returnButton.textContent = "Expand";
   endButton.textContent = session.type === "edit" ? "End editing session" : "End writing session";
   widget.classList.remove("hidden");
@@ -1306,6 +1314,59 @@ function renderProjectCardLifecycle(bundle) {
   `;
 }
 
+
+function projectCardBindingEntry(bundle) {
+  const projectId = String(bundle?.id || bundle?.project?.id || "").trim();
+  if (!projectId) return null;
+  const bindings = state.extensionDocumentBindings && typeof state.extensionDocumentBindings === "object"
+    ? state.extensionDocumentBindings
+    : {};
+  const activeBinding = Object.values(bindings).find((binding) => {
+    if (binding && typeof binding === "object") return String(binding.projectId || "").trim() === projectId;
+    return String(binding || "").trim() === projectId;
+  });
+  if (activeBinding) return { status: "active", binding: activeBinding };
+  const deletedBindings = state.extensionDeletedBindings && typeof state.extensionDeletedBindings === "object"
+    ? state.extensionDeletedBindings
+    : {};
+  const deletedBinding = deletedBindings[projectId];
+  if (deletedBinding && typeof deletedBinding === "object") {
+    return { status: String(deletedBinding.status || "stale_missing_doc"), binding: deletedBinding };
+  }
+  return null;
+}
+
+function projectCardBindingDocumentTitle(binding) {
+  return String(binding?.documentTitle || binding?.documentName || "").trim();
+}
+
+function projectCardBindingTabTitle(binding) {
+  return String(binding?.tabTitle || binding?.manuscriptSurfaceLabel || "").trim();
+}
+
+function renderProjectCardBindingSummary(bundle) {
+  const entry = projectCardBindingEntry(bundle);
+  if (!entry) {
+    return `<div class="project-card-binding" aria-label="Document binding"><p>No document bound</p></div>`;
+  }
+  const documentTitle = projectCardBindingDocumentTitle(entry.binding) || "Unknown document";
+  const tabTitle = projectCardBindingTabTitle(entry.binding) || "Current manuscript";
+  if (entry.status !== "active") {
+    return `
+      <div class="project-card-binding project-card-binding--stale" aria-label="Document binding">
+        <p>Bound document unavailable: <strong>${escapeHtml(documentTitle)}</strong></p>
+        <p>Last tab: <strong>${escapeHtml(tabTitle)}</strong></p>
+      </div>
+    `;
+  }
+  return `
+    <div class="project-card-binding" aria-label="Document binding">
+      <p>Bound document: <strong>${escapeHtml(documentTitle)}</strong></p>
+      <p>Bound tab: <strong>${escapeHtml(tabTitle)}</strong></p>
+    </div>
+  `;
+}
+
 function renderProjectCard(bundle, options = {}) {
   const { archived = false } = options;
   const stats = getStats(bundle);
@@ -1342,6 +1403,7 @@ function renderProjectCard(bundle, options = {}) {
       <h3>${escapeHtml(bundle.project.bookTitle || "Untitled project")}</h3>
       ${archived ? `<p class="project-card-status-copy">Archived ${escapeHtml(formatDate(bundle.archivedAt || new Date().toISOString()))}</p>` : ""}
       ${published ? `<p class="project-card-status-copy">Published ${escapeHtml(formatDate(bundle.publication?.publishedAt || new Date().toISOString()))}</p>` : ""}
+      ${renderProjectCardBindingSummary(bundle)}
       ${renderProjectCardLifecycle(bundle)}
       <div class="project-card-stat-row" aria-label="Project overview stats">
         <article>

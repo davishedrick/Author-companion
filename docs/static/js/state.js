@@ -466,6 +466,7 @@ let editingIssueId = null;
 let heatmapMonthOffset = 0;
 let selectedHeatmapDayKey = null;
 let sessionDraftMinutes = 25;
+let sessionRunMode = "timer";
 let activeWritingSession = null;
 let writingSessionInFocusMode = true;
 let pendingCompletedSession = null;

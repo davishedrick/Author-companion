@@ -1344,6 +1344,7 @@ function bindHeatmapInteractions(bundle) {
 function openSessionModal() {
   const modal = document.getElementById("session-modal");
   startSessionFlowType = "writing";
+  sessionRunMode = "timer";
   syncStartSessionFlow("choice");
   modal.classList.remove("hidden");
 }
@@ -1351,6 +1352,7 @@ function openSessionModal() {
 function openWritingSessionStartModal() {
   const modal = document.getElementById("session-modal");
   startSessionFlowType = "writing";
+  sessionRunMode = "timer";
   syncStartSessionFlow("config");
   modal.classList.remove("hidden");
 }
@@ -1371,6 +1373,8 @@ function syncStartSessionFlow(step = "choice") {
   const startCountField = document.getElementById("session-start-word-count-field");
   const writingDialWrap = document.getElementById("writing-session-dial-wrap");
   const editingDialWrap = document.getElementById("editing-session-dial-wrap");
+  const stopwatchPanel = document.getElementById("session-stopwatch-panel");
+  const sessionModeInputs = document.querySelectorAll("input[name='sessionRunMode']");
   const backButton = document.getElementById("session-flow-back-btn");
   const sessionTypeGrid = document.querySelector("#session-choice-step .session-type-grid");
   const previousLink = document.getElementById("log-previous-session-link");
@@ -1383,6 +1387,7 @@ function syncStartSessionFlow(step = "choice") {
   const isConfigStep = step === "config";
   const isPreviousStep = step === "previous";
   const isWriting = startSessionFlowType !== "editing";
+  const isStopwatch = sessionRunMode === "stopwatch";
 
   if (flow) flow.dataset.step = isConfigStep ? "config" : isPreviousStep ? "previous" : "choice";
   if (choiceStep) choiceStep.setAttribute("aria-hidden", String(isConfigStep));
@@ -1404,16 +1409,24 @@ function syncStartSessionFlow(step = "choice") {
     copy.textContent = isConfigStep
       ? pendingSnapshot?.structureUnitName
         ? `Resume ${pendingSnapshot.structureUnitName}, let the timer run, then close with a short handoff.`
-        : isWriting
-          ? "Choose session length, add your current word count, then start."
-          : "Choose how long you want to edit, then begin."
+        : isStopwatch
+          ? isWriting
+            ? "Add your current word count, start the stopwatch, then end it when you stop writing."
+            : "Start the stopwatch, edit as long as you need, then end it when you stop."
+          : isWriting
+            ? "Choose session length, add your current word count, then start."
+            : "Choose how long you want to edit, then begin."
       : isPreviousStep
         ? "Choose the kind of session you already finished."
       : "Choose the kind of focus you need, then set a timer that fits.";
   }
 
-  if (writingDialWrap) writingDialWrap.classList.toggle("hidden", !isWriting);
-  if (editingDialWrap) editingDialWrap.classList.toggle("hidden", isWriting);
+  sessionModeInputs.forEach((input) => {
+    input.checked = input.value === sessionRunMode;
+  });
+  if (stopwatchPanel) stopwatchPanel.classList.toggle("hidden", !isStopwatch);
+  if (writingDialWrap) writingDialWrap.classList.toggle("hidden", !isWriting || isStopwatch);
+  if (editingDialWrap) editingDialWrap.classList.toggle("hidden", isWriting || isStopwatch);
   if (startCountField) startCountField.classList.toggle("hidden", !isWriting);
   if (startCountInput) {
     startCountInput.value = String(number(bundle?.project?.currentWordCount));
@@ -1421,6 +1434,11 @@ function syncStartSessionFlow(step = "choice") {
   }
   syncSessionDial(sessionDraftMinutes);
   if (typeof syncEditSessionDial === "function") syncEditSessionDial(editSessionDraftMinutes);
+}
+
+function setSessionRunMode(mode) {
+  sessionRunMode = mode === "stopwatch" ? "stopwatch" : "timer";
+  syncStartSessionFlow("config");
 }
 
 function chooseStartSessionType(sessionType) {
@@ -1554,6 +1572,12 @@ function openSessionCompleteModal() {
 
 function openEndSessionConfirmModal() {
   const modal = document.getElementById("end-session-confirm-modal");
+  const copy = modal?.querySelector("p");
+  if (copy) {
+    copy.textContent = activeWritingSession?.mode === "stopwatch"
+      ? "Your stopwatch is still running. End it now and log what happened?"
+      : "Your timer is still running. End it now and log what happened?";
+  }
   modal.classList.remove("hidden");
 }
 
@@ -1953,6 +1977,14 @@ function updateWritingSessionScreen() {
   const clock = document.getElementById("writing-session-clock");
   const copy = document.getElementById("writing-session-copy");
   if (!screen || !clock || !copy || !activeWritingSession) return;
+  if (activeWritingSession.mode === "stopwatch") {
+    const elapsedSeconds = (Date.now() - activeWritingSession.startedAt) / 1000;
+    screen.classList.toggle("hidden", !writingSessionInFocusMode);
+    clock.textContent = formatClock(elapsedSeconds);
+    copy.textContent = "Stopwatch writing session in progress";
+    syncFloatingFocusTimer?.();
+    return;
+  }
   const remainingSeconds = (activeWritingSession.endsAt - Date.now()) / 1000;
   if (remainingSeconds <= 0) {
     clock.textContent = "00:00";
@@ -1968,10 +2000,12 @@ function updateWritingSessionScreen() {
 
 function startWritingSession(startWordCount) {
   const startedAt = Date.now();
+  const isStopwatch = sessionRunMode === "stopwatch";
   activeWritingSession = {
     startedAt,
-    plannedMinutes: sessionDraftMinutes,
-    endsAt: startedAt + (sessionDraftMinutes * 60000),
+    mode: isStopwatch ? "stopwatch" : "timer",
+    plannedMinutes: isStopwatch ? 0 : sessionDraftMinutes,
+    endsAt: isStopwatch ? null : startedAt + (sessionDraftMinutes * 60000),
     startWordCount: number(startWordCount)
   };
   writingSessionInFocusMode = true;
@@ -1988,8 +2022,9 @@ function finishActiveWritingSession(autoCompleted = false) {
   if (!activeWritingSession) return;
   const endedAt = Date.now();
   const elapsedMinutes = Math.max(1, Math.round((endedAt - activeWritingSession.startedAt) / 60000));
+  const isStopwatch = activeWritingSession.mode === "stopwatch";
   pendingCompletedSession = {
-    durationMinutes: autoCompleted ? activeWritingSession.plannedMinutes : elapsedMinutes,
+    durationMinutes: autoCompleted && !isStopwatch ? activeWritingSession.plannedMinutes : elapsedMinutes,
     startedAt: new Date(activeWritingSession.startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
     startWordCount: number(activeWritingSession.startWordCount)
@@ -2125,6 +2160,7 @@ function bindStartSessionFlowActions() {
   const previousChoices = document.getElementById("previous-session-choices");
   const previousWritingButton = document.getElementById("log-previous-writing-btn");
   const previousEditingButton = document.getElementById("log-previous-editing-btn");
+  const sessionModeInputs = document.querySelectorAll("input[name='sessionRunMode']");
   const sessionModal = document.getElementById("session-modal");
 
   if (startButton) startButton.onclick = startSelectedSessionFlow;
@@ -2132,6 +2168,9 @@ function bindStartSessionFlowActions() {
   if (backButton) backButton.onclick = () => syncStartSessionFlow("choice");
   if (writingButton) writingButton.onclick = () => chooseStartSessionType("writing");
   if (editingButton) editingButton.onclick = () => chooseStartSessionType("editing");
+  sessionModeInputs.forEach((input) => {
+    input.onchange = () => setSessionRunMode(input.value);
+  });
   if (previousLink) {
     previousLink.onclick = () => {
       previousChoices?.classList.toggle("hidden");

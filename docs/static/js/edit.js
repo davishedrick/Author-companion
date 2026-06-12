@@ -1302,6 +1302,7 @@ function openPastEditingSessionModal() {
 function openEditSessionStartModal() {
   const modal = document.getElementById("session-modal");
   startSessionFlowType = "editing";
+  sessionRunMode = "timer";
   syncStartSessionFlow("config");
   modal.classList.remove("hidden");
 }
@@ -1437,6 +1438,14 @@ function updateEditingSessionScreen() {
   const clock = document.getElementById("editing-session-clock");
   const copy = document.getElementById("editing-session-copy");
   if (!screen || !clock || !copy || !activeEditingSession) return;
+  if (activeEditingSession.mode === "stopwatch") {
+    const elapsedSeconds = (Date.now() - activeEditingSession.startedAt) / 1000;
+    screen.classList.toggle("hidden", !editingSessionInFocusMode);
+    clock.textContent = formatClock(elapsedSeconds);
+    copy.textContent = "Stopwatch editing session in progress";
+    syncFloatingFocusTimer?.();
+    return;
+  }
   const remainingSeconds = (activeEditingSession.endsAt - Date.now()) / 1000;
   if (remainingSeconds <= 0) {
     clock.textContent = "00:00";
@@ -1453,11 +1462,13 @@ function updateEditingSessionScreen() {
 function startEditingSession() {
   const startedAt = Date.now();
   const pendingSnapshot = getPendingSessionSnapshotContext();
+  const isStopwatch = sessionRunMode === "stopwatch";
   activeEditingSession = {
     startedAt,
+    mode: isStopwatch ? "stopwatch" : "timer",
     focusKey: pendingSnapshot?.focusKey || currentBundle()?.editing?.focusKey || "revision",
-    plannedMinutes: editSessionDraftMinutes,
-    endsAt: startedAt + (editSessionDraftMinutes * 60000)
+    plannedMinutes: isStopwatch ? 0 : editSessionDraftMinutes,
+    endsAt: isStopwatch ? null : startedAt + (editSessionDraftMinutes * 60000)
   };
   editingSessionInFocusMode = true;
   closeEndEditSessionConfirmModal();
@@ -1472,8 +1483,9 @@ function finishActiveEditingSession(autoCompleted = false) {
   if (!activeEditingSession) return;
   const endedAt = Date.now();
   const elapsedMinutes = Math.max(1, Math.round((endedAt - activeEditingSession.startedAt) / 60000));
+  const isStopwatch = activeEditingSession.mode === "stopwatch";
   pendingCompletedEditSession = {
-    durationMinutes: autoCompleted ? activeEditingSession.plannedMinutes : elapsedMinutes,
+    durationMinutes: autoCompleted && !isStopwatch ? activeEditingSession.plannedMinutes : elapsedMinutes,
     focusKey: activeEditingSession.focusKey || currentBundle()?.editing?.focusKey || "revision",
     startedAt: new Date(activeEditingSession.startedAt).toISOString(),
     endedAt: new Date(endedAt).toISOString()
@@ -1490,6 +1502,12 @@ function finishActiveEditingSession(autoCompleted = false) {
 
 function openEndEditSessionConfirmModal() {
   const modal = document.getElementById("end-edit-session-confirm-modal");
+  const copy = modal?.querySelector("p");
+  if (copy) {
+    copy.textContent = activeEditingSession?.mode === "stopwatch"
+      ? "Your stopwatch is still running. End it now and log what happened?"
+      : "Your editing timer is still running. End it now and log what changed?";
+  }
   modal.classList.remove("hidden");
 }
 

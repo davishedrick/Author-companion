@@ -358,6 +358,17 @@ def test_starting_word_count_labels_only_render_for_nonzero_baselines():
     assert "repeat(auto-fit, minmax(180px, 1fr))" in dashboard_css
 
 
+def test_activity_hides_extension_baseline_confirmation_sessions():
+    app_js = get_js_asset("app.js")
+
+    assert "function isBaselineConfirmationSession(session, bundle)" in app_js
+    assert "function getDisplayActivitySessions(bundle, sessions = bundle?.sessions || [])" in app_js
+    assert "return !isBaselineConfirmationSession(session, bundle);" in app_js
+    assert "const visibleSessions = getDisplayActivitySessions(bundle, sessions)" in app_js
+    assert "const sessions = getDisplayActivitySessions(bundle)" in app_js
+    assert "const displaySessions = getDisplayActivitySessions(bundle)" in app_js
+
+
 def test_open_app_refreshes_remote_state_after_extension_updates():
     app_js = get_app_js()
 
@@ -462,6 +473,7 @@ def test_design_system_route_is_hidden_and_uses_production_classes(tmp_path):
 
 def test_edit_dashboard_uses_the_same_start_timer_pattern_as_writing_sessions():
     html = get_html()
+    state_js = get_js_asset("state.js")
     js = get_js_asset("edit.js")
     dashboard_js = get_js_asset("dashboard.js")
 
@@ -474,19 +486,29 @@ def test_edit_dashboard_uses_the_same_start_timer_pattern_as_writing_sessions():
     assert 'id="editing-session-screen"' in html
     assert 'id="end-edit-session-btn"' in html
     assert 'id="end-edit-session-confirm-modal"' in html
+    assert 'name="sessionRunMode"' in html
+    assert 'value="stopwatch"' in html
+    assert 'id="session-stopwatch-panel"' in html
     assert "Start session" in html
     assert "Log previous session" in html
     assert 'id="start-edit-session-btn"' not in html
     assert 'id="edit-session-start-modal"' not in html
+    assert 'let sessionRunMode = "timer";' in state_js
     assert "function openEditSessionStartModal()" in js
     assert "function bindEditSessionDial()" in js
     assert "function bindEditSessionGlobalActions()" in js
     assert "function startEditingSession()" in js
     assert "function finishActiveEditingSession(autoCompleted = false)" in js
+    assert 'activeEditingSession.mode === "stopwatch"' in js
+    assert 'mode: isStopwatch ? "stopwatch" : "timer"' in js
+    assert "durationMinutes: autoCompleted && !isStopwatch ? activeEditingSession.plannedMinutes : elapsedMinutes" in js
     assert "function chooseStartSessionType(sessionType)" in dashboard_js
+    assert "function setSessionRunMode(mode)" in dashboard_js
     assert "function startSelectedSessionFlow()" in dashboard_js
     assert 'chooseStartSessionType("editing")' in dashboard_js
     assert 'startSessionFlowType === "editing"' in dashboard_js
+    assert 'activeWritingSession.mode === "stopwatch"' in dashboard_js
+    assert "durationMinutes: autoCompleted && !isStopwatch ? activeWritingSession.plannedMinutes : elapsedMinutes" in dashboard_js
     assert (
         'document.getElementById("editing-session-screen").classList.remove("hidden");'
         in js
@@ -515,6 +537,9 @@ def test_focus_mode_can_be_minimized_into_a_shared_floating_timer():
     assert "function getActiveFocusSession()" in app_js
     assert "function syncFloatingFocusTimer()" in app_js
     assert "function bindFloatingFocusTimer()" in app_js
+    assert 'mode: activeWritingSession.mode || "timer"' in app_js
+    assert 'widget.dataset.sessionMode = session.mode || "timer";' in app_js
+    assert "Stopwatch running. Keep it nearby until you end the session." in app_js
     assert "function leaveWritingFocusMode()" in dashboard_js
     assert "function enterWritingFocusMode()" in dashboard_js
     assert "function leaveEditingFocusMode()" in edit_js

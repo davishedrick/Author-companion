@@ -93,6 +93,34 @@ def test_first_document_binding_establishes_verified_manuscript_baseline(tmp_pat
     assert project["sessions"] == []
 
 
+def test_initial_zero_delta_extension_session_does_not_become_activity(tmp_path):
+    client = client_for(tmp_path)
+    seed_state(
+        client,
+        projects=[project_bundle("project-a", "Project A", current_word_count=0)],
+    )
+    bind_surface(client, verifiedWordCount=320, verifiedWordCountSource="stable-visible")
+
+    response = post_extension_session(
+        client,
+        extensionSessionId="baseline-confirmation-session",
+        durationMinutes=1,
+        wordsWritten=0,
+        startDocumentWordCount=320,
+        endDocumentWordCount=320,
+        netWordsChanged=0,
+        wordCountMethod="stable-visible",
+    )
+    project = get_project(client)
+
+    assert response.status_code == 200
+    assert response.get_json()["duplicate"] is True
+    assert response.get_json()["session"]["netWordsChanged"] == 0
+    assert project["project"]["currentWordCount"] == 320
+    assert project["project"]["startingWordCount"] == 320
+    assert project["sessions"] == []
+
+
 def test_rebinding_preserves_starting_word_count_but_updates_current_count(tmp_path):
     client = client_for(tmp_path)
     seed_state(client)

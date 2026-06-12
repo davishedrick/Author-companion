@@ -551,24 +551,34 @@ def _establish_project_starting_word_count(
     existing_starting_count = _optional_non_negative_int(
         project_bundle.get("startingWordCount")
     )
-    if existing_starting_count is not None and project_bundle.get(
-        "baselineEstablished"
-    ):
+    existing_source = _clean_text(project_bundle.get("startingWordCountSource"))
+    sessions = (
+        project.get("sessions") if isinstance(project.get("sessions"), list) else []
+    )
+    has_sessions = bool(sessions)
+    has_verified_existing_baseline = (
+        existing_starting_count is not None
+        and project_bundle.get("baselineEstablished")
+        and not (
+            not has_sessions
+            and existing_starting_count == 0
+            and verified_word_count > 0
+            and existing_source in {"", "provisional", "migration_bound_no_sessions"}
+        )
+    )
+
+    if has_verified_existing_baseline:
         project_bundle["startingWordCount"] = existing_starting_count
         project_bundle["currentWordCount"] = verified_word_count
         return
 
-    sessions = (
-        project.get("sessions") if isinstance(project.get("sessions"), list) else []
-    )
-    if sessions:
+    if has_sessions:
         tracked_delta = sum(_session_manuscript_delta(session) for session in sessions)
         project_bundle["startingWordCount"] = max(
             0, previous_current_word_count - tracked_delta
         )
         project_bundle["currentWordCount"] = verified_word_count
         project_bundle["baselineEstablished"] = True
-        existing_source = _clean_text(project_bundle.get("startingWordCountSource"))
         project_bundle["startingWordCountSource"] = (
             existing_source
             if existing_source and existing_source != "provisional"
