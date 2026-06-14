@@ -1189,8 +1189,9 @@ function handleRemoteSyncFailure(error) {
 }
 
 function queueRemoteStateSync() {
-  if (persistenceMode !== "remote" || remoteSyncSuspended) return;
+  if (persistenceMode !== "remote") return;
   pendingRemoteSnapshot = serializeStateSnapshot();
+  if (remoteSyncSuspended) return;
   remoteSyncPromise = remoteSyncPromise
     .then(async () => {
       if (!pendingRemoteSnapshot) return;

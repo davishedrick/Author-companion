@@ -404,6 +404,27 @@ def test_native_confirm_guard_prevents_remote_refresh_race_on_deletion():
     assert "nativeConfirmInProgress = true;\n    const shouldReplace = window.confirm(" in get_js_asset("state.js")
 
 
+def test_pending_snapshot_guard_prevents_in_flight_get_from_overwriting_deletion():
+    """queueRemoteStateSync must always save pendingRemoteSnapshot even when remoteSyncSuspended is true
+    (a GET is in-flight), and refreshRemoteStateFromServer must skip applyPersistedSnapshot when a
+    pending local change exists, flushing that snapshot as a PUT instead. This prevents a deletion from
+    being silently dropped when the user deletes a project while a remote refresh GET is in-flight —
+    the root cause of project reappearance in Safari and any browser where focus events fire before
+    the sync queue is idle."""
+    state_js = get_js_asset("state.js")
+    app_js = get_js_asset("app.js")
+    # queueRemoteStateSync always sets pendingRemoteSnapshot before checking remoteSyncSuspended
+    assert (
+        "pendingRemoteSnapshot = serializeStateSnapshot();\n  if (remoteSyncSuspended) return;" in state_js
+    )
+    # refreshRemoteStateFromServer skips applying stale server state when local changes are pending
+    assert "if (pendingRemoteSnapshot) {\n        return false;\n      }" in app_js
+    # The finally block flushes any snapshot that was saved while the GET was in-flight
+    assert (
+        "remoteSyncSuspended = false;\n      if (pendingRemoteSnapshot && persistenceMode === \"remote\")" in app_js
+    )
+
+
 def test_design_system_docs_exist_and_cover_required_contracts():
     required_docs = {
         "DESIGN_SYSTEM.md": [

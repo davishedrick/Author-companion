@@ -101,3 +101,42 @@ Added `let nativeConfirmInProgress = false;` flag in `app.js`. `refreshRemoteSta
 
 - Automated: `test_native_confirm_guard_prevents_remote_refresh_race_on_deletion` verifies the flag is declared, checked in `refreshRemoteStateFromServer`, and set around all three `window.confirm()` call sites.
 - Manual: archive a project, click "Delete permanently", confirm — project should be gone and not reappear on any subsequent page focus or tab switch.
+
+## APP-2026-06-13-deleted-project-reappears-in-safari-get-in-flight
+
+- Status: Fixed
+- Reported: 2026-06-13
+- Area: Project state | Persistence
+- Severity: High
+- Owner:
+- Related files: `static/js/state.js`, `static/js/app.js`, `docs/static/js/`
+- Related tests: `test_pending_snapshot_guard_prevents_in_flight_get_from_overwriting_deletion`
+- Related scenarios: `PS-DEL-001`
+
+### Summary
+
+After the Chrome confirm-dialog fix, project deletion still failed in Safari. Deleting an archived project caused it to disappear for a moment and then reappear, with the server never recording the deletion.
+
+### Reproduction
+
+1. Start from: a project bound to a Google Doc and archived, using Safari (no Chrome extension).
+2. Do: focus the Safari tab (triggering a remote refresh GET) → quickly click "Delete permanently" → confirm in the browser dialog before the GET completes.
+3. Expected: project is removed and stays removed.
+4. Actual: project disappears for a second, then reappears. Server still has the project.
+
+### Root Cause
+
+When a remote refresh GET is already in-flight (`remoteSyncSuspended = true`), `queueRemoteStateSync()` returned early without saving `pendingRemoteSnapshot`. The local deletion was applied to `state` and rendered, but no PUT was ever queued. When the GET completed, `applyPersistedSnapshot` overwrote local state with the server's old snapshot (which still had the project), making it reappear. This race window exists in any browser where a focus/visibility event fires before the sync queue is idle — in Safari this is common because `window.focus` fires when the user switches to the tab, often right before a delete action.
+
+### Fix
+
+Two-part change:
+
+1. **`state.js` — `queueRemoteStateSync`**: always saves `pendingRemoteSnapshot = serializeStateSnapshot()` before checking `remoteSyncSuspended`. If suspended, the snapshot is saved but the PUT is not chained yet; the snapshot will be flushed when suspension ends.
+
+2. **`app.js` — `refreshRemoteStateFromServer`**: after the GET response arrives, checks `pendingRemoteSnapshot` before calling `applyPersistedSnapshot`. If a local change is pending, skips the apply (preserving the deletion in local state and UI). The `finally` block then chains the saved snapshot as a PUT, ensuring the deletion reaches the server.
+
+### Verification
+
+- Automated: `test_pending_snapshot_guard_prevents_in_flight_get_from_overwriting_deletion` checks that `queueRemoteStateSync` saves the snapshot before the `remoteSyncSuspended` guard, that the GET skips `applyPersistedSnapshot` when `pendingRemoteSnapshot` is set, and that the finally block flushes the snapshot as a PUT.
+- Manual (Safari): focus the Safari tab, immediately open the archive, delete a project — project must not reappear after any subsequent tab focus, alt-tab, or page visibility change.

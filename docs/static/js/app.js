@@ -295,6 +295,9 @@ async function refreshRemoteStateFromServer(reason = "manual") {
       const lastWorkspaceViewBeforeRefresh = lastWorkspaceView;
       const before = JSON.stringify(serializeStateSnapshot());
       const remoteSnapshot = await fetchRemoteState();
+      if (pendingRemoteSnapshot) {
+        return false;
+      }
       applyPersistedSnapshot({
         ...remoteSnapshot,
         activeView: activeViewBeforeRefresh,
@@ -312,6 +315,23 @@ async function refreshRemoteStateFromServer(reason = "manual") {
       return false;
     } finally {
       remoteSyncSuspended = false;
+      if (pendingRemoteSnapshot && persistenceMode === "remote") {
+        remoteSyncPromise = remoteSyncPromise
+          .then(async () => {
+            if (!pendingRemoteSnapshot) return;
+            const snapshot = pendingRemoteSnapshot;
+            pendingRemoteSnapshot = null;
+            const response = await fetch(STATE_API_ENDPOINT, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify(snapshot)
+            });
+            if (!response.ok) {
+              throw new Error(`State save failed with status ${response.status}`);
+            }
+          })
+          .catch(handleRemoteSyncFailure);
+      }
     }
   });
   return remoteStateRefreshPromise;
