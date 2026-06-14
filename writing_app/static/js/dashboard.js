@@ -1303,7 +1303,9 @@ function bindGoalsDashboardEvents(bundle) {
     button.onclick = () => {
       const goal = bundle.goals.find((item) => item.id === button.dataset.id);
       if (!goal || goal.status !== "archived") return;
+      nativeConfirmInProgress = true;
       const confirmed = window.confirm("Delete this archived goal permanently? Past heatmap days tied to it will lose that goal context.");
+      nativeConfirmInProgress = false;
       if (!confirmed) return;
       updateCurrentBundle((projectBundle) => ({
         ...projectBundle,

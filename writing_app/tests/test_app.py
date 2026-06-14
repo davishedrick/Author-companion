@@ -399,6 +399,22 @@ def test_open_app_refreshes_remote_state_after_extension_updates():
     assert "function renderProjects()" in get_js_asset("app.js")
 
 
+def test_native_confirm_guard_prevents_remote_refresh_race_on_deletion():
+    """nativeConfirmInProgress must block refreshRemoteStateFromServer during window.confirm so that the
+    remote-refresh GET cannot run before queueRemoteStateSync fires the deletion PUT, which would otherwise
+    cause a deleted project to reappear after the stale server state is applied."""
+    app_js = get_app_js()
+    assert "let nativeConfirmInProgress = false;" in get_js_asset("app.js")
+    assert "nativeConfirmInProgress" in app_js
+    # refreshRemoteStateFromServer guards on the flag
+    assert "|| nativeConfirmInProgress" in get_js_asset("app.js")
+    # All window.confirm call sites set the flag before calling and clear it after
+    assert "nativeConfirmInProgress = true;\n      const confirmed = window.confirm(`Permanently delete" in get_js_asset("app.js")
+    assert "nativeConfirmInProgress = false;\n      if (!confirmed) return;\n      markExtensionProjectDeleted" in get_js_asset("app.js")
+    assert "nativeConfirmInProgress = true;\n      const confirmed = window.confirm(\"Delete this archived goal" in get_js_asset("dashboard.js")
+    assert "nativeConfirmInProgress = true;\n    const shouldReplace = window.confirm(" in get_js_asset("state.js")
+
+
 def test_design_system_docs_exist_and_cover_required_contracts():
     required_docs = {
         "DESIGN_SYSTEM.md": [
@@ -2809,6 +2825,93 @@ def test_state_api_allows_extension_created_project_delete_tombstone(tmp_path):
     assert not any(item["id"] == project["id"] for item in state["projects"])
     assert "google-doc-a" not in state["extensionDocumentBindings"]
     assert state["deletedExtensionProjectIds"] == [project["id"]]
+
+
+def test_state_api_allows_website_project_delete_tombstone_when_bound(tmp_path):
+    """Website-created projects bound to a document are permanently deleted when included in deletedExtensionProjectIds."""
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    project_id = "web-project-123"
+    client.put(
+        "/api/state",
+        json={
+            "projects": [
+                {
+                    "id": project_id,
+                    "source": "",
+                    "status": "archived",
+                    "project": {"bookTitle": "Web Novel", "currentWordCount": 1200},
+                    "sessions": [],
+                    "issues": [],
+                }
+            ],
+            "activeProjectId": project_id,
+            "activeView": "projects",
+            "lastWorkspaceView": "dashboard",
+            "extensionDocumentBindings": {
+                "google-doc-web": {"projectId": project_id, "documentId": "google-doc-web"}
+            },
+        },
+    )
+    delete_response = client.put(
+        "/api/state",
+        json={
+            "projects": [],
+            "activeProjectId": None,
+            "activeView": "projects",
+            "lastWorkspaceView": "dashboard",
+            "deletedExtensionProjectIds": [project_id],
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    assert delete_response.status_code == 200
+    assert not any(item["id"] == project_id for item in state["projects"])
+    assert "google-doc-web" not in state["extensionDocumentBindings"]
+
+
+def test_state_api_website_project_reappears_without_tombstone_when_bound(tmp_path):
+    """Without deletedExtensionProjectIds, a bound website project survives a PUT that omits it — documents why the frontend must include the tombstone."""
+    use_temp_state_db(tmp_path)
+    client = app.test_client()
+    register_and_login(client)
+    project_id = "web-project-456"
+    client.put(
+        "/api/state",
+        json={
+            "projects": [
+                {
+                    "id": project_id,
+                    "source": "",
+                    "status": "archived",
+                    "project": {"bookTitle": "Web Novel 2", "currentWordCount": 500},
+                    "sessions": [],
+                    "issues": [],
+                }
+            ],
+            "activeProjectId": project_id,
+            "activeView": "projects",
+            "lastWorkspaceView": "dashboard",
+            "extensionDocumentBindings": {
+                "google-doc-web2": {"projectId": project_id, "documentId": "google-doc-web2"}
+            },
+        },
+    )
+    # Simulate old (buggy) client: removes project but does NOT add tombstone
+    client.put(
+        "/api/state",
+        json={
+            "projects": [],
+            "activeProjectId": None,
+            "activeView": "projects",
+            "lastWorkspaceView": "dashboard",
+        },
+    )
+    state = client.get("/api/state").get_json()
+
+    # The project reappears because preserve_extension_sessions restores bound projects
+    assert any(item["id"] == project_id for item in state["projects"])
 
 
 def test_state_api_preserves_extension_bindings_when_payload_omits_them(tmp_path):

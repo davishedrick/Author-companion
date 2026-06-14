@@ -16,6 +16,7 @@ Coverage values:
 | APP-PL-001 | Create project | Project state | Create a new project from the app. | Project is persisted with normalized defaults and appears on reload. | Partially automated | `tests/test_app.py` | Manual app smoke |  |
 | APP-PL-002 | Edit project metadata | Project state | Edit title, target, status, or manuscript metadata. | Changes persist without corrupting sessions, issues, or extension bindings. | Partially automated | `tests/test_app.py` | Manual app smoke |  |
 | APP-PL-003 | Archive restore delete project | Project state | Archive, restore, and delete a project. | Project visibility and state transitions are correct, with no orphaned dashboard data. | Missing |  | Manual app smoke |  |
+| PS-DEL-001 | Permanently delete archived project | Project state | Archive a project, then open the archive panel and click "Delete permanently" → confirm the browser dialog. | Project is removed immediately and stays removed. No reappearance after subsequent tab focus, page visibility change, or any other remote-refresh trigger. Server no longer returns the project. | Automated (static) | `tests/test_app.py::test_native_confirm_guard_prevents_remote_refresh_race_on_deletion` | Manually archive a project, delete it, then alt-tab away and back — project must not reappear. | APP-2026-06-13-deleted-project-reappears-after-confirm-dialog |
 
 ## Writing Workflow
 

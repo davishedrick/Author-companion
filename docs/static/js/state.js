@@ -1450,8 +1450,7 @@ function markExtensionSessionDeleted(session) {
 }
 
 function extensionProjectIdForDeletion(project) {
-  if (!project || project.source !== "chrome-extension") return "";
-  return String(project.id || "").trim();
+  return String(project?.id || "").trim();
 }
 
 function markExtensionProjectDeleted(project) {
@@ -2711,7 +2710,9 @@ function importProjectFromCsv(text) {
   const existingIndex = state.projects.findIndex((project) => project.id === importedBundle.id);
 
   if (existingIndex >= 0) {
+    nativeConfirmInProgress = true;
     const shouldReplace = window.confirm(`Replace the existing project "${state.projects[existingIndex].project.bookTitle}" with the imported data?`);
+    nativeConfirmInProgress = false;
     if (!shouldReplace) return;
     state.projects.splice(existingIndex, 1, importedBundle);
   } else {

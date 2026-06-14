@@ -24,6 +24,7 @@ let activityScreenMode = "summary";
 let remoteStateRefreshBound = false;
 let remoteStateRefreshPromise = Promise.resolve();
 let lastRemoteStateRefreshAt = 0;
+let nativeConfirmInProgress = false;
 
 function getActiveFocusSession() {
   const activeSessions = [];
@@ -281,7 +282,7 @@ function bindRemoteStateRefresh() {
 }
 
 async function refreshRemoteStateFromServer(reason = "manual") {
-  if (persistenceMode !== "remote" || remoteSyncSuspended) return false;
+  if (persistenceMode !== "remote" || remoteSyncSuspended || nativeConfirmInProgress) return false;
   const now = Date.now();
   if (now - lastRemoteStateRefreshAt < 1000) return false;
   lastRemoteStateRefreshAt = now;
@@ -2039,7 +2040,9 @@ function bindProjectEvents() {
       const projectId = button.dataset.id;
       const bundle = getBundleById(projectId);
       if (!isProjectArchived(bundle)) return;
+      nativeConfirmInProgress = true;
       const confirmed = window.confirm(`Permanently delete "${bundle.project.bookTitle}"? This cannot be undone.`);
+      nativeConfirmInProgress = false;
       if (!confirmed) return;
       markExtensionProjectDeleted(bundle);
       state.projects = state.projects.filter((project) => project.id !== projectId);
