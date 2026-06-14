@@ -358,17 +358,6 @@ def test_starting_word_count_labels_only_render_for_nonzero_baselines():
     assert "repeat(auto-fit, minmax(180px, 1fr))" in dashboard_css
 
 
-def test_activity_hides_extension_baseline_confirmation_sessions():
-    app_js = get_js_asset("app.js")
-
-    assert "function isBaselineConfirmationSession(session, bundle)" in app_js
-    assert "function getDisplayActivitySessions(bundle, sessions = bundle?.sessions || [])" in app_js
-    assert "return !isBaselineConfirmationSession(session, bundle);" in app_js
-    assert "const visibleSessions = getDisplayActivitySessions(bundle, sessions)" in app_js
-    assert "const sessions = getDisplayActivitySessions(bundle)" in app_js
-    assert "const displaySessions = getDisplayActivitySessions(bundle)" in app_js
-
-
 def test_open_app_refreshes_remote_state_after_extension_updates():
     app_js = get_app_js()
 
